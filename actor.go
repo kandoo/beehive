@@ -25,8 +25,13 @@ package actor
 
 import (
   "errors"
+  "os"
+  "os/signal"
   "reflect"
+  "sort"
+  "syscall"
 
+  "github.com/coreos/go-etcd/etcd"
   "github.com/golang/glog"
 )
 
@@ -69,7 +74,7 @@ type Stage interface {
 
 // Creates a new stage based on the given configuration.
 func NewStage(cfg StageConfig) Stage {
-  return &stage{
+  s := &stage{
     id:      0,
     status:  StageStopped,
     config:  cfg,
@@ -78,14 +83,16 @@ func NewStage(cfg StageConfig) Stage {
     actors:  make([]Actor, 0),
     mappers: make(map[MsgType][]mapperAndHandler),
   }
+
+  return s
 }
 
 // Configuration of a stage.
 type StageConfig struct {
   // Listening address of the stage.
   StageAddr string
-  // Reigstery service address.
-  RegAddr string
+  // Reigstery service addresses.
+  RegAddrs []string
   // Buffer size in the data channel.
   DataChBufSize int
 }
@@ -104,14 +111,20 @@ type mapperAndHandler struct {
   handler Handler
 }
 
+// Internal implementation of Stage.
 type stage struct {
-  id      StageId
-  status  StageStatus
-  config  StageConfig
-  dataCh  chan Msg
-  ctrlCh  chan StageCmd
+  id     StageId
+  status StageStatus
+  config StageConfig
+
+  dataCh chan Msg
+  ctrlCh chan StageCmd
+  sigCh  chan os.Signal
+
   actors  []Actor
   mappers map[MsgType][]mapperAndHandler
+
+  registery registery
 }
 
 func (s *stage) Id() StageId {
@@ -132,8 +145,11 @@ func (s *stage) closeChannels() {
 func (s *stage) handleCmd(cmd StageCmd) {
   switch cmd {
   case StopStage:
+    // TODO(soheil): This has a race with Stop(). Use atomics here.
+    s.status = StageStopped
     close(s.dataCh)
     close(s.ctrlCh)
+    close(s.sigCh)
     return
   case DrainStage:
     // TODO(soheil): Implement drain.
@@ -161,17 +177,44 @@ func (s *stage) registerHandler(t MsgType, m *mapper, h Handler) {
 }
 
 func (s *stage) handleMsg(msg Msg) {
-  glog.Infof("Mapper %v %v", s.mappers, msg.Type())
+  //glog.Infof("Mapper %v %v", s.mappers, msg.Type())
   for _, mh := range s.mappers[msg.Type()] {
-    glog.Infof("Sent data %v %v", msg, mh.mapr)
+    //glog.Infof("Sent data %v %v", msg, mh.mapr)
     mh.mapr.dataCh <- msgAndHandler{msg, mh.handler}
   }
+}
+
+func (s *stage) registerSignals() {
+  s.sigCh = make(chan os.Signal, 1)
+  signal.Notify(s.sigCh,
+    syscall.SIGHUP,
+    syscall.SIGINT,
+    syscall.SIGTERM,
+    syscall.SIGQUIT)
+  go func() {
+    <-s.sigCh
+    s.Stop()
+  }()
+}
+
+func (s *stage) connectToRegistery() {
+  if len(s.config.RegAddrs) == 0 {
+    return
+  }
+
+  // TODO(soheil): Add TLS registery.
+  s.registery = registery{etcd.NewClient(s.config.RegAddrs)}
+  s.registery.SyncCluster()
 }
 
 func (s *stage) Start(waitCh chan interface{}) error {
   // TODO(soheil): Listen and grab and ID. Connect to etcd.
   defer close(waitCh)
+
   s.status = StageStarted
+  s.registerSignals()
+  s.connectToRegistery()
+
   for {
     select {
     case msg, ok := <-s.dataCh:
@@ -228,7 +271,7 @@ func (s *stage) SendTo(msg Msg, to ActorName, ms MapSet) {
 type ReceiverId struct {
   StageId   StageId
   ActorName ActorName
-  RcvrId    int32
+  RcvrId    uint32
 }
 
 // Creates a global ID from stage and receiver IDs.
@@ -306,7 +349,14 @@ type DictionaryKey struct {
 
 type MapSet []DictionaryKey
 
-func dictionaryKeyToString(dk DictionaryKey) string {
+func (ms MapSet) Len() int      { return len(ms) }
+func (ms MapSet) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
+func (ms MapSet) Less(i, j int) bool {
+  return ms[i].Dict < ms[j].Dict ||
+    (ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
+}
+
+func (dk *DictionaryKey) String() string {
   // TODO(soheil): This will change when we implement it using a Trie instead of
   // a map.
   return string(dk.Dict) + "/" + string(dk.Key)
@@ -326,8 +376,8 @@ type RecvContext interface {
 
 type context struct {
   state State
-  stage Stage
-  actor Actor
+  stage *stage
+  actor *actor
 }
 
 type recvContext struct {
@@ -522,6 +572,7 @@ type mapper struct {
   asyncRoutine
   ctx       context
   receivers map[string]receiver
+  lastRId   uint32
 }
 
 func (mapr *mapper) state() State {
@@ -548,14 +599,14 @@ func (rcvr *localRcvr) id() ReceiverId {
 }
 
 func (rcvr *localRcvr) start() {
-  glog.Infof("Started %v", rcvr.dataCh)
+  //glog.Infof("Started %v", rcvr.dataCh)
   for {
     select {
     case d, ok := <-rcvr.dataCh:
       if !ok {
         return
       }
-      glog.Infof("Message got in rcvr %v", d)
+      //glog.Infof("Message got in rcvr %v", d)
       rcvr.handleMsg(d)
 
     case c, ok := <-rcvr.ctrlCh:
@@ -581,7 +632,7 @@ func (rcvr *localRcvr) handleCmd(cmd actorCommand) {
 }
 
 func (rcvr *localRcvr) enque(mh msgAndHandler) {
-  glog.Infof("Enqueued ")
+  //glog.Infof("Enqueued ")
   rcvr.dataCh <- mh
 }
 
@@ -593,7 +644,7 @@ func (rcvr *proxyRcvr) handleMsg(mh msgAndHandler) {
 }
 
 func (rcvr *proxyRcvr) start() {
-  glog.Infof("It's a proxy!!!!")
+  //glog.Infof("It's a proxy!!!!")
 }
 
 func (mapr *mapper) start() {
@@ -632,35 +683,51 @@ func (mapr *mapper) handleCmd(cmd actorCommand) {
   }
 }
 
-func (mapr *mapper) findReceiver(dk DictionaryKey) (receiver, bool) {
-  return nil, false
+func (mapr *mapper) receiver(dk DictionaryKey) receiver {
+  return mapr.receivers[dk.String()]
 }
 
 func (mapr *mapper) setReceiver(dk DictionaryKey, rcvr receiver) {
+  mapr.receivers[dk.String()] = rcvr
+}
+
+func (mapr *mapper) syncReceivers(ms MapSet, rcvr receiver) {
+  for _, dictKey := range ms {
+    dkRecvr := mapr.receiver(dictKey)
+    if dkRecvr == nil {
+      mapr.lockKey(dictKey, rcvr)
+      continue
+    }
+
+    if dkRecvr == rcvr {
+      continue
+    }
+
+    glog.Fatalf("Incosistent shards for keys %v in MapSet %v", dictKey,
+      ms)
+  }
+}
+
+func (mapr *mapper) anyReceiver(ms MapSet) receiver {
+  for _, dictKey := range ms {
+    rcvr := mapr.receiver(dictKey)
+    if rcvr != nil {
+      return rcvr
+    }
+  }
+
+  return nil
 }
 
 func (mapr *mapper) handleMsg(mh msgAndHandler) {
   mapSet := mh.handler.Map(mh.msg, &mapr.ctx)
 
-  var rcvr receiver
-  for _, dictKey := range mapSet {
-    tempRr, ok := mapr.findReceiver(dictKey)
-    if ok && tempRr == rcvr {
-      continue
-    }
-
-    if !ok {
-      mapr.lockKey(dictKey, rcvr)
-      continue
-    }
-
-    glog.Fatalf("Incosistent shards for keys %v in MapSet %v", dictKey,
-      mapSet)
-  }
+  rcvr := mapr.anyReceiver(mapSet)
 
   if rcvr == nil {
     rcvr = mapr.newReceiver(mapSet)
-    glog.Info("New recvr %v", rcvr)
+  } else {
+    mapr.syncReceivers(mapSet, rcvr)
   }
 
   rcvr.enque(mh)
@@ -669,11 +736,23 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 // Locks the map set and returns a new receiver ID if possible, otherwise
 // returns the ID of the owner of this map set.
 func (mapr *mapper) tryLock(mapSet MapSet) ReceiverId {
-  return ReceiverId{}
+  sort.Sort(mapSet)
+
+  mapr.lastRId++
+  id := ReceiverId{
+    StageId:   mapr.ctx.stage.Id(),
+    RcvrId:    mapr.lastRId,
+    ActorName: mapr.ctx.actor.Name(),
+  }
+  v := mapr.ctx.stage.registery.lockAllOrGet(id, mapSet, 10)
+  id.StageId = v.StageId
+  id.RcvrId = v.RcvrId
+  return id
 }
 
 func (mapr *mapper) lockKey(dk DictionaryKey, rcvr receiver) bool {
-  return false
+  mapr.receivers[dk.String()] = rcvr
+  return true
 }
 
 func proxyRecv(sId StageId, rId ReceiverId) Recv {
@@ -706,7 +785,7 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
       rcvr: r,
     }
     go r.start()
-    glog.Infof("Local started")
+    //glog.Infof("Local started")
     rcvr = r
   } else {
     //h := proxyRecv(rcvr, mapr.ctx)
