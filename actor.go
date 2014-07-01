@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
-	"sort"
 	"syscall"
 
 	"github.com/coreos/go-etcd/etcd"
@@ -108,6 +107,10 @@ func (s *stage) Id() StageId {
 	return s.id
 }
 
+func (s *stage) isIsol() bool {
+	return s.registery.connected()
+}
+
 func (s *stage) closeChannels() {
 	for _, mhs := range s.mappers {
 		for _, mh := range mhs {
@@ -174,13 +177,18 @@ func (s *stage) registerSignals() {
 	}()
 }
 
+const (
+	regPrefix = "theatre"
+	regTtl    = 0
+)
+
 func (s *stage) connectToRegistery() {
 	if len(s.config.RegAddrs) == 0 {
 		return
 	}
 
 	// TODO(soheil): Add TLS registery.
-	s.registery = registery{etcd.NewClient(s.config.RegAddrs)}
+	s.registery = registery{etcd.NewClient(s.config.RegAddrs), regPrefix, regTtl}
 	s.registery.SyncCluster()
 }
 
@@ -703,9 +711,9 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 
 	if rcvr == nil {
 		rcvr = mapr.newReceiver(mapSet)
-	} else {
-		mapr.syncReceivers(mapSet, rcvr)
 	}
+
+	mapr.syncReceivers(mapSet, rcvr)
 
 	rcvr.enque(mh)
 }
@@ -713,22 +721,37 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 // Locks the map set and returns a new receiver ID if possible, otherwise
 // returns the ID of the owner of this map set.
 func (mapr *mapper) tryLock(mapSet MapSet) ReceiverId {
-	sort.Sort(mapSet)
-
 	mapr.lastRId++
 	id := ReceiverId{
 		StageId:   mapr.ctx.stage.Id(),
 		RcvrId:    mapr.lastRId,
 		ActorName: mapr.ctx.actor.Name(),
 	}
-	v := mapr.ctx.stage.registery.lockAllOrGet(id, mapSet, 10)
+
+	if mapr.ctx.stage.isIsol() {
+		return id
+	}
+
+	v := mapr.ctx.stage.registery.storeOrGet(id, mapSet)
+
+	if v.StageId == id.StageId && v.RcvrId == id.RcvrId {
+		return id
+	}
+
+	mapr.lastRId--
 	id.StageId = v.StageId
 	id.RcvrId = v.RcvrId
 	return id
 }
 
 func (mapr *mapper) lockKey(dk DictionaryKey, rcvr receiver) bool {
-	mapr.receivers[dk.String()] = rcvr
+	mapr.setReceiver(dk, rcvr)
+	if mapr.ctx.stage.isIsol() {
+		return true
+	}
+
+	mapr.ctx.stage.registery.storeOrGet(rcvr.id(), []DictionaryKey{dk})
+
 	return true
 }
 
