@@ -10,7 +10,7 @@ import (
 
 // Represents the globally unique ID of a stage. These IDs are automatically
 // assigned using the distributed configuration service.
-type StageId uint32
+type StageId string
 
 // Status of a stage.
 type StageStatus int
@@ -48,7 +48,7 @@ type Stage interface {
 // Creates a new stage based on the given configuration.
 func NewStage(cfg StageConfig) Stage {
 	s := &stage{
-		id:      0,
+		id:      StageId(cfg.StageAddr),
 		status:  StageStopped,
 		config:  cfg,
 		dataCh:  make(chan Msg, cfg.DataChBufSize),
@@ -599,7 +599,6 @@ func (rcvr *proxyRcvr) handleMsg(mh msgAndHandler) {
 }
 
 func (rcvr *proxyRcvr) start() {
-	//glog.Infof("It's a proxy!!!!")
 }
 
 func (mapr *mapper) start() {
@@ -725,10 +724,6 @@ func (mapr *mapper) lockKey(dk DictionaryKey, rcvr receiver) bool {
 	return true
 }
 
-func proxyRecv(sId StageId, rId ReceiverId) Recv {
-	return nil
-}
-
 func (mapr *mapper) isLocalRcvr(id ReceiverId) bool {
 	return mapr.ctx.stage.Id() == id.StageId
 }
@@ -737,8 +732,6 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 	var rcvr receiver
 	rcvrId := mapr.tryLock(mapSet)
 	if mapr.isLocalRcvr(rcvrId) {
-		// TODO(soheil): State should include rcvr's id.
-		//state := newState(string(mapr.ctx.actor.Name()))
 		r := &localRcvr{
 			asyncRoutine: asyncRoutine{
 				dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
@@ -755,13 +748,25 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 			rcvr: r,
 		}
 		go r.start()
-		//glog.Infof("Local started")
 		rcvr = r
 	} else {
-		//h := proxyRecv(rcvr, mapr.ctx)
-		//rcvr = newReceiver(proxyRecv(rcvr.id), nil, rcvr.id)
-		// TODO(soheil): Implement proxy messages.
-		rcvr = &proxyRcvr{}
+		r := &proxyRcvr{
+			localRcvr{
+				asyncRoutine: asyncRoutine{
+					dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
+					ctrlCh: make(chan actorCommand),
+					waitCh: make(chan interface{}),
+				},
+				rId: rcvrId,
+			},
+		}
+		r.ctx = recvContext{
+			context: context{
+				stage: mapr.ctx.stage,
+				actor: mapr.ctx.actor,
+			},
+			rcvr: r,
+		}
 		glog.Fatalf("Proxy messages are not implemented yet!")
 	}
 
