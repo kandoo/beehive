@@ -214,7 +214,7 @@ func (s *stage) Start(waitCh chan interface{}) error {
 			}
 			s.handleCmd(cmd)
 		case <-waitCh:
-			glog.Fatalf("Stage's wait channel should not be closed.")
+			glog.Fatalf("Stage's wait channel should not be used nor closed.")
 		}
 	}
 	return nil
@@ -463,6 +463,7 @@ func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
 	d, ok := s.dicts[string(name)]
 	if !ok {
 		d = &inMemoryDictionary{name, make(map[Key]Value)}
+		s.dicts[string(name)] = d
 	}
 	return d
 }

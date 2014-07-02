@@ -129,7 +129,6 @@ func (g registery) storeOrGet(id ReceiverId, ms MapSet) regVal {
 	validate := false
 	for _, dk := range ms {
 		k := fmt.Sprintf(keyFmtStr, id.ActorName, dk.Dict, dk.Key)
-		fmt.Println(k)
 		res, err := g.Get(k, false, false)
 		if err != nil {
 			continue
