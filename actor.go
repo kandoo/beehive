@@ -1,80 +1,9 @@
 package actor
 
 import (
-	"errors"
-	"os"
-	"reflect"
+	"fmt"
 
 	"github.com/golang/glog"
-)
-
-// Represents the globally unique ID of a stage. These IDs are automatically
-// assigned using the distributed configuration service.
-type StageId string
-
-// Status of a stage.
-type StageStatus int
-
-// Valid values for StageStatus.
-const (
-	StageStopped StageStatus = iota
-	StageStarted             = iota
-)
-
-type Stage interface {
-	// ID of the stage. Valid only if the stage is started.
-	Id() StageId
-
-	// Starts the stage and will close the waitCh once the stage stops.
-	Start(waitCh chan interface{}) error
-	// Stops the stage and all its actors.
-	Stop() error
-	// Returns the stage status.
-	Status() StageStatus
-
-	// Creates an actor with the given name. Note that actors are not active until
-	// the stage is started.
-	NewActor(name ActorName) Actor
-
-	// Emits a message from this stage.
-	Emit(msg Msg)
-	// Sends a message to a specific actor that owns a specific MapSet. Returns an
-	// error if there is no such actor.
-	SendTo(msg Msg, to ActorName, ms MapSet)
-	// Replies to a message.
-	ReplyTo(msg Msg, reply Msg)
-}
-
-// Creates a new stage based on the given configuration.
-func NewStage(cfg StageConfig) Stage {
-	s := &stage{
-		id:      StageId(cfg.StageAddr),
-		status:  StageStopped,
-		config:  cfg,
-		dataCh:  make(chan Msg, cfg.DataChBufSize),
-		ctrlCh:  make(chan StageCmd),
-		actors:  make([]Actor, 0),
-		mappers: make(map[MsgType][]mapperAndHandler),
-	}
-
-	return s
-}
-
-// Configuration of a stage.
-type StageConfig struct {
-	// Listening address of the stage.
-	StageAddr string
-	// Reigstery service addresses.
-	RegAddrs []string
-	// Buffer size in the data channel.
-	DataChBufSize int
-}
-
-type StageCmd int
-
-const (
-	StopStage  StageCmd = iota
-	DrainStage          = iota
 )
 
 type ActorName string
@@ -84,236 +13,10 @@ type mapperAndHandler struct {
 	handler Handler
 }
 
-// Internal implementation of Stage.
-type stage struct {
-	id     StageId
-	status StageStatus
-	config StageConfig
-
-	dataCh chan Msg
-	ctrlCh chan StageCmd
-	sigCh  chan os.Signal
-
-	actors  []Actor
-	mappers map[MsgType][]mapperAndHandler
-
-	registery registery
-}
-
-func (s *stage) Id() StageId {
-	return s.id
-}
-
-func (s *stage) isIsol() bool {
-	return s.registery.connected()
-}
-
-func (s *stage) closeChannels() {
-	for _, mhs := range s.mappers {
-		for _, mh := range mhs {
-			mh.mapr.ctrlCh <- stopActor
-			<-mh.mapr.waitCh
-		}
-	}
-	close(s.dataCh)
-	close(s.ctrlCh)
-}
-
-func (s *stage) handleCmd(cmd StageCmd) {
-	switch cmd {
-	case StopStage:
-		// TODO(soheil): This has a race with Stop(). Use atomics here.
-		s.status = StageStopped
-		close(s.dataCh)
-		close(s.ctrlCh)
-		close(s.sigCh)
-		return
-	case DrainStage:
-		// TODO(soheil): Implement drain.
-	}
-}
-
-func (s *stage) ReplyTo(msg Msg, reply Msg) {
-	// TODO(soheil): implement this.
-	// Lookup actor from msg.
-	// Ask the mapper to send the message to that specific recvr.
-	glog.Fatalf("stage.ReplyTo is not implemented.")
-}
-
-const (
-	kInitialMappers   = 10
-	kInitialReceivers = 10
-)
-
-func (s *stage) registerActor(a Actor) {
-	s.actors = append(s.actors, a)
-}
-
-func (s *stage) registerHandler(t MsgType, m *mapper, h Handler) {
-	s.mappers[t] = append(s.mappers[t], mapperAndHandler{m, h})
-}
-
-func (s *stage) handleMsg(msg Msg) {
-	//glog.Infof("Mapper %v %v", s.mappers, msg.Type())
-	for _, mh := range s.mappers[msg.Type()] {
-		//glog.Infof("Sent data %v %v", msg, mh.mapr)
-		mh.mapr.dataCh <- msgAndHandler{msg, mh.handler}
-	}
-}
-
-func (s *stage) Start(waitCh chan interface{}) error {
-	// TODO(soheil): Listen and grab and ID. Connect to etcd.
-	defer close(waitCh)
-
-	s.status = StageStarted
-	s.registerSignals()
-	s.connectToRegistery()
-
-	for {
-		select {
-		case msg, ok := <-s.dataCh:
-			if !ok {
-				return errors.New("Data channel is closed.")
-			}
-			glog.V(2).Infof("Received msg %v", msg)
-			s.handleMsg(msg)
-		case cmd, ok := <-s.ctrlCh:
-			if !ok {
-				return errors.New("Control channel is closed.")
-			}
-			s.handleCmd(cmd)
-		case <-waitCh:
-			glog.Fatalf("Stage's wait channel should not be used nor closed.")
-		}
-	}
-	return nil
-}
-
-func (s *stage) Stop() error {
-	if s.ctrlCh == nil {
-		return errors.New("Control channel is closed.")
-	}
-
-	if s.Status() == StageStopped {
-		return errors.New("Stage is already stopped.")
-	}
-
-	s.ctrlCh <- StopStage
-	return nil
-}
-
-func (s *stage) Status() StageStatus {
-	return s.status
-}
-
-func (s *stage) NewActor(name ActorName) Actor {
-	a := &actor{
-		name:  name,
-		stage: s,
-	}
-	a.initMapper()
-	return a
-}
-
-func (s *stage) Emit(msg Msg) {
-	s.dataCh <- msg
-}
-
-func (s *stage) SendTo(msg Msg, to ActorName, ms MapSet) {
-}
-
 type ReceiverId struct {
 	StageId   StageId
 	ActorName ActorName
 	RcvrId    uint32
-}
-
-// Creates a global ID from stage and receiver IDs.
-//func MakeGlobalReceiverId(sId StageId, rId ReceiverId) GlobalReceiverId {
-//return GlobalReceiverId(sId)<<32 | GlobalReceiverId(rId)
-//}
-
-// Extracts actor ID from a global receiver ID.
-//func ExtractReceiverId(gId GlobalReceiverId) ReceiverId {
-//return ReceiverId(gId & 0xFFFFFFFF)
-//}
-
-// Extracts stage ID from a global receiver ID.
-//func ExtractStageId(gId GlobalReceiverId) StageId {
-//return StageId((gId >> 32) & 0xFFFFFFFF)
-//}
-
-// Message is a generic interface for messages emitted in the system. Messages
-// are defined for each type.
-type Msg interface {
-	Reply(msg Msg)
-	Type() MsgType
-}
-
-type MsgType string
-
-type GenericMsg struct {
-	stage  Stage
-	rcvrId ReceiverId
-}
-
-func (m *GenericMsg) Reply(r Msg) {
-	if m.stage == nil {
-		glog.Fatalf(
-			"Message not correctly build: No stage in the generic message.")
-	}
-
-	m.stage.ReplyTo(m, r)
-}
-
-const (
-	genericMsgType = "GenericMsg"
-)
-
-// This method should always be overridden by messages.
-func (m *GenericMsg) Type() MsgType {
-	return genericMsgType
-}
-
-// State is the storage for a collection of dictionaries.
-type State interface {
-	Dict(name DictionaryName) Dictionary
-}
-
-// Simply a key-value store.
-type Dictionary interface {
-	Name() DictionaryName
-	Get(key Key) (Value, bool)
-	Set(key Key, val Value)
-}
-
-// DictionaryName is the key to lookup dictionaries in the state.
-type DictionaryName string
-
-// Key is to lookup values in Dicitonaries and is simply a byte array.
-type Key string
-type Value interface{}
-
-// A tuple of (dictionary name, key) which is used in the map function of
-// actors.
-type DictionaryKey struct {
-	Dict DictionaryName
-	Key  Key
-}
-
-type MapSet []DictionaryKey
-
-func (ms MapSet) Len() int      { return len(ms) }
-func (ms MapSet) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
-func (ms MapSet) Less(i, j int) bool {
-	return ms[i].Dict < ms[j].Dict ||
-		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
-}
-
-func (dk *DictionaryKey) String() string {
-	// TODO(soheil): This will change when we implement it using a Trie instead of
-	// a map.
-	return string(dk.Dict) + "/" + string(dk.Key)
 }
 
 type Context interface {
@@ -322,10 +25,9 @@ type Context interface {
 
 type RecvContext interface {
 	Context
-	NewGenericMsg() GenericMsg
-	Emit(msg Msg)
-	SendTo(msg Msg, to ActorName, ms MapSet)
-	ReplyTo(msg Msg, r Msg)
+	Emit(msgData interface{})
+	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
+	ReplyTo(msg Msg, replyData interface{})
 }
 
 type context struct {
@@ -347,23 +49,41 @@ func (ctx *context) State() State {
 	return ctx.state
 }
 
-func (ctx *recvContext) NewGenericMsg() GenericMsg {
-	return GenericMsg{stage: ctx.stage, rcvrId: ctx.rcvr.id()}
+// Emits a message. Note that m should be your data not an instance of Msg.
+func (ctx *recvContext) Emit(msgData interface{}) {
+	msg := broadcastMsg{
+		simpleMsg: simpleMsg{
+			stage:   ctx.stage,
+			data:    msgData,
+			msgType: msgType(msgData),
+		},
+		from: ctx.rcvr.id(),
+	}
+
+	ctx.stage.EmitMsg(&msg)
 }
 
-func (ctx *recvContext) Emit(m Msg) {
-	gmsg := m.(*GenericMsg)
-	gmsg.stage = ctx.stage
-	gmsg.rcvrId = ctx.rcvr.id()
-	ctx.stage.Emit(m)
-}
+func (ctx *recvContext) SendTo(msgData interface{}, to ActorName,
+	dk DictionaryKey) {
 
-func (ctx *recvContext) SendTo(msg Msg, to ActorName, ms MapSet) {
+	msg := unicastMsg{
+		broadcastMsg: broadcastMsg{
+			simpleMsg: simpleMsg{
+				stage:   ctx.stage,
+				data:    msgData,
+				msgType: msgType(msgData),
+			},
+			from: ctx.rcvr.id(),
+		},
+	}
+
+	ctx.stage.EmitMsg(&msg)
+
 	// TODO(soheil): Implement send to.
 	glog.Fatal("Sendto is not implemented.")
 }
 
-func (ctx *recvContext) ReplyTo(msg Msg, r Msg) {
+func (ctx *recvContext) ReplyTo(msg Msg, replyData interface{}) {
 	// TODO(soheil): Implement reply to.
 	glog.Fatal("RelpyTo is not implemented.")
 }
@@ -466,10 +186,10 @@ func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) {
 	a.Handle(msgType, handlerFromFuncs(m, r))
 }
 
-func (a *actor) Handle(msgType interface{}, h Handler) {
-	t, ok := msgType.(MsgType)
+func (a *actor) Handle(msgT interface{}, h Handler) {
+	t, ok := msgT.(MsgType)
 	if !ok {
-		t = MsgType(reflect.TypeOf(msgType).String())
+		t = msgType(msgT)
 	}
 
 	if a.mapper == nil {
@@ -554,14 +274,12 @@ func (rcvr *localRcvr) id() ReceiverId {
 }
 
 func (rcvr *localRcvr) start() {
-	//glog.Infof("Started %v", rcvr.dataCh)
 	for {
 		select {
 		case d, ok := <-rcvr.dataCh:
 			if !ok {
 				return
 			}
-			//glog.Infof("Message got in rcvr %v", d)
 			rcvr.handleMsg(d)
 
 		case c, ok := <-rcvr.ctrlCh:
@@ -587,18 +305,7 @@ func (rcvr *localRcvr) handleCmd(cmd actorCommand) {
 }
 
 func (rcvr *localRcvr) enque(mh msgAndHandler) {
-	//glog.Infof("Enqueued ")
 	rcvr.dataCh <- mh
-}
-
-type proxyRcvr struct {
-	localRcvr
-}
-
-func (rcvr *proxyRcvr) handleMsg(mh msgAndHandler) {
-}
-
-func (rcvr *proxyRcvr) start() {
 }
 
 func (mapr *mapper) start() {
@@ -728,47 +435,38 @@ func (mapr *mapper) isLocalRcvr(id ReceiverId) bool {
 	return mapr.ctx.stage.Id() == id.StageId
 }
 
+func (mapr *mapper) newLocalRcvr(id ReceiverId) localRcvr {
+	r := localRcvr{
+		asyncRoutine: asyncRoutine{
+			dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
+			ctrlCh: make(chan actorCommand),
+			waitCh: make(chan interface{}),
+		},
+		rId: id,
+	}
+	r.ctx = recvContext{
+		context: mapr.ctx,
+	}
+	return r
+}
+
 func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 	var rcvr receiver
 	rcvrId := mapr.tryLock(mapSet)
 	if mapr.isLocalRcvr(rcvrId) {
-		r := &localRcvr{
-			asyncRoutine: asyncRoutine{
-				dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
-				ctrlCh: make(chan actorCommand),
-				waitCh: make(chan interface{}),
-			},
-			rId: rcvrId,
-		}
-		r.ctx = recvContext{
-			context: context{
-				stage: mapr.ctx.stage,
-				actor: mapr.ctx.actor,
-			},
-			rcvr: r,
-		}
-		go r.start()
-		rcvr = r
+		fmt.Println("Creating a local receiver")
+		r := mapr.newLocalRcvr(rcvrId)
+		r.ctx.rcvr = &r
+		rcvr = &r
 	} else {
-		r := &proxyRcvr{
-			localRcvr{
-				asyncRoutine: asyncRoutine{
-					dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
-					ctrlCh: make(chan actorCommand),
-					waitCh: make(chan interface{}),
-				},
-				rId: rcvrId,
-			},
+		fmt.Println("Creating a proxy receiver")
+		r := proxyRcvr{
+			localRcvr: mapr.newLocalRcvr(rcvrId),
 		}
-		r.ctx = recvContext{
-			context: context{
-				stage: mapr.ctx.stage,
-				actor: mapr.ctx.actor,
-			},
-			rcvr: r,
-		}
-		glog.Fatalf("Proxy messages are not implemented yet!")
+		r.ctx.rcvr = &r
+		rcvr = &r
 	}
+	go rcvr.start()
 
 	for _, dictKey := range mapSet {
 		mapr.setReceiver(dictKey, rcvr)

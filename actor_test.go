@@ -60,12 +60,7 @@ func TestStage(t *testing.T) {
 		testStageCh = nil
 	}()
 
-	cfg := StageConfig{
-		StageAddr:     "0.0.0.0:7737",
-		RegAddrs:      []string{"127.0.0.1:4001"},
-		DataChBufSize: 1024,
-	}
-	stage := NewStage(cfg)
+	stage := NewStage()
 	actor := stage.NewActor("MyActor")
 	actor.Handle(MyMsg{}, &MyHandler{})
 
