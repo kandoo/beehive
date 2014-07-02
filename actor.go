@@ -3,11 +3,8 @@ package actor
 import (
 	"errors"
 	"os"
-	"os/signal"
 	"reflect"
-	"syscall"
 
-	"github.com/coreos/go-etcd/etcd"
 	"github.com/golang/glog"
 )
 
@@ -162,34 +159,6 @@ func (s *stage) handleMsg(msg Msg) {
 		//glog.Infof("Sent data %v %v", msg, mh.mapr)
 		mh.mapr.dataCh <- msgAndHandler{msg, mh.handler}
 	}
-}
-
-func (s *stage) registerSignals() {
-	s.sigCh = make(chan os.Signal, 1)
-	signal.Notify(s.sigCh,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-	go func() {
-		<-s.sigCh
-		s.Stop()
-	}()
-}
-
-const (
-	regPrefix = "theatre"
-	regTtl    = 0
-)
-
-func (s *stage) connectToRegistery() {
-	if len(s.config.RegAddrs) == 0 {
-		return
-	}
-
-	// TODO(soheil): Add TLS registery.
-	s.registery = registery{etcd.NewClient(s.config.RegAddrs), regPrefix, regTtl}
-	s.registery.SyncCluster()
 }
 
 func (s *stage) Start(waitCh chan interface{}) error {
@@ -801,7 +770,4 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 	}
 
 	return rcvr
-}
-
-func init() {
 }

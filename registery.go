@@ -11,10 +11,25 @@ import (
 	"github.com/golang/glog"
 )
 
+const (
+	regPrefix = "theatre"
+	regTtl    = 0
+)
+
 type registery struct {
 	*etcd.Client
 	prefix string
 	ttl    uint64
+}
+
+func (s *stage) connectToRegistery() {
+	if len(s.config.RegAddrs) == 0 {
+		return
+	}
+
+	// TODO(soheil): Add TLS registery.
+	s.registery = registery{etcd.NewClient(s.config.RegAddrs), regPrefix, regTtl}
+	s.registery.SyncCluster()
 }
 
 func (g registery) connected() bool {
