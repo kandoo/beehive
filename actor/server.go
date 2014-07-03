@@ -17,7 +17,7 @@ func (s *stage) handleConn(conn net.Conn) {
 	dec := gob.NewDecoder(conn)
 	enc := gob.NewEncoder(conn)
 
-	var id ReceiverId
+	var id RcvrId
 	dec.Decode(&id)
 
 	//var dataCh chan msgAndHandler

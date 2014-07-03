@@ -15,26 +15,26 @@ type MsgType string
 
 type simpleMsg struct {
 	stage   Stage
-	data    interface{}
-	msgType MsgType
+	MsgData interface{}
+	MsgType MsgType
 }
 
 type broadcastMsg struct {
 	simpleMsg
-	from ReceiverId
+	From RcvrId
 }
 
 type unicastMsg struct {
 	broadcastMsg
-	to ReceiverId
+	To RcvrId
 }
 
 func (m *simpleMsg) Type() MsgType {
-	return m.msgType
+	return m.MsgType
 }
 
 func (m *simpleMsg) Data() interface{} {
-	return m.data
+	return m.MsgData
 }
 
 func msgType(d interface{}) MsgType {

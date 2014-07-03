@@ -112,6 +112,11 @@ const (
 	kInitialReceivers = 10
 )
 
+type mapperAndHandler struct {
+	mapr    *mapper
+	handler Handler
+}
+
 // The internal implementation of Stage.
 type stage struct {
 	id     StageId
@@ -231,8 +236,8 @@ func (s *stage) NewActor(name ActorName) Actor {
 func (s *stage) Emit(msgData interface{}) {
 	msg := simpleMsg{
 		stage:   s,
-		data:    msgData,
-		msgType: msgType(msgData),
+		MsgData: msgData,
+		MsgType: msgType(msgData),
 	}
 
 	s.EmitMsg(&msg)

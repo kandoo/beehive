@@ -82,12 +82,12 @@ func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) lockActor(id ReceiverId) error {
+func (g registery) lockActor(id RcvrId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
 	v := regVal{
 		StageId: id.StageId,
-		RcvrId:  id.RcvrId,
+		RcvrId:  id.Id,
 	}
 	k := g.path(string(id.ActorName), lockFileName)
 
@@ -104,10 +104,10 @@ func (g registery) lockActor(id ReceiverId) error {
 	}
 }
 
-func (g registery) unlockActor(id ReceiverId) error {
+func (g registery) unlockActor(id RcvrId) error {
 	v := regVal{
 		StageId: id.StageId,
-		RcvrId:  id.RcvrId,
+		RcvrId:  id.Id,
 	}
 	k := g.path(string(id.ActorName), lockFileName)
 
@@ -130,7 +130,7 @@ func (g registery) unlockActor(id ReceiverId) error {
 	return nil
 }
 
-func (g registery) storeOrGet(id ReceiverId, ms MapSet) regVal {
+func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 	g.lockActor(id)
 	defer g.unlockActor(id)
 
@@ -138,7 +138,7 @@ func (g registery) storeOrGet(id ReceiverId, ms MapSet) regVal {
 
 	v := regVal{
 		StageId: id.StageId,
-		RcvrId:  id.RcvrId,
+		RcvrId:  id.Id,
 	}
 	mv := marshallRegValOrFail(v)
 	validate := false

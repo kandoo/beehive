@@ -41,3 +41,39 @@ func (ms MapSet) Less(i, j int) bool {
 	return ms[i].Dict < ms[j].Dict ||
 		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
 }
+
+func newState(name string) State {
+	return &inMemoryState{name, make(map[string]Dictionary)}
+}
+
+type inMemoryState struct {
+	name  string
+	dicts map[string]Dictionary
+}
+
+type inMemoryDictionary struct {
+	name DictionaryName
+	dict map[Key]Value
+}
+
+func (d *inMemoryDictionary) Get(k Key) (Value, bool) {
+	v, ok := d.dict[k]
+	return v, ok
+}
+
+func (d *inMemoryDictionary) Set(k Key, v Value) {
+	d.dict[k] = v
+}
+
+func (d *inMemoryDictionary) Name() DictionaryName {
+	return d.name
+}
+
+func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
+	d, ok := s.dicts[string(name)]
+	if !ok {
+		d = &inMemoryDictionary{name, make(map[Key]Value)}
+		s.dicts[string(name)] = d
+	}
+	return d
+}

@@ -34,7 +34,7 @@ func (h *MyHandler) Recv(m Msg, c RecvContext) {
 	i := v.(int) + 1
 	d.Set(k, i)
 
-	id := c.(*recvContext).rcvr.id().RcvrId % uint32(kHandlers)
+	id := c.(*recvContext).rcvr.id().Id % uint32(kHandlers)
 	if id != uint32(hash) {
 		panic(fmt.Sprintf("Invalid message %v received in %v.", m, id))
 	}
