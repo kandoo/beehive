@@ -92,14 +92,15 @@ func (a *actor) initMapper() {
 	a.mapper = &mapper{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, a.stage.config.DataChBufSize),
-			ctrlCh: make(chan routineCommand),
+			ctrlCh: make(chan routineCmd),
 			waitCh: make(chan interface{}),
 		},
 		ctx: context{
 			stage: a.stage,
 			actor: a,
 		},
-		receivers: make(map[string]receiver),
+		keyToRcvrs: make(map[string]receiver),
+		localRcvrs: make(map[uint32]*localRcvr),
 	}
 
 	go a.mapper.start()

@@ -13,27 +13,30 @@ type Msg interface {
 
 type MsgType string
 
-type simpleMsg struct {
-	stage   Stage
+type msg struct {
 	MsgData interface{}
 	MsgType MsgType
+	From    RcvrId
+	To      RcvrId
 }
 
-type broadcastMsg struct {
-	simpleMsg
-	From RcvrId
+func (m *msg) noReply() bool {
+	return m.From.isNil()
 }
 
-type unicastMsg struct {
-	broadcastMsg
-	To RcvrId
+func (m *msg) isBroadCast() bool {
+	return m.To.isNil()
 }
 
-func (m *simpleMsg) Type() MsgType {
+func (m *msg) isUnicast() bool {
+	return !m.To.isNil()
+}
+
+func (m *msg) Type() MsgType {
 	return m.MsgType
 }
 
-func (m *simpleMsg) Data() interface{} {
+func (m *msg) Data() interface{} {
 	return m.MsgData
 }
 

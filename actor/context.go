@@ -34,30 +34,21 @@ func (ctx *context) State() State {
 
 // Emits a message. Note that m should be your data not an instance of Msg.
 func (ctx *recvContext) Emit(msgData interface{}) {
-	msg := broadcastMsg{
-		simpleMsg: simpleMsg{
-			stage:   ctx.stage,
-			MsgData: msgData,
-			MsgType: msgType(msgData),
-		},
-		From: ctx.rcvr.id(),
+	msg := msg{
+		MsgData: msgData,
+		MsgType: msgType(msgData),
+		From:    ctx.rcvr.id(),
 	}
-
 	ctx.stage.EmitMsg(&msg)
 }
 
 func (ctx *recvContext) SendTo(msgData interface{}, to ActorName,
 	dk DictionaryKey) {
 
-	msg := unicastMsg{
-		broadcastMsg: broadcastMsg{
-			simpleMsg: simpleMsg{
-				stage:   ctx.stage,
-				MsgData: msgData,
-				MsgType: msgType(msgData),
-			},
-			From: ctx.rcvr.id(),
-		},
+	msg := msg{
+		MsgData: msgData,
+		MsgType: msgType(msgData),
+		From:    ctx.rcvr.id(),
 	}
 
 	ctx.stage.EmitMsg(&msg)

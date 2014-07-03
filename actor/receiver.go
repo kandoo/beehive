@@ -6,6 +6,10 @@ type RcvrId struct {
 	Id        uint32
 }
 
+func (r *RcvrId) isNil() bool {
+	return len(r.StageId) == 0 && len(r.ActorName) == 0 && r.Id == 0
+}
+
 type receiver interface {
 	id() RcvrId
 	enque(mh msgAndHandler)
@@ -44,9 +48,9 @@ func (rcvr *localRcvr) handleMsg(mh msgAndHandler) {
 	mh.handler.Recv(mh.msg, &rcvr.ctx)
 }
 
-func (rcvr *localRcvr) handleCmd(cmd routineCommand) {
-	switch cmd {
-	case stopActor:
+func (rcvr *localRcvr) handleCmd(cmd routineCmd) {
+	switch {
+	case cmd.cmdType == stopRoutine:
 		close(rcvr.dataCh)
 		close(rcvr.ctrlCh)
 		close(rcvr.waitCh)

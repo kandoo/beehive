@@ -8,9 +8,10 @@ import (
 
 type mapper struct {
 	asyncRoutine
-	ctx       context
-	receivers map[string]receiver
-	lastRId   uint32
+	ctx        context
+	keyToRcvrs map[string]receiver
+	lastRId    uint32
+	localRcvrs map[uint32]*localRcvr
 }
 
 func (mapr *mapper) state() State {
@@ -48,20 +49,25 @@ func (mapr *mapper) stopReceivers() {
 	// TODO(soheil): Impl this method.
 }
 
-func (mapr *mapper) handleCmd(cmd routineCommand) {
-	switch cmd {
-	case stopActor:
+func (mapr *mapper) handleCmd(cmd routineCmd) {
+	switch {
+	case cmd.cmdType == stopRoutine:
 		mapr.stopReceivers()
 		mapr.closeChannels()
+
+	case cmd.cmdType == findRcvr:
+		id := cmd.cmdData.(uint32)
+		r := mapr.localRcvrs[id]
+		cmd.resCh <- r
 	}
 }
 
 func (mapr *mapper) receiver(dk DictionaryKey) receiver {
-	return mapr.receivers[dk.String()]
+	return mapr.keyToRcvrs[dk.String()]
 }
 
 func (mapr *mapper) setReceiver(dk DictionaryKey, rcvr receiver) {
-	mapr.receivers[dk.String()] = rcvr
+	mapr.keyToRcvrs[dk.String()] = rcvr
 }
 
 func (mapr *mapper) syncReceivers(ms MapSet, rcvr receiver) {
@@ -151,7 +157,7 @@ func (mapr *mapper) newLocalRcvr(id RcvrId) localRcvr {
 	r := localRcvr{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
-			ctrlCh: make(chan routineCommand),
+			ctrlCh: make(chan routineCmd),
 			waitCh: make(chan interface{}),
 		},
 		rId: id,
@@ -170,6 +176,7 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 		r := mapr.newLocalRcvr(rcvrId)
 		r.ctx.rcvr = &r
 		rcvr = &r
+		mapr.localRcvrs[rcvrId.Id] = &r
 	} else {
 		fmt.Println("Creating a proxy receiver")
 		r := proxyRcvr{

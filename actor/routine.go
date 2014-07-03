@@ -1,10 +1,17 @@
 package actor
 
-type routineCommand int
+type routineCmd struct {
+	cmdType routineCmdType
+	cmdData interface{}
+	resCh   chan interface{}
+}
+
+type routineCmdType int
 
 const (
-	stopActor  routineCommand = iota
-	startActor                = iota
+	stopRoutine  routineCmdType = iota
+	startRoutine                = iota
+	findRcvr                    = iota
 )
 
 type msgAndHandler struct {
@@ -15,6 +22,6 @@ type msgAndHandler struct {
 // The base structure shared between mappers and receivers.
 type asyncRoutine struct {
 	dataCh chan msgAndHandler
-	ctrlCh chan routineCommand
+	ctrlCh chan routineCmd
 	waitCh chan interface{}
 }

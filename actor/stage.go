@@ -141,10 +141,20 @@ func (s *stage) isIsol() bool {
 	return s.registery.connected()
 }
 
+func (s *stage) actor(name ActorName) (*actor, error) {
+	for _, a := range s.actors {
+		if a.Name() == name {
+			return a.(*actor), nil
+		}
+	}
+
+	return nil, errors.New("Actor not found.")
+}
+
 func (s *stage) closeChannels() {
 	for _, mhs := range s.mappers {
 		for _, mh := range mhs {
-			mh.mapr.ctrlCh <- stopActor
+			mh.mapr.ctrlCh <- routineCmd{cmdType: stopRoutine}
 			<-mh.mapr.waitCh
 		}
 	}
@@ -234,13 +244,7 @@ func (s *stage) NewActor(name ActorName) Actor {
 }
 
 func (s *stage) Emit(msgData interface{}) {
-	msg := simpleMsg{
-		stage:   s,
-		MsgData: msgData,
-		MsgType: msgType(msgData),
-	}
-
-	s.EmitMsg(&msg)
+	s.EmitMsg(&msg{MsgData: msgData, MsgType: msgType(msgData)})
 }
 
 func (s *stage) EmitMsg(msg Msg) {
