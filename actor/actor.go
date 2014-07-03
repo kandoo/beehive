@@ -1,6 +1,10 @@
 package actor
 
-import "github.com/golang/glog"
+import (
+	"encoding/gob"
+
+	"github.com/golang/glog"
+)
 
 type ActorName string
 
@@ -70,6 +74,7 @@ func (a *actor) Handle(msgT interface{}, h Handler) {
 	t, ok := msgT.(MsgType)
 	if !ok {
 		t = msgType(msgT)
+		gob.Register(msgT)
 	}
 
 	if a.mapper == nil {

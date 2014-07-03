@@ -26,7 +26,7 @@ type Stage interface {
 	Id() StageId
 
 	// Starts the stage and will close the waitCh once the stage stops.
-	Start(waitCh chan interface{}) error
+	Start(joinCh chan interface{}) error
 	// Stops the stage and all its actors.
 	Stop() error
 	// Returns the stage status.
@@ -190,9 +190,9 @@ func (s *stage) handleMsg(msg Msg) {
 	}
 }
 
-func (s *stage) Start(waitCh chan interface{}) error {
+func (s *stage) Start(joinCh chan interface{}) error {
 	// TODO(soheil): Listen and grab and ID. Connect to etcd.
-	defer close(waitCh)
+	defer close(joinCh)
 
 	s.status = StageStarted
 	s.registerSignals()
@@ -210,8 +210,8 @@ func (s *stage) Start(waitCh chan interface{}) error {
 				return errors.New("Control channel is closed.")
 			}
 			s.handleCmd(cmd)
-		case <-waitCh:
-			glog.Fatalf("Stage's wait channel should not be used nor closed.")
+		case <-joinCh:
+			glog.Fatalf("Stage's join channel should not be used nor closed.")
 		}
 	}
 	return nil
@@ -240,6 +240,7 @@ func (s *stage) NewActor(name ActorName) Actor {
 		stage: s,
 	}
 	a.initMapper()
+	s.registerActor(a)
 	return a
 }
 

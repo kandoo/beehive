@@ -23,10 +23,16 @@ type proxyRcvr struct {
 }
 
 func (r *proxyRcvr) handleMsg(mh msgAndHandler) {
-	r.encoder.Encode(mh.msg)
+	err := r.encoder.Encode(mh.msg)
+	if err != nil {
+		glog.Errorf("Cannot encode message: %v", err)
+	}
 }
 
 func (r *proxyRcvr) dial() {
+	// FIXME(soheil): This can't scale. We can only support 65k remote receivers.
+	// There should be one connection per remote stage and with that we can
+	// support 65k remote controllers.
 	step := time.Duration(waitStepInMs)
 	waitMs := minWaitInMs
 	for {
@@ -56,11 +62,15 @@ func (r *proxyRcvr) dial() {
 	r.encoder = gob.NewEncoder(r.conn)
 	r.decoder = gob.NewDecoder(r.conn)
 
-	r.encoder.Encode(&r.rId)
-	ok := false
-	r.decoder.Decode(&ok)
-	if !ok {
-		glog.Fatalf("Cannot connect to receiver %+v", r.rId)
+	err := r.encoder.Encode(&r.rId)
+	if err != nil {
+		glog.Fatalf("Cannot handshake with peer: %v", err)
+	}
+
+	peerOk := false
+	r.decoder.Decode(&peerOk)
+	if !peerOk {
+		glog.Fatalf("Peer cannot find receiver: %+v", r.rId)
 	}
 }
 

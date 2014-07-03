@@ -1,10 +1,6 @@
 package actor
 
-import (
-	"fmt"
-
-	"github.com/golang/glog"
-)
+import "github.com/golang/glog"
 
 type mapper struct {
 	asyncRoutine
@@ -172,13 +168,11 @@ func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
 	var rcvr receiver
 	rcvrId := mapr.tryLock(mapSet)
 	if mapr.isLocalRcvr(rcvrId) {
-		fmt.Println("Creating a local receiver")
 		r := mapr.newLocalRcvr(rcvrId)
 		r.ctx.rcvr = &r
 		rcvr = &r
 		mapr.localRcvrs[rcvrId.Id] = &r
 	} else {
-		fmt.Println("Creating a proxy receiver")
 		r := proxyRcvr{
 			localRcvr: mapr.newLocalRcvr(rcvrId),
 		}

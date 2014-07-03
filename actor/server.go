@@ -2,7 +2,6 @@ package actor
 
 import (
 	"encoding/gob"
-	"fmt"
 	"net"
 
 	"github.com/golang/glog"
@@ -51,7 +50,7 @@ func (s *stage) handleConn(conn net.Conn) {
 
 		hs, ok := handlers[m.Type()]
 		if !ok {
-			hs := []Handler{}
+			hs = []Handler{}
 			for _, mh := range s.mappers[m.Type()] {
 				if mh.mapr.ctx.actor.Name() == id.ActorName {
 					hs = append(hs, mh.handler)
@@ -67,18 +66,20 @@ func (s *stage) handleConn(conn net.Conn) {
 }
 
 func (s *stage) listen() {
-	fmt.Println("start")
-	l, err := net.Listen("tcp", ":8080")
+	l, err := net.Listen("tcp", s.config.StageAddr)
 	if err != nil {
 		glog.Fatal("Cannot start listener: %v", err)
 	}
 
+	glog.V(1).Infof("Network server listening at: %s", s.config.StageAddr)
 	for {
 		c, err := l.Accept()
 		if err != nil {
 			glog.Errorf("Error in accept %s", err)
 			continue
 		}
+		glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
+			c.LocalAddr())
 		go s.handleConn(c)
 	}
 }

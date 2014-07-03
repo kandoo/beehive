@@ -29,7 +29,9 @@ func (s *stage) connectToRegistery() {
 
 	// TODO(soheil): Add TLS registery.
 	s.registery = registery{etcd.NewClient(s.config.RegAddrs), regPrefix, regTtl}
-	s.registery.SyncCluster()
+	if ok := s.registery.SyncCluster(); !ok {
+		glog.Fatalf("Cannot connect to registery nodes: %s", s.config.RegAddrs)
+	}
 }
 
 func (g registery) connected() bool {
@@ -131,8 +133,17 @@ func (g registery) unlockActor(id RcvrId) error {
 }
 
 func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
-	g.lockActor(id)
-	defer g.unlockActor(id)
+	err := g.lockActor(id)
+	if err != nil {
+		glog.Fatalf("Cannot lock actor %v: %v", id, err)
+	}
+
+	defer func() {
+		err := g.unlockActor(id)
+		if err != nil {
+			glog.Fatalf("Cannot unlock actor %v: %v", id, err)
+		}
+	}()
 
 	sort.Sort(ms)
 
