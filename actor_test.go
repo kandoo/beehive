@@ -7,30 +7,24 @@ import (
 	"testing"
 )
 
-type MyMsg struct {
-	GenericMsg
-	val int
-}
-
-func (msg *MyMsg) Type() MsgType {
-	return "actor.MyMsg"
-}
+type MyMsg int
 
 type MyHandler struct{}
 
 const (
 	kHandlers int = 10
-	kMsgs         = 10000
+	kMsgs         = 1000000
 )
 
 func (h *MyHandler) Map(m Msg, c Context) MapSet {
-	return MapSet{{"D", Key(strconv.Itoa(m.(*MyMsg).val % kHandlers))}}
+	v := int(m.Data().(MyMsg))
+	return MapSet{{"D", Key(strconv.Itoa(v % kHandlers))}}
 }
 
 var testStageCh chan interface{} = make(chan interface{})
 
 func (h *MyHandler) Recv(m Msg, c RecvContext) {
-	hash := m.(*MyMsg).val % kHandlers
+	hash := int(m.Data().(MyMsg)) % kHandlers
 	d := c.State().Dict("D")
 	k := Key(strconv.Itoa(hash))
 	v, ok := d.Get(k)
@@ -62,13 +56,13 @@ func TestStage(t *testing.T) {
 
 	stage := NewStage()
 	actor := stage.NewActor("MyActor")
-	actor.Handle(MyMsg{}, &MyHandler{})
+	actor.Handle(MyMsg(0), &MyHandler{})
 
 	stageWCh := make(chan interface{})
 	go stage.Start(stageWCh)
 
 	for i := 1; i <= kMsgs; i++ {
-		stage.Emit(&MyMsg{val: i})
+		stage.Emit(MyMsg(i))
 	}
 
 	for i := 0; i < kHandlers; i++ {
