@@ -73,5 +73,11 @@ func main() {
 	s.Emit(Op{1, 2, Sub})
 	fmt.Println("Emitted sub.")
 
+	s.Emit(Op{1, 2, Add})
+	fmt.Println("Emitted add.")
+
+	s.Emit(Op{1, 2, Sub})
+	fmt.Println("Emitted sub.")
+
 	<-joinCh
 }
