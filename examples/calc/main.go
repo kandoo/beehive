@@ -58,26 +58,42 @@ func (c *Calculator) calc(op Op) int {
 	return 0
 }
 
+type Generator struct{}
+
+func (g *Generator) Start(ctx actor.RecvContext) {
+	fmt.Println("Generator started.")
+
+	ctx.Emit(Op{1, 2, Add})
+	fmt.Println("Emitted add.")
+
+	ctx.Emit(Op{1, 2, Sub})
+	fmt.Println("Emitted sub.")
+
+	ctx.Emit(Op{1, 2, Add})
+	fmt.Println("Emitted add.")
+
+	ctx.Emit(Op{1, 2, Sub})
+	fmt.Println("Emitted sub.")
+}
+
+func (g *Generator) Stop(ctx actor.RecvContext) {
+	fmt.Println("Generator stopped.")
+}
+
+func (g *Generator) Recv(msg actor.Msg, ctx actor.RecvContext) {
+	panic("Should not receive a reply.")
+}
+
 func main() {
 	s := actor.NewStage()
-	a := s.NewActor("Test")
+	a := s.NewActor("Calc")
 	a.Handle(Op{}, &Calculator{})
+	a.Detached(&Generator{})
 
 	joinCh := make(chan interface{})
 	go s.Start(joinCh)
 	fmt.Println("Stage started.")
 
-	s.Emit(Op{1, 2, Add})
-	fmt.Println("Emitted add.")
-
-	s.Emit(Op{1, 2, Sub})
-	fmt.Println("Emitted sub.")
-
-	s.Emit(Op{1, 2, Add})
-	fmt.Println("Emitted add.")
-
-	s.Emit(Op{1, 2, Sub})
-	fmt.Println("Emitted sub.")
-
 	<-joinCh
+	fmt.Println("Stage stopped.")
 }

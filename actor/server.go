@@ -70,6 +70,7 @@ func (s *stage) listen() {
 	if err != nil {
 		glog.Fatal("Cannot start listener: %v", err)
 	}
+	defer l.Close()
 
 	glog.V(1).Infof("Network server listening at: %s", s.config.StageAddr)
 	for {

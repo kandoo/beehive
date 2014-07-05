@@ -11,14 +11,20 @@ type ActorName string
 // Actors simply process and exchange messages. Actor methods are not
 // thread-safe and we assume that neither are its map and receive functions.
 type Actor interface {
+	// Handles a specific message type using the handler. If msgType is an
+	// name of msgType's reflection type.
+	// instnace of MsgType, we use it as the type. Otherwise, we use the qualified
+	Handle(msgType interface{}, h Handler)
 	// Hanldes a specific message type using the map and receive functions. If
 	// msgType is an instnace of MsgType, we use it as the type. Otherwise, we use
 	// the qualified name of msgType's reflection type.
 	HandleFunc(msgType interface{}, m Map, r Recv)
-	// Handles a specific message type using the handler. If msgType is an
-	// instnace of MsgType, we use it as the type. Otherwise, we use the qualified
-	// name of msgType's reflection type.
-	Handle(msgType interface{}, h Handler)
+
+	// Regsiters the actor's detached handler.
+	Detached(h DetachedHandler) error
+	// Registers the detached handler using functions.
+	DetachedFunc(start Start, stop Stop, r Recv)
+
 	// Returns the state of this actor that is shared among all instances and the
 	// map function. This state is NOT thread-safe and actors must synchronize for
 	// themselves.
@@ -42,6 +48,27 @@ type Handler interface {
 	Recv(m Msg, c RecvContext)
 }
 
+// Detached handlers, in contrast to normal Handlers with Map and Recv, start in
+// their own go-routine and emit messages. They do not listen on a particular
+// message and only recv replys in their receive functions.
+// Note that each actor can have only one detached handler.
+type DetachedHandler interface {
+	// Starts the handler. Note that this will run in a separate goroutine, and
+	// you can block.
+	Start(ctx RecvContext)
+	// Stops the handler. This should notify the start method perhaps using a
+	// channel.
+	Stop(ctx RecvContext)
+	// Receives replies to messages emitted in this handler.
+	Recv(m Msg, ctx RecvContext)
+}
+
+// Start function of a detached handler.
+type Start func(ctx RecvContext)
+
+// Stop function of a detached handler.
+type Stop func(ctx RecvContext)
+
 type funcHandler struct {
 	mapFunc  Map
 	recvFunc Recv
@@ -55,9 +82,22 @@ func (h *funcHandler) Recv(m Msg, c RecvContext) {
 	h.recvFunc(m, c)
 }
 
-// Creates a handler using the given map and recv functions.
-func handlerFromFuncs(m Map, r Recv) Handler {
-	return &funcHandler{m, r}
+type funcDetached struct {
+	startFunc Start
+	stopFunc  Stop
+	recvFunc  Recv
+}
+
+func (h *funcDetached) Start(c RecvContext) {
+	h.startFunc(c)
+}
+
+func (h *funcDetached) Stop(c RecvContext) {
+	h.stopFunc(c)
+}
+
+func (h *funcDetached) Recv(m Msg, c RecvContext) {
+	h.recvFunc(m, c)
 }
 
 type actor struct {
@@ -67,7 +107,11 @@ type actor struct {
 }
 
 func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) {
-	a.Handle(msgType, handlerFromFuncs(m, r))
+	a.Handle(msgType, &funcHandler{m, r})
+}
+
+func (a *actor) DetachedFunc(start Start, stop Stop, rcv Recv) {
+	a.Detached(&funcDetached{start, stop, rcv})
 }
 
 func (a *actor) Handle(msgT interface{}, h Handler) {
@@ -82,6 +126,10 @@ func (a *actor) Handle(msgT interface{}, h Handler) {
 	}
 
 	a.stage.registerHandler(t, a.mapper, h)
+}
+
+func (a *actor) Detached(h DetachedHandler) error {
+	return a.mapper.registerDetached(h)
 }
 
 func (a *actor) State() State {

@@ -1,6 +1,14 @@
 package actor
 
-import "github.com/golang/glog"
+import (
+	"errors"
+
+	"github.com/golang/glog"
+)
+
+const (
+	detachedRcvrId = 0
+)
 
 type mapper struct {
 	asyncRoutine
@@ -8,6 +16,7 @@ type mapper struct {
 	keyToRcvrs map[string]receiver
 	lastRId    uint32
 	localRcvrs map[uint32]*localRcvr
+	detached   *detachedRcvr
 }
 
 func (mapr *mapper) state() State {
@@ -18,6 +27,10 @@ func (mapr *mapper) state() State {
 }
 
 func (mapr *mapper) start() {
+	if mapr.detached != nil {
+		go mapr.detached.start()
+	}
+
 	for {
 		select {
 		case d, ok := <-mapr.dataCh:
@@ -42,7 +55,19 @@ func (mapr *mapper) closeChannels() {
 }
 
 func (mapr *mapper) stopReceivers() {
-	// TODO(soheil): Impl this method.
+	stop := routineCmd{stopRoutine, nil, nil}
+	if mapr.detached != nil {
+		mapr.detached.ctrlCh <- stop
+	}
+
+	for _, v := range mapr.keyToRcvrs {
+		switch r := v.(type) {
+		case *proxyRcvr:
+			r.ctrlCh <- stop
+		case *localRcvr:
+			r.ctrlCh <- stop
+		}
+	}
 }
 
 func (mapr *mapper) handleCmd(cmd routineCmd) {
@@ -53,9 +78,41 @@ func (mapr *mapper) handleCmd(cmd routineCmd) {
 
 	case cmd.cmdType == findRcvr:
 		id := cmd.cmdData.(uint32)
-		r := mapr.localRcvrs[id]
-		cmd.resCh <- r
+
+		if id == detachedRcvrId {
+			cmd.resCh <- mapr.detached
+			return
+		}
+
+		lr, ok := mapr.localRcvrs[id]
+		if ok {
+			cmd.resCh <- lr
+			return
+		}
+
+		cmd.resCh <- nil
 	}
+}
+
+func (mapr *mapper) registerDetached(h DetachedHandler) error {
+	if mapr.detached != nil {
+		return errors.New("Actor has a detached handler.")
+	}
+
+	id := RcvrId{
+		ActorName: mapr.ctx.actor.Name(),
+		StageId:   mapr.ctx.stage.Id(),
+		Id:        detachedRcvrId,
+	}
+
+	mapr.detached = &detachedRcvr{
+		localRcvr: mapr.newLocalRcvr(id),
+		h:         h,
+	}
+
+	mapr.detached.ctx.rcvr = mapr.detached
+
+	return nil
 }
 
 func (mapr *mapper) receiver(dk DictionaryKey) receiver {
