@@ -21,14 +21,14 @@ func (s *stage) handleConn(conn net.Conn) {
 	var id RcvrId
 	dec.Decode(&id)
 
-	a, err := s.actor(id.ActorName)
-	if err != nil {
+	a, ok := s.actor(id.ActorName)
+	if !ok {
 		glog.Errorf("Cannot find actor: %s", id.ActorName)
 		return
 	}
 
 	resCh := make(chan interface{})
-	a.mapper.ctrlCh <- routineCmd{findRcvr, id.Id, resCh}
+	a.mapper.ctrlCh <- routineCmd{findRcvr, id, resCh}
 
 	res := <-resCh
 	if res == nil {
@@ -40,12 +40,23 @@ func (s *stage) handleConn(conn net.Conn) {
 
 	enc.Encode(true)
 
-	handlers := make(map[MsgType][]Handler)
+	toDetached := id.isDetachedId()
+
+	var handlers map[MsgType][]Handler
+	if !toDetached {
+		handlers = make(map[MsgType][]Handler)
+	}
+
 	for {
 		m := msg{}
 		if err := dec.Decode(&m); err != nil {
 			glog.Errorf("Cannot decode message: %v", err)
 			return
+		}
+
+		if toDetached {
+			rcvr.enque(msgAndHandler{&m, nil})
+			continue
 		}
 
 		hs, ok := handlers[m.Type()]
@@ -57,6 +68,11 @@ func (s *stage) handleConn(conn net.Conn) {
 				}
 			}
 			handlers[m.Type()] = hs
+		}
+
+		if len(hs) == 0 {
+			glog.Errorf("No handler for message type %v in receiver %v", m.Type(), id)
+			continue
 		}
 
 		for _, h := range hs {

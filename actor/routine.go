@@ -15,7 +15,7 @@ const (
 )
 
 type msgAndHandler struct {
-	msg     Msg
+	msg     *msg
 	handler Handler
 }
 

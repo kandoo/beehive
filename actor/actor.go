@@ -2,6 +2,7 @@ package actor
 
 import (
 	"encoding/gob"
+	"errors"
 
 	"github.com/golang/glog"
 )
@@ -14,16 +15,16 @@ type Actor interface {
 	// Handles a specific message type using the handler. If msgType is an
 	// name of msgType's reflection type.
 	// instnace of MsgType, we use it as the type. Otherwise, we use the qualified
-	Handle(msgType interface{}, h Handler)
+	Handle(msgType interface{}, h Handler) error
 	// Hanldes a specific message type using the map and receive functions. If
 	// msgType is an instnace of MsgType, we use it as the type. Otherwise, we use
 	// the qualified name of msgType's reflection type.
-	HandleFunc(msgType interface{}, m Map, r Recv)
+	HandleFunc(msgType interface{}, m Map, r Recv) error
 
 	// Regsiters the actor's detached handler.
 	Detached(h DetachedHandler) error
 	// Registers the detached handler using functions.
-	DetachedFunc(start Start, stop Stop, r Recv)
+	DetachedFunc(start Start, stop Stop, r Recv) error
 
 	// Returns the state of this actor that is shared among all instances and the
 	// map function. This state is NOT thread-safe and actors must synchronize for
@@ -101,31 +102,52 @@ func (h *funcDetached) Recv(m Msg, c RecvContext) {
 }
 
 type actor struct {
-	name   ActorName
-	stage  *stage
-	mapper *mapper
+	name     ActorName
+	stage    *stage
+	mapper   *mapper
+	handlers map[MsgType]Handler
 }
 
-func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) {
-	a.Handle(msgType, &funcHandler{m, r})
+func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) error {
+	return a.Handle(msgType, &funcHandler{m, r})
 }
 
-func (a *actor) DetachedFunc(start Start, stop Stop, rcv Recv) {
-	a.Detached(&funcDetached{start, stop, rcv})
+func (a *actor) DetachedFunc(start Start, stop Stop, rcv Recv) error {
+	return a.Detached(&funcDetached{start, stop, rcv})
 }
 
-func (a *actor) Handle(msgT interface{}, h Handler) {
+func (a *actor) Handle(msgT interface{}, h Handler) error {
+	if a.mapper == nil {
+		glog.Fatalf("Actor's mapper is nil!")
+	}
+
 	t, ok := msgT.(MsgType)
 	if !ok {
 		t = msgType(msgT)
 		gob.Register(msgT)
 	}
 
-	if a.mapper == nil {
-		glog.Fatalf("Actor's mapper is nil!")
+	err := a.registerHandler(t, h)
+	if err != nil {
+		return err
 	}
 
 	a.stage.registerHandler(t, a.mapper, h)
+	return nil
+}
+
+func (a *actor) registerHandler(t MsgType, h Handler) error {
+	_, ok := a.handlers[t]
+	if ok {
+		return errors.New("A handler for this message type already exists.")
+	}
+
+	a.handlers[t] = h
+	return nil
+}
+
+func (a *actor) handler(t MsgType) Handler {
+	return a.handlers[t]
 }
 
 func (a *actor) Detached(h DetachedHandler) error {
@@ -153,7 +175,7 @@ func (a *actor) initMapper() {
 			actor: a,
 		},
 		keyToRcvrs: make(map[string]receiver),
-		localRcvrs: make(map[uint32]*localRcvr),
+		idToRcvrs:  make(map[RcvrId]receiver),
 	}
 
 	go a.mapper.start()

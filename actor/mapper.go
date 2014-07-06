@@ -13,10 +13,9 @@ const (
 type mapper struct {
 	asyncRoutine
 	ctx        context
-	keyToRcvrs map[string]receiver
 	lastRId    uint32
-	localRcvrs map[uint32]*localRcvr
-	detached   *detachedRcvr
+	idToRcvrs  map[RcvrId]receiver
+	keyToRcvrs map[string]receiver
 }
 
 func (mapr *mapper) state() State {
@@ -26,9 +25,35 @@ func (mapr *mapper) state() State {
 	return mapr.ctx.state
 }
 
+func (mapr *mapper) detachedRcvrId() RcvrId {
+	id := RcvrId{
+		StageId:   mapr.ctx.stage.Id(),
+		ActorName: mapr.ctx.actor.Name(),
+		Id:        detachedRcvrId,
+	}
+	return id
+}
+
+func (mapr *mapper) setDetached(d *detachedRcvr) error {
+	if _, ok := mapr.detached(); ok {
+		return errors.New("Actor already has a detached handler.")
+	}
+
+	mapr.idToRcvrs[mapr.detachedRcvrId()] = d
+	return nil
+}
+
+func (mapr *mapper) detached() (*detachedRcvr, bool) {
+	d, ok := mapr.idToRcvrs[mapr.detachedRcvrId()]
+	if !ok {
+		return nil, false
+	}
+	return d.(*detachedRcvr), ok
+}
+
 func (mapr *mapper) start() {
-	if mapr.detached != nil {
-		go mapr.detached.start()
+	if d, ok := mapr.detached(); ok {
+		go d.start()
 	}
 
 	for {
@@ -56,8 +81,8 @@ func (mapr *mapper) closeChannels() {
 
 func (mapr *mapper) stopReceivers() {
 	stop := routineCmd{stopRoutine, nil, nil}
-	if mapr.detached != nil {
-		mapr.detached.ctrlCh <- stop
+	if d, ok := mapr.detached(); ok {
+		d.ctrlCh <- stop
 	}
 
 	for _, v := range mapr.keyToRcvrs {
@@ -77,46 +102,28 @@ func (mapr *mapper) handleCmd(cmd routineCmd) {
 		mapr.closeChannels()
 
 	case cmd.cmdType == findRcvr:
-		id := cmd.cmdData.(uint32)
-
-		if id == detachedRcvrId {
-			cmd.resCh <- mapr.detached
-			return
-		}
-
-		lr, ok := mapr.localRcvrs[id]
+		id := cmd.cmdData.(RcvrId)
+		r, ok := mapr.idToRcvrs[id]
 		if ok {
-			cmd.resCh <- lr
+			cmd.resCh <- r
 			return
 		}
-
 		cmd.resCh <- nil
 	}
 }
 
 func (mapr *mapper) registerDetached(h DetachedHandler) error {
-	if mapr.detached != nil {
-		return errors.New("Actor has a detached handler.")
-	}
-
-	id := RcvrId{
-		ActorName: mapr.ctx.actor.Name(),
-		StageId:   mapr.ctx.stage.Id(),
-		Id:        detachedRcvrId,
-	}
-
-	mapr.detached = &detachedRcvr{
-		localRcvr: mapr.newLocalRcvr(id),
-		h:         h,
-	}
-
-	mapr.detached.ctx.rcvr = mapr.detached
-
-	return nil
+	return mapr.setDetached(mapr.newDetachedRcvr(h))
 }
 
-func (mapr *mapper) receiver(dk DictionaryKey) receiver {
-	return mapr.keyToRcvrs[dk.String()]
+func (mapr *mapper) receiverByKey(dk DictionaryKey) (receiver, bool) {
+	r, ok := mapr.keyToRcvrs[dk.String()]
+	return r, ok
+}
+
+func (mapr *mapper) receiverById(id RcvrId) (receiver, bool) {
+	r, ok := mapr.idToRcvrs[id]
+	return r, ok
 }
 
 func (mapr *mapper) setReceiver(dk DictionaryKey, rcvr receiver) {
@@ -125,8 +132,8 @@ func (mapr *mapper) setReceiver(dk DictionaryKey, rcvr receiver) {
 
 func (mapr *mapper) syncReceivers(ms MapSet, rcvr receiver) {
 	for _, dictKey := range ms {
-		dkRecvr := mapr.receiver(dictKey)
-		if dkRecvr == nil {
+		dkRecvr, ok := mapr.receiverByKey(dictKey)
+		if !ok {
 			mapr.lockKey(dictKey, rcvr)
 			continue
 		}
@@ -142,8 +149,8 @@ func (mapr *mapper) syncReceivers(ms MapSet, rcvr receiver) {
 
 func (mapr *mapper) anyReceiver(ms MapSet) receiver {
 	for _, dictKey := range ms {
-		rcvr := mapr.receiver(dictKey)
-		if rcvr != nil {
+		rcvr, ok := mapr.receiverByKey(dictKey)
+		if ok {
 			return rcvr
 		}
 	}
@@ -152,15 +159,32 @@ func (mapr *mapper) anyReceiver(ms MapSet) receiver {
 }
 
 func (mapr *mapper) handleMsg(mh msgAndHandler) {
+	if mh.msg.isUnicast() {
+		rcvr, ok := mapr.receiverById(mh.msg.To)
+		if !ok {
+			if mapr.isLocalRcvr(mh.msg.To) {
+				glog.Fatalf("Cannot find a local receiver: %v", mh.msg.To)
+			}
+
+			rcvr = mapr.receiver(mh.msg.To)
+		}
+
+		if mh.handler == nil && mh.msg.To.Id != detachedRcvrId {
+			glog.Fatalf("Handler cannot be nil for receivers.")
+		}
+
+		rcvr.enque(mh)
+		return
+	}
+
 	mapSet := mh.handler.Map(mh.msg, &mapr.ctx)
 
 	rcvr := mapr.anyReceiver(mapSet)
-
 	if rcvr == nil {
-		rcvr = mapr.newReceiver(mapSet)
+		rcvr = mapr.newReceiverForMapSet(mapSet)
+	} else {
+		mapr.syncReceivers(mapSet, rcvr)
 	}
-
-	mapr.syncReceivers(mapSet, rcvr)
 
 	rcvr.enque(mh)
 }
@@ -206,37 +230,56 @@ func (mapr *mapper) isLocalRcvr(id RcvrId) bool {
 	return mapr.ctx.stage.Id() == id.StageId
 }
 
-func (mapr *mapper) newLocalRcvr(id RcvrId) localRcvr {
-	r := localRcvr{
+func (mapr *mapper) defaultLocalRcvr(id RcvrId) localRcvr {
+	return localRcvr{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
 			ctrlCh: make(chan routineCmd),
 			waitCh: make(chan interface{}),
 		},
+		ctx: recvContext{context: mapr.ctx},
 		rId: id,
 	}
-	r.ctx = recvContext{
-		context: mapr.ctx,
-	}
-	return r
 }
 
-func (mapr *mapper) newReceiver(mapSet MapSet) receiver {
-	var rcvr receiver
-	rcvrId := mapr.tryLock(mapSet)
-	if mapr.isLocalRcvr(rcvrId) {
-		r := mapr.newLocalRcvr(rcvrId)
-		r.ctx.rcvr = &r
-		rcvr = &r
-		mapr.localRcvrs[rcvrId.Id] = &r
-	} else {
-		r := proxyRcvr{
-			localRcvr: mapr.newLocalRcvr(rcvrId),
-		}
-		r.ctx.rcvr = &r
-		rcvr = &r
+func (mapr *mapper) receiver(id RcvrId) receiver {
+	if r, ok := mapr.receiverById(id); ok {
+		return r
 	}
+
+	l := mapr.defaultLocalRcvr(id)
+
+	var rcvr receiver
+	if mapr.isLocalRcvr(id) {
+		r := &l
+		r.ctx.rcvr = r
+		rcvr = r
+	} else {
+		r := &proxyRcvr{
+			localRcvr: l,
+		}
+		r.ctx.rcvr = r
+		rcvr = r
+	}
+
+	mapr.idToRcvrs[id] = rcvr
 	go rcvr.start()
+
+	return rcvr
+}
+
+func (mapr *mapper) newDetachedRcvr(h DetachedHandler) *detachedRcvr {
+	d := &detachedRcvr{
+		localRcvr: mapr.defaultLocalRcvr(mapr.detachedRcvrId()),
+		h:         h,
+	}
+	d.ctx.rcvr = d
+	return d
+}
+
+func (mapr *mapper) newReceiverForMapSet(mapSet MapSet) receiver {
+	rcvrId := mapr.tryLock(mapSet)
+	rcvr := mapr.receiver(rcvrId)
 
 	for _, dictKey := range mapSet {
 		mapr.setReceiver(dictKey, rcvr)

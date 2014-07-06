@@ -7,7 +7,21 @@ type detachedRcvr struct {
 
 func (r *detachedRcvr) start() {
 	go r.h.Start(&r.ctx)
-	r.localRcvr.start()
+	for {
+		select {
+		case d, ok := <-r.dataCh:
+			if !ok {
+				return
+			}
+			r.handleMsg(d)
+
+		case c, ok := <-r.ctrlCh:
+			if !ok {
+				return
+			}
+			r.handleCmd(c)
+		}
+	}
 }
 
 func (r *detachedRcvr) handleMsg(mh msgAndHandler) {

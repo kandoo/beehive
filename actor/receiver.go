@@ -10,10 +10,16 @@ func (r *RcvrId) isNil() bool {
 	return len(r.StageId) == 0 && len(r.ActorName) == 0 && r.Id == 0
 }
 
+func (r *RcvrId) isDetachedId() bool {
+	return !r.isNil() && r.Id == detachedRcvrId
+}
+
 type receiver interface {
 	id() RcvrId
 	enque(mh msgAndHandler)
 	start()
+	handleMsg(mh msgAndHandler)
+	handleCmd(cmd routineCmd)
 }
 
 type localRcvr struct {

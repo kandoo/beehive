@@ -45,7 +45,9 @@ func (c *Calculator) Map(msg actor.Msg, ctx actor.Context) actor.MapSet {
 
 func (c *Calculator) Recv(msg actor.Msg, ctx actor.RecvContext) {
 	op := msg.Data().(Op)
-	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, c.calc(op))
+	res := c.calc(op)
+	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, res)
+	ctx.ReplyTo(msg, res)
 }
 
 func (c *Calculator) calc(op Op) int {
@@ -81,7 +83,7 @@ func (g *Generator) Stop(ctx actor.RecvContext) {
 }
 
 func (g *Generator) Recv(msg actor.Msg, ctx actor.RecvContext) {
-	panic("Should not receive a reply.")
+	fmt.Printf("The result is: %d\n", msg.Data().(int))
 }
 
 func main() {

@@ -1,6 +1,10 @@
 package actor
 
-import "github.com/golang/glog"
+import (
+	"errors"
+
+	"github.com/golang/glog"
+)
 
 type Context interface {
 	State() State
@@ -10,7 +14,7 @@ type RecvContext interface {
 	Context
 	Emit(msgData interface{})
 	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
-	ReplyTo(msg Msg, replyData interface{})
+	ReplyTo(msg Msg, replyData interface{}) error
 }
 
 type context struct {
@@ -39,7 +43,7 @@ func (ctx *recvContext) Emit(msgData interface{}) {
 		MsgType: msgType(msgData),
 		From:    ctx.rcvr.id(),
 	}
-	ctx.stage.EmitMsg(&msg)
+	ctx.stage.emitMsg(&msg)
 }
 
 func (ctx *recvContext) SendTo(msgData interface{}, to ActorName,
@@ -51,13 +55,19 @@ func (ctx *recvContext) SendTo(msgData interface{}, to ActorName,
 		From:    ctx.rcvr.id(),
 	}
 
-	ctx.stage.EmitMsg(&msg)
+	ctx.stage.emitMsg(&msg)
 
 	// TODO(soheil): Implement send to.
 	glog.Fatal("Sendto is not implemented.")
 }
 
-func (ctx *recvContext) ReplyTo(msg Msg, replyData interface{}) {
-	// TODO(soheil): Implement reply to.
-	glog.Fatal("RelpyTo is not implemented.")
+// Reply to thatMsg with the provided replyData.
+func (ctx *recvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
+	m := thatMsg.(*msg)
+	if m.noReply() {
+		return errors.New("Cannot reply to this message.")
+	}
+
+	ctx.stage.emitMsg(newMsgFromData(replyData, ctx.rcvr.id(), m.From))
+	return nil
 }

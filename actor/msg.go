@@ -43,3 +43,12 @@ func (m *msg) Data() interface{} {
 func msgType(d interface{}) MsgType {
 	return MsgType(reflect.TypeOf(d).String())
 }
+
+func newMsgFromData(data interface{}, from RcvrId, to RcvrId) *msg {
+	return &msg{
+		MsgType: msgType(data),
+		MsgData: data,
+		From:    from,
+		To:      to,
+	}
+}

@@ -8,11 +8,11 @@ import (
 	"github.com/golang/glog"
 )
 
-// Represents the globally unique ID of a stage. These IDs are automatically
-// assigned using the distributed configuration service.
+// StageId represents the globally unique ID of a stage. These IDs are
+// automatically assigned using the distributed configuration service.
 type StageId string
 
-// Status of a stage.
+// StageStatus represents the status of a stage.
 type StageStatus int
 
 // Valid values for StageStatus.
@@ -41,14 +41,7 @@ type Stage interface {
 	// Sends a message to a specific actor that owns a specific dictionary key.
 	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
 	// Replies to a message.
-	ReplyTo(msg Msg, replyData interface{})
-
-	// Emits a message from this stage.
-	EmitMsg(msg Msg)
-	// Sends a message to the actor instance that owns the dictionary key.
-	SendMsgTo(msg Msg, to ActorName, dk DictionaryKey)
-	// Replies to a message with another message.
-	ReplyMsgTo(msg Msg, reply Msg)
+	ReplyTo(msg Msg, replyData interface{}) error
 }
 
 // Configuration of a stage.
@@ -67,9 +60,9 @@ func NewStageWithConfig(cfg StageConfig) Stage {
 		id:      StageId(cfg.StageAddr),
 		status:  StageStopped,
 		config:  cfg,
-		dataCh:  make(chan Msg, cfg.DataChBufSize),
+		dataCh:  make(chan *msg, cfg.DataChBufSize),
 		ctrlCh:  make(chan StageCmd),
-		actors:  make([]Actor, 0),
+		actors:  make(map[ActorName]*actor, 0),
 		mappers: make(map[MsgType][]mapperAndHandler),
 	}
 
@@ -123,11 +116,11 @@ type stage struct {
 	status StageStatus
 	config StageConfig
 
-	dataCh chan Msg
+	dataCh chan *msg
 	ctrlCh chan StageCmd
 	sigCh  chan os.Signal
 
-	actors  []Actor
+	actors  map[ActorName]*actor
 	mappers map[MsgType][]mapperAndHandler
 
 	registery registery
@@ -141,14 +134,9 @@ func (s *stage) isIsol() bool {
 	return s.registery.connected()
 }
 
-func (s *stage) actor(name ActorName) (*actor, error) {
-	for _, a := range s.actors {
-		if a.Name() == name {
-			return a.(*actor), nil
-		}
-	}
-
-	return nil, errors.New("Actor not found.")
+func (s *stage) actor(name ActorName) (*actor, bool) {
+	a, ok := s.actors[name]
+	return a, ok
 }
 
 func (s *stage) closeChannels() {
@@ -176,17 +164,17 @@ func (s *stage) handleCmd(cmd StageCmd) {
 	}
 }
 
-func (s *stage) registerActor(a Actor) {
-	s.actors = append(s.actors, a)
+func (s *stage) registerActor(a *actor) {
+	s.actors[a.Name()] = a
 }
 
 func (s *stage) registerHandler(t MsgType, m *mapper, h Handler) {
 	s.mappers[t] = append(s.mappers[t], mapperAndHandler{m, h})
 }
 
-func (s *stage) handleMsg(msg Msg) {
-	for _, mh := range s.mappers[msg.Type()] {
-		mh.mapr.dataCh <- msgAndHandler{msg, mh.handler}
+func (s *stage) handleMsg(m *msg) {
+	for _, mh := range s.mappers[m.Type()] {
+		mh.mapr.dataCh <- msgAndHandler{m, mh.handler}
 	}
 }
 
@@ -236,8 +224,9 @@ func (s *stage) Status() StageStatus {
 
 func (s *stage) NewActor(name ActorName) Actor {
 	a := &actor{
-		name:  name,
-		stage: s,
+		name:     name,
+		stage:    s,
+		handlers: make(map[MsgType]Handler),
 	}
 	a.initMapper()
 	s.registerActor(a)
@@ -245,21 +234,34 @@ func (s *stage) NewActor(name ActorName) Actor {
 }
 
 func (s *stage) Emit(msgData interface{}) {
-	s.EmitMsg(&msg{MsgData: msgData, MsgType: msgType(msgData)})
+	s.emitMsg(&msg{MsgData: msgData, MsgType: msgType(msgData)})
 }
 
-func (s *stage) EmitMsg(msg Msg) {
-	s.dataCh <- msg
+func (s *stage) emitMsg(msg *msg) {
+	switch {
+	case msg.isBroadCast():
+		s.dataCh <- msg
+	case msg.isUnicast():
+		a, ok := s.actor(msg.To.ActorName)
+		if !ok {
+			glog.Fatalf("Application not found: %s", msg.To.ActorName)
+		}
+		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
+	}
 }
 
 func (s *stage) SendTo(msgData interface{}, to ActorName, dk DictionaryKey) {
+	// TODO(soheil): Implement this stage.SendTo.
+	glog.Fatalf("Not implemented yet.")
 }
 
-func (s *stage) ReplyTo(msg Msg, replyData interface{}) {
-}
+// Reply to thatMsg with the provided replyData.
+func (s *stage) ReplyTo(thatMsg Msg, replyData interface{}) error {
+	m := thatMsg.(*msg)
+	if m.noReply() {
+		return errors.New("Cannot reply to this message.")
+	}
 
-func (s *stage) SendMsgTo(msg Msg, to ActorName, dk DictionaryKey) {
-}
-
-func (s *stage) ReplyMsgTo(msg Msg, reply Msg) {
+	s.emitMsg(newMsgFromData(replyData, RcvrId{}, m.From))
+	return nil
 }
