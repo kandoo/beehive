@@ -1,7 +1,6 @@
 package actor
 
 import (
-	"encoding/gob"
 	"errors"
 
 	"github.com/golang/glog"
@@ -116,24 +115,14 @@ func (a *actor) DetachedFunc(start Start, stop Stop, rcv Recv) error {
 	return a.Detached(&funcDetached{start, stop, rcv})
 }
 
-func (a *actor) Handle(msgT interface{}, h Handler) error {
+func (a *actor) Handle(msg interface{}, h Handler) error {
 	if a.mapper == nil {
 		glog.Fatalf("Actor's mapper is nil!")
 	}
 
-	t, ok := msgT.(MsgType)
-	if !ok {
-		t = msgType(msgT)
-		gob.Register(msgT)
-	}
-
-	err := a.registerHandler(t, h)
-	if err != nil {
-		return err
-	}
-
-	a.stage.registerHandler(t, a.mapper, h)
-	return nil
+	t := msgType(msg)
+	a.stage.RegisterMsg(msg)
+	return a.registerHandler(t, h)
 }
 
 func (a *actor) registerHandler(t MsgType, h Handler) error {
@@ -143,6 +132,7 @@ func (a *actor) registerHandler(t MsgType, h Handler) error {
 	}
 
 	a.handlers[t] = h
+	a.stage.registerHandler(t, a.mapper, h)
 	return nil
 }
 

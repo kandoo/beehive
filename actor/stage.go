@@ -1,6 +1,7 @@
 package actor
 
 import (
+	"encoding/gob"
 	"errors"
 	"flag"
 	"os"
@@ -42,6 +43,9 @@ type Stage interface {
 	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
+
+	// Registers a message for encoding and decoding.
+	RegisterMsg(msg interface{})
 }
 
 // Configuration of a stage.
@@ -128,6 +132,13 @@ type stage struct {
 
 func (s *stage) Id() StageId {
 	return s.id
+}
+
+// Registers a message for encoding/decoding. This method should be called only
+// on messages that have no active handler. Such messages are almost always
+// replies to some detached handler.
+func (s *stage) RegisterMsg(msg interface{}) {
+	gob.Register(msg)
 }
 
 func (s *stage) isIsol() bool {
