@@ -10,6 +10,7 @@ type Dictionary interface {
 	Name() DictionaryName
 	Get(key Key) (Value, bool)
 	Set(key Key, val Value)
+	All() map[Key]Value
 }
 
 // DictionaryName is the key to lookup dictionaries in the state.
@@ -67,6 +68,10 @@ func (d *inMemoryDictionary) Set(k Key, v Value) {
 
 func (d *inMemoryDictionary) Name() DictionaryName {
 	return d.name
+}
+
+func (d *inMemoryDictionary) All() map[Key]Value {
+	return d.dict
 }
 
 func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
