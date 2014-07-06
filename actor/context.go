@@ -7,7 +7,9 @@ import (
 )
 
 type Context interface {
+	Stage() Stage
 	State() State
+	Dict(n DictionaryName) Dictionary
 }
 
 type RecvContext interface {
@@ -34,6 +36,14 @@ func (ctx *context) State() State {
 	}
 
 	return ctx.state
+}
+
+func (ctx *context) Dict(n DictionaryName) Dictionary {
+	return ctx.State().Dict(n)
+}
+
+func (ctx *context) Stage() Stage {
+	return ctx.stage
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.

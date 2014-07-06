@@ -44,7 +44,9 @@ type Stage interface {
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
 
-	// Registers a message for encoding and decoding.
+	// Registers a message for encoding/decoding. This method should be called
+	// only on messages that have no active handler. Such messages are almost
+	// always replies to some detached handler.
 	RegisterMsg(msg interface{})
 }
 
@@ -134,9 +136,6 @@ func (s *stage) Id() StageId {
 	return s.id
 }
 
-// Registers a message for encoding/decoding. This method should be called only
-// on messages that have no active handler. Such messages are almost always
-// replies to some detached handler.
 func (s *stage) RegisterMsg(msg interface{}) {
 	gob.Register(msg)
 }
