@@ -18,6 +18,11 @@ func main() {
 	r := s.NewActor("Router")
 	r.Handle(MatrixUpdate{}, &UpdateHandler{})
 
+	d := s.NewActor("Driver")
+	driver := NewDriver(0, 10)
+	d.Detached(driver)
+	d.Handle(StatQuery{}, driver)
+
 	join := make(chan interface{})
 	s.Start(join)
 }

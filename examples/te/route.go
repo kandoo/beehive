@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-
+	"github.com/golang/glog"
 	"github.com/soheilhy/actor/actor"
 )
 
@@ -13,7 +12,7 @@ const (
 type UpdateHandler struct{}
 
 func (r *UpdateHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
-	fmt.Printf("Received matrix update: %+v", m.Data().(MatrixUpdate))
+	glog.Infof("Received matrix update: %+v", m.Data().(MatrixUpdate))
 }
 
 func (r *UpdateHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {

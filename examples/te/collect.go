@@ -50,6 +50,7 @@ type Collector struct {
 
 func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	res := m.Data().(StatResult)
+	glog.Infof("Stat resulsts: %#v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
 	sw, ok := matrix.Get(key)
@@ -61,13 +62,9 @@ func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	c.poller.query <- StatQuery{res.Switch}
 
 	stat, ok := sw.(SwitchStats)[res.Flow]
-	if !ok {
-		sw.(SwitchStats)[res.Flow] = res.Bytes
-		ctx.Emit(MatrixUpdate(res))
-		return
-	}
+	sw.(SwitchStats)[res.Flow] = res.Bytes
 
-	if res.Bytes-stat > c.delta {
+	if !ok || res.Bytes-stat > c.delta {
 		ctx.Emit(MatrixUpdate(res))
 	}
 }
@@ -109,6 +106,7 @@ func (p *Poller) Start(ctx actor.RecvContext) {
 				}
 				ctx.Emit(StatQuery{s})
 				p.switches[s] = false
+				glog.Infof("Queried switch: %+v", s)
 			}
 		}
 	}
@@ -141,6 +139,7 @@ func (s *SwitchJoinHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
 	}
 	matrix.Set(key, make(SwitchStats))
 	s.poller.query <- StatQuery{joined.Switch}
+	glog.Infof("Switch joined: %+v", joined)
 }
 
 func (s *SwitchJoinHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
