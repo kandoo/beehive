@@ -50,7 +50,7 @@ type Collector struct {
 
 func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	res := m.Data().(StatResult)
-	glog.Infof("Stat resulsts: %#v", res)
+	glog.Infof("Stat results: %#v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
 	sw, ok := matrix.Get(key)
