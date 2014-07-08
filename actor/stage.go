@@ -58,6 +58,8 @@ type StageConfig struct {
 	RegAddrs []string
 	// Buffer size in the data channel.
 	DataChBufSize int
+	// Whether to instrument actors on the stage.
+	Instrument bool
 }
 
 // Creates a new stage based on the given configuration.
@@ -72,6 +74,7 @@ func NewStageWithConfig(cfg StageConfig) Stage {
 		mappers: make(map[MsgType][]mapperAndHandler),
 	}
 
+	s.init()
 	go s.listen()
 
 	return s
@@ -104,6 +107,8 @@ func init() {
 		"Address of etcd machines. Separate entries with a semi-colon ';'")
 	flag.IntVar(&defaultCfg.DataChBufSize, "chsize", 1024,
 		"Buffer size of channels.")
+	flag.BoolVar(&defaultCfg.Instrument, "instrument", false,
+		"Whether to insturment actors.")
 }
 
 const (
@@ -130,6 +135,7 @@ type stage struct {
 	mappers map[MsgType][]mapperAndHandler
 
 	registery registery
+	collector statCollector
 }
 
 func (s *stage) Id() StageId {
@@ -258,6 +264,8 @@ func (s *stage) emitMsg(msg *msg) {
 		}
 		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
+
+	s.collector.collect(msg.From, msg.To, msg)
 }
 
 func (s *stage) SendTo(msgData interface{}, to ActorName, dk DictionaryKey) {
