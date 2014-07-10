@@ -264,8 +264,6 @@ func (s *stage) emitMsg(msg *msg) {
 		}
 		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
-
-	s.collector.collect(msg.From, msg.To, msg)
 }
 
 func (s *stage) SendTo(msgData interface{}, to ActorName, dk DictionaryKey) {

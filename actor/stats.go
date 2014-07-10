@@ -8,18 +8,15 @@ import (
 )
 
 type statCollector interface {
-	init(s Stage)
 	collect(from, to RcvrId, msg Msg)
 }
 
 func (s *stage) init() {
 	if s.config.Instrument {
-		s.collector = &actorStatCollector{}
+		s.collector = newActorStatCollector(s)
 	} else {
 		s.collector = &dummyStatCollector{}
 	}
-
-	s.collector.init(s)
 }
 
 type dummyStatCollector struct{}
@@ -31,21 +28,22 @@ type actorStatCollector struct {
 	stage Stage
 }
 
-func (c *actorStatCollector) init(s Stage) {
-	c.stage = s
+func newActorStatCollector(s Stage) statCollector {
+	c := &actorStatCollector{stage: s}
 	a := s.NewActor("localStatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
 	glog.V(1).Infof("Actor stat collector is registered.")
+	return c
 }
 
 func (c *actorStatCollector) collect(from, to RcvrId, msg Msg) {
-	_, ok := msg.Data().(localStatUpdate)
-	if ok {
+	switch msg.Data().(type) {
+	case localStatUpdate, aggrStatUpdate:
 		return
 	}
 
-	glog.V(2).Infof("Stat collector collects a new message from: %#v --> %#v",
+	glog.V(2).Infof("Stat collector collects a new message from: %+v --> %+v",
 		from, to)
 	c.stage.Emit(localStatUpdate{from, to, 1})
 }
@@ -88,10 +86,14 @@ func (s *communicationStat) countSinceLastEvent() uint64 {
 	return s.count - s.lastCount
 }
 
+func (s *communicationStat) timeSinceLastEvent() time.Duration {
+	return time.Now().Sub(s.lastEvent)
+}
+
 type localStatCollector struct{}
 
 func (u *localStatUpdate) Key() Key {
-	return Key(fmt.Sprintf("%#v", u))
+	return Key(fmt.Sprintf("%#v-%#v", u.From, u.To))
 }
 
 func (u *localStatUpdate) localCommunication() bool {
@@ -126,7 +128,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 	u := msg.Data().(localStatUpdate)
 	s := updateStat(u, ctx.Dict(localStatDict))
 
-	if s.countSinceLastEvent() < 100 {
+	if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
 		return
 	}
 
@@ -138,6 +140,7 @@ type aggrStatUpdate localStatUpdate
 type optimizer struct{}
 
 func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
+	glog.V(1).Infof("Received stat update: %+v", msg.Data())
 	updateStat(localStatUpdate(msg.Data().(aggrStatUpdate)),
 		ctx.Dict(aggrStatDict))
 }

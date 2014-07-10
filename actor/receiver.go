@@ -52,6 +52,7 @@ func (rcvr *localRcvr) start() {
 
 func (rcvr *localRcvr) handleMsg(mh msgAndHandler) {
 	mh.handler.Recv(mh.msg, &rcvr.ctx)
+	rcvr.ctx.stage.collector.collect(mh.msg.From, rcvr.rId, mh.msg)
 }
 
 func (rcvr *localRcvr) handleCmd(cmd routineCmd) {
