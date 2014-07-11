@@ -125,14 +125,26 @@ func updateStat(u localStatUpdate, d Dictionary) communicationStat {
 }
 
 func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
-	u := msg.Data().(localStatUpdate)
-	s := updateStat(u, ctx.Dict(localStatDict))
+	switch d := msg.Data().(type) {
+	case localStatUpdate:
+		s := updateStat(d, ctx.Dict(localStatDict))
 
-	if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
-		return
+		if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
+			return
+		}
+
+		ctx.Emit(s.toAggrStat())
+	case migrateRcvrCmdData:
+		a, ok := ctx.(*recvContext).stage.actor(d.From.ActorName)
+		if !ok {
+			glog.Fatalf("Cannot find actor: %+v", d.From.ActorName)
+			return
+		}
+
+		resCh := make(chan asyncResult)
+		a.mapper.ctrlCh <- routineCmd{migrateRcvrCmd, d, resCh}
+		<-resCh
 	}
-
-	ctx.Emit(s.toAggrStat())
 }
 
 type aggrStatUpdate localStatUpdate

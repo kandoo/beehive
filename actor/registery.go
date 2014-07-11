@@ -132,6 +132,36 @@ func (g registery) unlockActor(id RcvrId) error {
 	return nil
 }
 
+func (g registery) set(id RcvrId, ms MapSet) regVal {
+	err := g.lockActor(id)
+	if err != nil {
+		glog.Fatalf("Cannot lock actor %v: %v", id, err)
+	}
+
+	defer func() {
+		err := g.unlockActor(id)
+		if err != nil {
+			glog.Fatalf("Cannot unlock actor %v: %v", id, err)
+		}
+	}()
+
+	sort.Sort(ms)
+
+	v := regVal{
+		StageId: id.StageId,
+		RcvrId:  id.Id,
+	}
+	mv := marshallRegValOrFail(v)
+	for _, dk := range ms {
+		k := fmt.Sprintf(keyFmtStr, id.ActorName, dk.Dict, dk.Key)
+		_, err := g.Set(k, mv, g.ttl)
+		if err != nil {
+			glog.Fatalf("Cannot set receiver: %+v", k)
+		}
+	}
+	return v
+}
+
 func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 	err := g.lockActor(id)
 	if err != nil {

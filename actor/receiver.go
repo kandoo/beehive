@@ -16,10 +16,14 @@ func (r *RcvrId) isDetachedId() bool {
 
 type receiver interface {
 	id() RcvrId
-	enque(mh msgAndHandler)
 	start()
+
+	enqueMsg(mh msgAndHandler)
+	enqueCmd(cmd routineCmd)
+
 	handleMsg(mh msgAndHandler)
-	handleCmd(cmd routineCmd)
+	// Handles a command and returns false if the receiver should stop.
+	handleCmd(cmd routineCmd) bool
 }
 
 type localRcvr struct {
@@ -45,7 +49,9 @@ func (rcvr *localRcvr) start() {
 			if !ok {
 				return
 			}
-			rcvr.handleCmd(c)
+			if ok = rcvr.handleCmd(c); !ok {
+				return
+			}
 		}
 	}
 }
@@ -55,15 +61,20 @@ func (rcvr *localRcvr) handleMsg(mh msgAndHandler) {
 	rcvr.ctx.stage.collector.collect(mh.msg.From, rcvr.rId, mh.msg)
 }
 
-func (rcvr *localRcvr) handleCmd(cmd routineCmd) {
-	switch {
-	case cmd.cmdType == stopRoutine:
-		close(rcvr.dataCh)
-		close(rcvr.ctrlCh)
-		close(rcvr.waitCh)
+func (rcvr *localRcvr) handleCmd(cmd routineCmd) bool {
+	switch cmd.cmdType {
+	case stopCmd:
+		cmd.resCh <- asyncResult{}
+		return false
 	}
+
+	return true
 }
 
-func (rcvr *localRcvr) enque(mh msgAndHandler) {
+func (rcvr *localRcvr) enqueMsg(mh msgAndHandler) {
 	rcvr.dataCh <- mh
+}
+
+func (rcvr *localRcvr) enqueCmd(cmd routineCmd) {
+	rcvr.ctrlCh <- cmd
 }

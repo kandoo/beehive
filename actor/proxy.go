@@ -2,6 +2,8 @@ package actor
 
 import (
 	"encoding/gob"
+	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -9,10 +11,12 @@ import (
 )
 
 const (
+	// TODO(soheil): Add all these as flags and configs.
 	proxyProto                 = "tcp"
 	minWaitInMs  time.Duration = 100
 	maxWaitInMs                = 1000
 	waitStepInMs               = 10
+	maxRetries                 = 3
 )
 
 type proxyRcvr struct {
@@ -29,23 +33,27 @@ func (r *proxyRcvr) handleMsg(mh msgAndHandler) {
 	}
 }
 
-func (r *proxyRcvr) dial() {
-	// FIXME(soheil): This can't scale. We can only support 65k remote receivers.
-	// There should be one connection per remote stage and with that we can
-	// support 65k remote controllers.
+func dialStage(id StageId) (net.Conn, error) {
 	step := time.Duration(waitStepInMs)
 	waitMs := minWaitInMs
+	retries := 0
 	for {
-		c, err := net.Dial(proxyProto, string(r.rId.StageId))
+		c, err := net.Dial(proxyProto, string(id))
 		if err == nil {
-			r.conn = c
-			break
+			return c, nil
 		}
 
+		if retries >= maxRetries {
+			return nil, errors.New(
+				fmt.Sprintf("Cannot connect to %+v: %+v. Failed %v times.", id, err,
+					retries))
+		}
+
+		retries++
 		// TODO(soheil): What if the pair has just crashed? We need to return error
 		// and return from start and try to regrab the locks again. Then panic if
 		// neither can be successful.
-		glog.Errorf("Cannot connect to %s: %v", r.rId.StageId, err)
+		glog.Errorf("Cannot connect to %+v: %+v. Retrying...", id, err)
 		time.Sleep(waitMs * time.Millisecond)
 
 		if waitMs > maxWaitInMs {
@@ -59,17 +67,28 @@ func (r *proxyRcvr) dial() {
 		}
 	}
 
+	return nil, errors.New(fmt.Sprintf("Cannot connect to remote stage: %+v", id))
+}
+
+func (r *proxyRcvr) dial() {
+	// FIXME(soheil): This can't scale. We can only support 65k remote receivers.
+	// There should be one connection per remote stage and with that we can
+	// support 65k remote controllers.
+	conn, err := dialStage(r.rId.StageId)
+	if err != nil {
+		glog.Fatalf("Cannot connect to peer: %v", err)
+	}
+
+	r.conn = conn
 	r.encoder = gob.NewEncoder(r.conn)
 	r.decoder = gob.NewDecoder(r.conn)
 
-	err := r.encoder.Encode(&r.rId)
-	if err != nil {
+	if err = r.encoder.Encode(stageHandshake{findRcvrCmd, r.rId}); err != nil {
 		glog.Fatalf("Cannot handshake with peer: %v", err)
 	}
 
-	peerOk := false
-	r.decoder.Decode(&peerOk)
-	if !peerOk {
+	id := RcvrId{}
+	if err = r.decoder.Decode(&id); err != nil || r.rId != id {
 		glog.Fatalf("Peer cannot find receiver: %+v", r.rId)
 	}
 }
@@ -97,7 +116,9 @@ func (r *proxyRcvr) start() {
 			if !ok {
 				return
 			}
-			r.handleCmd(c)
+			if ok = r.handleCmd(c); !ok {
+				return
+			}
 		}
 	}
 }

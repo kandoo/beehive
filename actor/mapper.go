@@ -1,7 +1,9 @@
 package actor
 
 import (
+	"encoding/gob"
 	"errors"
+	"fmt"
 
 	"github.com/golang/glog"
 )
@@ -15,7 +17,7 @@ type mapper struct {
 	ctx        context
 	lastRId    uint32
 	idToRcvrs  map[RcvrId]receiver
-	keyToRcvrs map[string]receiver
+	keyToRcvrs map[DictionaryKey]receiver
 }
 
 func (mapr *mapper) state() State {
@@ -76,11 +78,10 @@ func (mapr *mapper) start() {
 func (mapr *mapper) closeChannels() {
 	close(mapr.dataCh)
 	close(mapr.ctrlCh)
-	close(mapr.waitCh)
 }
 
 func (mapr *mapper) stopReceivers() {
-	stop := routineCmd{stopRoutine, nil, nil}
+	stop := routineCmd{stopCmd, nil, nil}
 	if d, ok := mapr.detached(); ok {
 		d.ctrlCh <- stop
 	}
@@ -96,19 +97,25 @@ func (mapr *mapper) stopReceivers() {
 }
 
 func (mapr *mapper) handleCmd(cmd routineCmd) {
-	switch {
-	case cmd.cmdType == stopRoutine:
+	switch cmd.cmdType {
+	case stopCmd:
 		mapr.stopReceivers()
 		mapr.closeChannels()
 
-	case cmd.cmdType == findRcvr:
+	case findRcvrCmd:
 		id := cmd.cmdData.(RcvrId)
 		r, ok := mapr.idToRcvrs[id]
 		if ok {
-			cmd.resCh <- r
+			cmd.resCh <- asyncResult{r, nil}
 			return
 		}
-		cmd.resCh <- nil
+
+		err := errors.New(fmt.Sprintf("No receiver found: %+v", id))
+		cmd.resCh <- asyncResult{nil, err}
+
+	case migrateRcvrCmd:
+		m := cmd.cmdData.(migrateRcvrCmdData)
+		mapr.migrate(m.From, m.To, cmd.resCh)
 	}
 }
 
@@ -117,7 +124,7 @@ func (mapr *mapper) registerDetached(h DetachedHandler) error {
 }
 
 func (mapr *mapper) receiverByKey(dk DictionaryKey) (receiver, bool) {
-	r, ok := mapr.keyToRcvrs[dk.String()]
+	r, ok := mapr.keyToRcvrs[dk]
 	return r, ok
 }
 
@@ -127,7 +134,7 @@ func (mapr *mapper) receiverById(id RcvrId) (receiver, bool) {
 }
 
 func (mapr *mapper) setReceiver(dk DictionaryKey, rcvr receiver) {
-	mapr.keyToRcvrs[dk.String()] = rcvr
+	mapr.keyToRcvrs[dk] = rcvr
 }
 
 func (mapr *mapper) syncReceivers(ms MapSet, rcvr receiver) {
@@ -166,14 +173,14 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 				glog.Fatalf("Cannot find a local receiver: %v", mh.msg.To)
 			}
 
-			rcvr = mapr.receiver(mh.msg.To)
+			rcvr = mapr.findOrCreateReceiver(mh.msg.To)
 		}
 
 		if mh.handler == nil && mh.msg.To.Id != detachedRcvrId {
 			glog.Fatalf("Handler cannot be nil for receivers.")
 		}
 
-		rcvr.enque(mh)
+		rcvr.enqueMsg(mh)
 		return
 	}
 
@@ -186,7 +193,7 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 		mapr.syncReceivers(mapSet, rcvr)
 	}
 
-	rcvr.enque(mh)
+	rcvr.enqueMsg(mh)
 }
 
 // Locks the map set and returns a new receiver ID if possible, otherwise
@@ -235,14 +242,51 @@ func (mapr *mapper) defaultLocalRcvr(id RcvrId) localRcvr {
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, cap(mapr.dataCh)),
 			ctrlCh: make(chan routineCmd),
-			waitCh: make(chan interface{}),
 		},
 		ctx: recvContext{context: mapr.ctx},
 		rId: id,
 	}
 }
 
-func (mapr *mapper) receiver(id RcvrId) receiver {
+func (mapr *mapper) proxyFromLocal(id RcvrId, lRcvr *localRcvr) (*proxyRcvr,
+	error) {
+
+	if mapr.isLocalRcvr(id) {
+		return nil, errors.New(fmt.Sprintf("Receiver ID is a local ID: %+v", id))
+	}
+
+	if r, ok := mapr.receiverById(id); ok {
+		return nil, errors.New(fmt.Sprintf("Rcvr already exists: %+v", r))
+	}
+
+	r := &proxyRcvr{
+		localRcvr: *lRcvr,
+	}
+	r.ctx.rcvr = r
+	mapr.idToRcvrs[id] = r
+	mapr.idToRcvrs[lRcvr.id()] = r
+	return r, nil
+}
+
+func (mapr *mapper) localFromProxy(id RcvrId, pRcvr *proxyRcvr) (*localRcvr,
+	error) {
+
+	if !mapr.isLocalRcvr(id) {
+		return nil, errors.New(fmt.Sprintf("Receiver ID is a proxy ID: %+v", id))
+	}
+
+	if r, ok := mapr.receiverById(id); ok {
+		return nil, errors.New(fmt.Sprintf("Rcvr already exists: %+v", r))
+	}
+
+	r := pRcvr.localRcvr
+	r.ctx.rcvr = &r
+	mapr.idToRcvrs[id] = &r
+	mapr.idToRcvrs[pRcvr.id()] = &r
+	return &r, nil
+}
+
+func (mapr *mapper) findOrCreateReceiver(id RcvrId) receiver {
 	if r, ok := mapr.receiverById(id); ok {
 		return r
 	}
@@ -279,11 +323,80 @@ func (mapr *mapper) newDetachedRcvr(h DetachedHandler) *detachedRcvr {
 
 func (mapr *mapper) newReceiverForMapSet(mapSet MapSet) receiver {
 	rcvrId := mapr.tryLock(mapSet)
-	rcvr := mapr.receiver(rcvrId)
+	rcvr := mapr.findOrCreateReceiver(rcvrId)
 
 	for _, dictKey := range mapSet {
 		mapr.setReceiver(dictKey, rcvr)
 	}
 
 	return rcvr
+}
+
+func (mapr *mapper) mapSetOfRcvr(id RcvrId) MapSet {
+	ms := MapSet{}
+	for k, r := range mapr.keyToRcvrs {
+		if r.id() == id {
+			ms = append(ms, k)
+		}
+	}
+	return ms
+}
+
+func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
+	if rcvrId.isDetachedId() {
+		err := errors.New(fmt.Sprintf("Cannot migrate detached: %+v", rcvrId))
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	oldRcvr, ok := mapr.receiverById(rcvrId)
+	if !ok {
+		err := errors.New(fmt.Sprintf("Receiver not found: %+v", oldRcvr))
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	stopCh := make(chan asyncResult)
+	oldRcvr.enqueCmd(routineCmd{stopCmd, nil, stopCh})
+	_, err := (<-stopCh).get()
+	if err != nil {
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	// TODO(soheil): There is a possibility of a deadlock. If the number of
+	// migrrations pass the control channel's buffer size.
+	conn, err := dialStage(to)
+	if err != nil {
+		resCh <- asyncResult{nil, err}
+	}
+
+	enc := gob.NewEncoder(conn)
+	dec := gob.NewDecoder(conn)
+
+	if err := enc.Encode(stageHandshake{newRcvrCmd, rcvrId}); err != nil {
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	id := RcvrId{}
+	if err := dec.Decode(&id); err != nil {
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	newRcvr, err := mapr.proxyFromLocal(id, oldRcvr.(*localRcvr))
+	if err != nil {
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	mapSet := mapr.mapSetOfRcvr(oldRcvr.id())
+	mapr.ctx.stage.registery.set(newRcvr.id(), mapSet)
+
+	for _, dictKey := range mapSet {
+		mapr.setReceiver(dictKey, newRcvr)
+	}
+
+	go newRcvr.start()
 }

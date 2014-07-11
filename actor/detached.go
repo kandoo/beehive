@@ -7,6 +7,8 @@ type detachedRcvr struct {
 
 func (r *detachedRcvr) start() {
 	go r.h.Start(&r.ctx)
+	defer r.h.Stop(&r.ctx)
+
 	for {
 		select {
 		case d, ok := <-r.dataCh:
@@ -19,19 +21,13 @@ func (r *detachedRcvr) start() {
 			if !ok {
 				return
 			}
-			r.handleCmd(c)
+			if ok = r.handleCmd(c); !ok {
+				return
+			}
 		}
 	}
 }
 
 func (r *detachedRcvr) handleMsg(mh msgAndHandler) {
 	r.h.Recv(mh.msg, &r.ctx)
-}
-
-func (r *detachedRcvr) handleCmd(cmd routineCmd) {
-	switch {
-	case cmd.cmdType == stopRoutine:
-		r.h.Stop(&r.ctx)
-		r.localRcvr.handleCmd(cmd)
-	}
 }

@@ -156,10 +156,14 @@ func (s *stage) actor(name ActorName) (*actor, bool) {
 }
 
 func (s *stage) closeChannels() {
+	stopCh := make(chan asyncResult)
 	for _, mhs := range s.mappers {
 		for _, mh := range mhs {
-			mh.mapr.ctrlCh <- routineCmd{cmdType: stopRoutine}
-			<-mh.mapr.waitCh
+			mh.mapr.ctrlCh <- routineCmd{stopCmd, nil, stopCh}
+			_, err := (<-stopCh).get()
+			if err != nil {
+				glog.Errorf("Error in stopping a mapper: %+v", err)
+			}
 		}
 	}
 	close(s.dataCh)
@@ -177,6 +181,7 @@ func (s *stage) handleCmd(cmd StageCmd) {
 		return
 	case DrainStage:
 		// TODO(soheil): Implement drain.
+		glog.Fatalf("Drain Stage is not implemented.")
 	}
 }
 

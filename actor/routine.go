@@ -1,19 +1,5 @@
 package actor
 
-type routineCmd struct {
-	cmdType routineCmdType
-	cmdData interface{}
-	resCh   chan interface{}
-}
-
-type routineCmdType int
-
-const (
-	stopRoutine  routineCmdType = iota
-	startRoutine                = iota
-	findRcvr                    = iota
-)
-
 type msgAndHandler struct {
 	msg     *msg
 	handler Handler
@@ -23,5 +9,13 @@ type msgAndHandler struct {
 type asyncRoutine struct {
 	dataCh chan msgAndHandler
 	ctrlCh chan routineCmd
-	waitCh chan interface{}
+}
+
+type asyncResult struct {
+	data interface{}
+	err  error
+}
+
+func (r asyncResult) get() (interface{}, error) {
+	return r.data, r.err
 }

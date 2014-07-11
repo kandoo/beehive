@@ -7,9 +7,9 @@ import (
 	"github.com/golang/glog"
 )
 
-type handlerAndDataCh struct {
-	dataCh  chan msgAndHandler
-	handler Handler
+type stageHandshake struct {
+	Type   routineCmdType
+	RcvrId RcvrId
 }
 
 func (s *stage) handleConn(conn net.Conn) {
@@ -18,33 +18,33 @@ func (s *stage) handleConn(conn net.Conn) {
 	dec := gob.NewDecoder(conn)
 	enc := gob.NewEncoder(conn)
 
-	var id RcvrId
-	dec.Decode(&id)
-
-	a, ok := s.actor(id.ActorName)
-	if !ok {
-		glog.Errorf("Cannot find actor: %s", id.ActorName)
+	var hs stageHandshake
+	err := dec.Decode(&hs)
+	if err != nil {
+		glog.Errorf("Cannot decode handshake.")
 		return
 	}
 
-	resCh := make(chan interface{})
-	a.mapper.ctrlCh <- routineCmd{findRcvr, id, resCh}
+	a, ok := s.actor(hs.RcvrId.ActorName)
+	if !ok {
+		glog.Errorf("Cannot find actor: %s", hs.RcvrId.ActorName)
+		return
+	}
 
-	res := <-resCh
-	if res == nil {
-		glog.Errorf("Cannot find receiver: %v", id)
+	resCh := make(chan asyncResult)
+	a.mapper.ctrlCh <- routineCmd{hs.Type, hs.RcvrId, resCh}
+	res, err := (<-resCh).get()
+	if err != nil {
+		glog.Error(err)
 		return
 	}
 
 	rcvr := res.(receiver)
+	id := rcvr.id()
+	enc.Encode(id)
 
-	enc.Encode(true)
-
-	toDetached := id.isDetachedId()
-
-	var handlers map[MsgType][]Handler
-	if !toDetached {
-		handlers = make(map[MsgType][]Handler)
+	if hs.Type == newRcvrCmd {
+		return
 	}
 
 	for {
@@ -54,30 +54,7 @@ func (s *stage) handleConn(conn net.Conn) {
 			return
 		}
 
-		if toDetached {
-			rcvr.enque(msgAndHandler{&m, nil})
-			continue
-		}
-
-		hs, ok := handlers[m.Type()]
-		if !ok {
-			hs = []Handler{}
-			for _, mh := range s.mappers[m.Type()] {
-				if mh.mapr.ctx.actor.Name() == id.ActorName {
-					hs = append(hs, mh.handler)
-				}
-			}
-			handlers[m.Type()] = hs
-		}
-
-		if len(hs) == 0 {
-			glog.Errorf("No handler for message type %v in receiver %v", m.Type(), id)
-			continue
-		}
-
-		for _, h := range hs {
-			rcvr.enque(msgAndHandler{&m, h})
-		}
+		a.mapper.dataCh <- msgAndHandler{&m, a.handlers[m.Type()]}
 	}
 }
 
