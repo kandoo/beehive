@@ -15,7 +15,8 @@ type Context interface {
 type RecvContext interface {
 	Context
 	Emit(msgData interface{})
-	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
+	SendToDictKey(msgData interface{}, to ActorName, dk DictionaryKey)
+	SendToRcvr(msgData interface{}, to RcvrId)
 	ReplyTo(msg Msg, replyData interface{}) error
 }
 
@@ -48,27 +49,21 @@ func (ctx *context) Stage() Stage {
 
 // Emits a message. Note that m should be your data not an instance of Msg.
 func (ctx *recvContext) Emit(msgData interface{}) {
-	msg := msg{
-		MsgData: msgData,
-		MsgType: msgType(msgData),
-		From:    ctx.rcvr.id(),
-	}
-	ctx.stage.emitMsg(&msg)
+	ctx.stage.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{}))
 }
 
-func (ctx *recvContext) SendTo(msgData interface{}, to ActorName,
+func (ctx *recvContext) SendToDictKey(msgData interface{}, to ActorName,
 	dk DictionaryKey) {
 
-	msg := msg{
-		MsgData: msgData,
-		MsgType: msgType(msgData),
-		From:    ctx.rcvr.id(),
-	}
-
-	ctx.stage.emitMsg(&msg)
-
 	// TODO(soheil): Implement send to.
+	msg := newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{})
+	ctx.stage.emitMsg(msg)
+
 	glog.Fatal("Sendto is not implemented.")
+}
+
+func (ctx *recvContext) SendToRcvr(msgData interface{}, to RcvrId) {
+	ctx.stage.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), to))
 }
 
 // Reply to thatMsg with the provided replyData.
@@ -78,6 +73,6 @@ func (ctx *recvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	ctx.stage.emitMsg(newMsgFromData(replyData, ctx.rcvr.id(), m.From))
+	ctx.SendToRcvr(replyData, m.From())
 	return nil
 }

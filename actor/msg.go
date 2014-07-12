@@ -9,6 +9,10 @@ type Msg interface {
 	Type() MsgType
 	// Data stored in the message.
 	Data() interface{}
+	// Source of the message.
+	From() RcvrId
+	// Destination of the message.
+	To() RcvrId
 }
 
 type MsgType string
@@ -16,20 +20,20 @@ type MsgType string
 type msg struct {
 	MsgData interface{}
 	MsgType MsgType
-	From    RcvrId
-	To      RcvrId
+	MsgFrom RcvrId
+	MsgTo   RcvrId
 }
 
 func (m *msg) noReply() bool {
-	return m.From.isNil()
+	return m.MsgFrom.isNil()
 }
 
 func (m *msg) isBroadCast() bool {
-	return m.To.isNil()
+	return m.MsgTo.isNil()
 }
 
 func (m *msg) isUnicast() bool {
-	return !m.To.isNil()
+	return !m.MsgTo.isNil()
 }
 
 func (m *msg) Type() MsgType {
@@ -40,6 +44,14 @@ func (m *msg) Data() interface{} {
 	return m.MsgData
 }
 
+func (m *msg) To() RcvrId {
+	return m.MsgTo
+}
+
+func (m *msg) From() RcvrId {
+	return m.MsgFrom
+}
+
 func msgType(d interface{}) MsgType {
 	return MsgType(reflect.TypeOf(d).String())
 }
@@ -48,7 +60,7 @@ func newMsgFromData(data interface{}, from RcvrId, to RcvrId) *msg {
 	return &msg{
 		MsgType: msgType(data),
 		MsgData: data,
-		From:    from,
-		To:      to,
+		MsgFrom: from,
+		MsgTo:   to,
 	}
 }

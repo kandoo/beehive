@@ -39,8 +39,10 @@ type Stage interface {
 
 	// Emits a message containing msgData from this stage.
 	Emit(msgData interface{})
-	// Sends a message to a specific actor that owns a specific dictionary key.
-	SendTo(msgData interface{}, to ActorName, dk DictionaryKey)
+	// Sends a message to a specific receiver that owns a specific dictionary key.
+	SendToDictKey(msgData interface{}, to ActorName, dk DictionaryKey)
+	// Sends a message to a sepcific receiver.
+	SentToRcvr(msgData interface{}, to RcvrId)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
 
@@ -263,17 +265,22 @@ func (s *stage) emitMsg(msg *msg) {
 	case msg.isBroadCast():
 		s.dataCh <- msg
 	case msg.isUnicast():
-		a, ok := s.actor(msg.To.ActorName)
+		a, ok := s.actor(msg.To().ActorName)
 		if !ok {
-			glog.Fatalf("Application not found: %s", msg.To.ActorName)
+			glog.Fatalf("Application not found: %s", msg.To().ActorName)
 		}
 		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
 }
 
-func (s *stage) SendTo(msgData interface{}, to ActorName, dk DictionaryKey) {
+func (s *stage) SendToDictKey(msgData interface{}, to ActorName,
+	dk DictionaryKey) {
 	// TODO(soheil): Implement this stage.SendTo.
 	glog.Fatalf("Not implemented yet.")
+}
+
+func (s *stage) SentToRcvr(msgData interface{}, to RcvrId) {
+	s.emitMsg(newMsgFromData(msgData, RcvrId{}, to))
 }
 
 // Reply to thatMsg with the provided replyData.
@@ -283,6 +290,6 @@ func (s *stage) ReplyTo(thatMsg Msg, replyData interface{}) error {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	s.emitMsg(newMsgFromData(replyData, RcvrId{}, m.From))
+	s.emitMsg(newMsgFromData(replyData, RcvrId{}, m.From()))
 	return nil
 }

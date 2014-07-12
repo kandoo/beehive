@@ -167,16 +167,16 @@ func (mapr *mapper) anyReceiver(ms MapSet) receiver {
 
 func (mapr *mapper) handleMsg(mh msgAndHandler) {
 	if mh.msg.isUnicast() {
-		rcvr, ok := mapr.receiverById(mh.msg.To)
+		rcvr, ok := mapr.receiverById(mh.msg.To())
 		if !ok {
-			if mapr.isLocalRcvr(mh.msg.To) {
+			if mapr.isLocalRcvr(mh.msg.To()) {
 				glog.Fatalf("Cannot find a local receiver: %v", mh.msg.To)
 			}
 
-			rcvr = mapr.findOrCreateReceiver(mh.msg.To)
+			rcvr = mapr.findOrCreateReceiver(mh.msg.To())
 		}
 
-		if mh.handler == nil && mh.msg.To.Id != detachedRcvrId {
+		if mh.handler == nil && mh.msg.To().Id != detachedRcvrId {
 			glog.Fatalf("Handler cannot be nil for receivers.")
 		}
 

@@ -129,7 +129,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 	case localStatUpdate:
 		s := updateStat(d, ctx.Dict(localStatDict))
 
-		if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
+		if s.countSinceLastEvent() < 1 || s.timeSinceLastEvent() < 1*time.Second {
 			return
 		}
 
@@ -144,6 +144,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 		resCh := make(chan asyncResult)
 		a.mapper.ctrlCh <- routineCmd{migrateRcvrCmd, d, resCh}
 		<-resCh
+		// TODO(soheil): Maybe handle errors.
 	}
 }
 
