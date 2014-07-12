@@ -113,6 +113,11 @@ func (mapr *mapper) handleCmd(cmd routineCmd) {
 		err := errors.New(fmt.Sprintf("No receiver found: %+v", id))
 		cmd.resCh <- asyncResult{nil, err}
 
+	case newRcvrCmd:
+		r := mapr.newLocalReceiver()
+		glog.V(2).Infof("Created a new local receiver: %+v", r.id())
+		cmd.resCh <- asyncResult{r.id(), nil}
+
 	case migrateRcvrCmd:
 		m := cmd.cmdData.(migrateRcvrCmdData)
 		mapr.migrate(m.From, m.To, cmd.resCh)
@@ -167,6 +172,7 @@ func (mapr *mapper) anyReceiver(ms MapSet) receiver {
 
 func (mapr *mapper) handleMsg(mh msgAndHandler) {
 	if mh.msg.isUnicast() {
+		glog.V(2).Infof("Unicast msg: %+v", mh.msg)
 		rcvr, ok := mapr.receiverById(mh.msg.To())
 		if !ok {
 			if mapr.isLocalRcvr(mh.msg.To()) {
@@ -177,7 +183,7 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 		}
 
 		if mh.handler == nil && mh.msg.To().Id != detachedRcvrId {
-			glog.Fatalf("Handler cannot be nil for receivers.")
+			glog.Fatalf("Handler cannot be nil for receivers: %+v, %+v", mh, mh.msg)
 		}
 
 		rcvr.enqueMsg(mh)
@@ -196,21 +202,29 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 	rcvr.enqueMsg(mh)
 }
 
-// Locks the map set and returns a new receiver ID if possible, otherwise
-// returns the ID of the owner of this map set.
-func (mapr *mapper) tryLock(mapSet MapSet) RcvrId {
+func (mapr *mapper) nextRcvrId() RcvrId {
 	mapr.lastRId++
-	id := RcvrId{
+	return RcvrId{
 		ActorName: mapr.ctx.actor.Name(),
 		StageId:   mapr.ctx.stage.Id(),
 		Id:        mapr.lastRId,
 	}
+}
 
+// Locks the map set and returns a new receiver ID if possible, otherwise
+// returns the ID of the owner of this map set.
+func (mapr *mapper) lock(mapSet MapSet, force bool) RcvrId {
+	id := mapr.nextRcvrId()
 	if mapr.ctx.stage.isIsol() {
 		return id
 	}
 
-	v := mapr.ctx.stage.registery.storeOrGet(id, mapSet)
+	var v regVal
+	if force {
+		v = mapr.ctx.stage.registery.set(id, mapSet)
+	} else {
+		v = mapr.ctx.stage.registery.storeOrGet(id, mapSet)
+	}
 
 	if v.StageId == id.StageId && v.RcvrId == id.Id {
 		return id
@@ -262,6 +276,7 @@ func (mapr *mapper) proxyFromLocal(id RcvrId, lRcvr *localRcvr) (*proxyRcvr,
 	r := &proxyRcvr{
 		localRcvr: *lRcvr,
 	}
+	r.rId = id
 	r.ctx.rcvr = r
 	mapr.idToRcvrs[id] = r
 	mapr.idToRcvrs[lRcvr.id()] = r
@@ -280,10 +295,15 @@ func (mapr *mapper) localFromProxy(id RcvrId, pRcvr *proxyRcvr) (*localRcvr,
 	}
 
 	r := pRcvr.localRcvr
+	r.rId = id
 	r.ctx.rcvr = &r
 	mapr.idToRcvrs[id] = &r
 	mapr.idToRcvrs[pRcvr.id()] = &r
 	return &r, nil
+}
+
+func (mapr *mapper) newLocalReceiver() receiver {
+	return mapr.findOrCreateReceiver(mapr.nextRcvrId())
 }
 
 func (mapr *mapper) findOrCreateReceiver(id RcvrId) receiver {
@@ -322,7 +342,7 @@ func (mapr *mapper) newDetachedRcvr(h DetachedHandler) *detachedRcvr {
 }
 
 func (mapr *mapper) newReceiverForMapSet(mapSet MapSet) receiver {
-	rcvrId := mapr.tryLock(mapSet)
+	rcvrId := mapr.lock(mapSet, false)
 	rcvr := mapr.findOrCreateReceiver(rcvrId)
 
 	for _, dictKey := range mapSet {
@@ -364,26 +384,41 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 		return
 	}
 
+	glog.V(2).Infof("Received stopped: %+v", oldRcvr)
+
 	// TODO(soheil): There is a possibility of a deadlock. If the number of
 	// migrrations pass the control channel's buffer size.
 	conn, err := dialStage(to)
 	if err != nil {
 		resCh <- asyncResult{nil, err}
+		return
 	}
+
+	defer conn.Close()
 
 	enc := gob.NewEncoder(conn)
 	dec := gob.NewDecoder(conn)
 
-	if err := enc.Encode(stageHandshake{newRcvrCmd, rcvrId}); err != nil {
+	if err := enc.Encode(stageHandshake{ctrlHandshake}); err != nil {
+		glog.Errorf("Cannot encode handshake: %+v", err)
 		resCh <- asyncResult{nil, err}
 		return
 	}
 
-	id := RcvrId{}
-	if err := dec.Decode(&id); err != nil {
+	id := RcvrId{StageId: to, ActorName: rcvrId.ActorName}
+	if err := enc.Encode(stageRemoteCommand{newRcvrCmd, id}); err != nil {
+		glog.Errorf("Cannot encode command: %+v", err)
 		resCh <- asyncResult{nil, err}
 		return
 	}
+
+	if err := dec.Decode(&id); err != nil {
+		glog.V(2).Infof("Cannot decode the new receiver: %+v", err)
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	glog.V(2).Infof("Got the new receiver: %+v", id)
 
 	newRcvr, err := mapr.proxyFromLocal(id, oldRcvr.(*localRcvr))
 	if err != nil {
@@ -391,8 +426,12 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 		return
 	}
 
+	glog.V(2).Infof("Created a proxy for the new receiver: %+v", newRcvr)
+
 	mapSet := mapr.mapSetOfRcvr(oldRcvr.id())
 	mapr.ctx.stage.registery.set(newRcvr.id(), mapSet)
+
+	glog.V(2).Infof("Locked the mapset %+v for %+v", mapSet, newRcvr)
 
 	for _, dictKey := range mapSet {
 		mapr.setReceiver(dictKey, newRcvr)

@@ -32,6 +32,7 @@ func newActorStatCollector(s Stage) statCollector {
 	c := &actorStatCollector{stage: s}
 	a := s.NewActor("localStatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
+	a.Handle(migrateRcvrCmdData{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
 	glog.V(1).Infof("Actor stat collector is registered.")
 	return c
@@ -43,8 +44,12 @@ func (c *actorStatCollector) collect(from, to RcvrId, msg Msg) {
 		return
 	}
 
-	glog.V(2).Infof("Stat collector collects a new message from: %+v --> %+v",
-		from, to)
+	if from.isNil() || to.isNil() {
+		return
+	}
+
+	//glog.V(2).Infof("Stat collector collects a new message from: %+v --> %+v",
+	//from, to)
 	c.stage.Emit(localStatUpdate{from, to, 1})
 }
 
@@ -76,6 +81,9 @@ func (s *communicationStat) add(count uint64) {
 }
 
 func (s *communicationStat) toAggrStat() aggrStatUpdate {
+	if s.from.isNil() {
+		panic(s)
+	}
 	u := aggrStatUpdate{s.from, s.to, s.count}
 	s.lastEvent = time.Now()
 	s.lastCount = s.count
@@ -137,7 +145,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 	case migrateRcvrCmdData:
 		a, ok := ctx.(*recvContext).stage.actor(d.From.ActorName)
 		if !ok {
-			glog.Fatalf("Cannot find actor: %+v", d.From.ActorName)
+			glog.Fatalf("Cannot find actor for migrate command: %+v", d)
 			return
 		}
 
@@ -152,10 +160,17 @@ type aggrStatUpdate localStatUpdate
 
 type optimizer struct{}
 
+var first = true
+
 func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
-	glog.V(1).Infof("Received stat update: %+v", msg.Data())
-	updateStat(localStatUpdate(msg.Data().(aggrStatUpdate)),
-		ctx.Dict(aggrStatDict))
+	//glog.V(1).Infof("Received stat update: %+v", msg.Data())
+	u := msg.Data().(aggrStatUpdate)
+	updateStat(localStatUpdate(u), ctx.Dict(aggrStatDict))
+	if u.From.StageId != u.To.StageId && first {
+		glog.V(1).Infof("Initiating a migration: %+v", u)
+		ctx.SendToRcvr(migrateRcvrCmdData{u.To, u.From.StageId}, msg.From())
+		first = false
+	}
 }
 
 func (o *optimizer) Map(msg Msg, ctx Context) MapSet {

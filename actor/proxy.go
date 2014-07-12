@@ -27,8 +27,8 @@ type proxyRcvr struct {
 }
 
 func (r *proxyRcvr) handleMsg(mh msgAndHandler) {
-	err := r.encoder.Encode(mh.msg)
-	if err != nil {
+	mh.msg.MsgTo = r.rId
+	if err := r.encoder.Encode(mh.msg); err != nil {
 		glog.Errorf("Cannot encode message: %v", err)
 	}
 }
@@ -83,14 +83,20 @@ func (r *proxyRcvr) dial() {
 	r.encoder = gob.NewEncoder(r.conn)
 	r.decoder = gob.NewDecoder(r.conn)
 
-	if err = r.encoder.Encode(stageHandshake{findRcvrCmd, r.rId}); err != nil {
+	if err = r.encoder.Encode(stageHandshake{dataHandshake}); err != nil {
 		glog.Fatalf("Cannot handshake with peer: %v", err)
+	}
+
+	if err = r.encoder.Encode(r.rId); err != nil {
+		glog.Fatalf("Cannot encode receiver: %v", err)
 	}
 
 	id := RcvrId{}
 	if err = r.decoder.Decode(&id); err != nil || r.rId != id {
-		glog.Fatalf("Peer cannot find receiver: %+v", r.rId)
+		glog.Fatalf("Peer cannot find receiver: %v", r.rId)
 	}
+
+	glog.V(2).Infof("Proxy connected to remote receiver %+v", r.rId)
 }
 
 func (r *proxyRcvr) hangup() {
