@@ -175,6 +175,10 @@ func (o *optimizer) stat(id RcvrId, dict Dictionary) aggrStat {
 func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
 	update := msg.Data().(aggrStatUpdate)
+	if update.To.isDetachedId() {
+		return
+	}
+
 	dict := ctx.Dict(aggrStatDict)
 	stat := o.stat(update.To, dict)
 	if stat.Migrated || o.stat(update.From, dict).Migrated {
@@ -200,8 +204,7 @@ func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 	}
 
 	glog.Infof("Initiating a migration: %+v", update)
-	ctx.SendToRcvr(migrateRcvrCmdData{update.To, update.From.StageId},
-		msg.From())
+	ctx.SendToRcvr(migrateRcvrCmdData{update.To, maxStage}, msg.From())
 
 	stat.Migrated = true
 }
