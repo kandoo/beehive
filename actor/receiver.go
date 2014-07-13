@@ -1,5 +1,7 @@
 package actor
 
+import "fmt"
+
 type RcvrId struct {
 	StageId   StageId
 	ActorName ActorName
@@ -14,9 +16,15 @@ func (r *RcvrId) isDetachedId() bool {
 	return !r.isNil() && r.Id == detachedRcvrId
 }
 
+func (r *RcvrId) Key() Key {
+	return Key(fmt.Sprintf("%+v", *r))
+}
+
 type receiver interface {
 	id() RcvrId
 	start()
+
+	state() State
 
 	enqueMsg(mh msgAndHandler)
 	enqueCmd(cmd routineCmd)
@@ -34,6 +42,10 @@ type localRcvr struct {
 
 func (rcvr *localRcvr) id() RcvrId {
 	return rcvr.rId
+}
+
+func (rcvr *localRcvr) state() State {
+	return rcvr.ctx.State()
 }
 
 func (rcvr *localRcvr) start() {

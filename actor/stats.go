@@ -11,14 +11,6 @@ type statCollector interface {
 	collect(from, to RcvrId, msg Msg)
 }
 
-func (s *stage) init() {
-	if s.config.Instrument {
-		s.collector = newActorStatCollector(s)
-	} else {
-		s.collector = &dummyStatCollector{}
-	}
-}
-
 type dummyStatCollector struct{}
 
 func (c *dummyStatCollector) collect(from, to RcvrId, msg Msg) {}
@@ -56,6 +48,7 @@ func (c *actorStatCollector) collect(from, to RcvrId, msg Msg) {
 const (
 	localStatDict = "LocalStatistics"
 	aggrStatDict  = "AggregatedStatDict"
+	aggrHeatDict  = "AggregatedHeapDict"
 )
 
 type localStatUpdate struct {
@@ -73,7 +66,7 @@ type communicationStat struct {
 }
 
 func newCommunicationStat(u localStatUpdate) communicationStat {
-	return communicationStat{u.From, u.To, u.Count, 0, time.Time{}}
+	return communicationStat{u.From, u.To, 0, 0, time.Time{}}
 }
 
 func (s *communicationStat) add(count uint64) {
@@ -117,40 +110,35 @@ func (c *localStatCollector) Map(msg Msg, ctx Context) MapSet {
 	return MapSet{{localStatDict, u.Key()}}
 }
 
-func updateStat(u localStatUpdate, d Dictionary) communicationStat {
-	k := u.Key()
-	v, ok := d.Get(k)
-	if !ok {
-		s := newCommunicationStat(u)
-		d.Set(k, s)
-		return s
-	}
-
-	s := v.(communicationStat)
-	s.add(u.Count)
-	d.Set(k, s)
-	return s
-}
-
 func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
-	switch d := msg.Data().(type) {
+	switch m := msg.Data().(type) {
 	case localStatUpdate:
-		s := updateStat(d, ctx.Dict(localStatDict))
+		d := ctx.Dict(localStatDict)
+		k := m.Key()
+		v, ok := d.Get(k)
+		if !ok {
+			v = newCommunicationStat(m)
+		}
+		s := v.(communicationStat)
+		s.add(m.Count)
 
-		if s.countSinceLastEvent() < 1 || s.timeSinceLastEvent() < 1*time.Second {
+		if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
+			d.Set(k, s)
 			return
 		}
 
 		ctx.Emit(s.toAggrStat())
+		d.Set(k, s)
+
 	case migrateRcvrCmdData:
-		a, ok := ctx.(*recvContext).stage.actor(d.From.ActorName)
+		a, ok := ctx.(*recvContext).stage.actor(m.From.ActorName)
 		if !ok {
-			glog.Fatalf("Cannot find actor for migrate command: %+v", d)
+			glog.Fatalf("Cannot find actor for migrate command: %+v", m)
 			return
 		}
 
 		resCh := make(chan asyncResult)
-		a.mapper.ctrlCh <- routineCmd{migrateRcvrCmd, d, resCh}
+		a.mapper.ctrlCh <- routineCmd{migrateRcvrCmd, m, resCh}
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}
@@ -158,19 +146,64 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 
 type aggrStatUpdate localStatUpdate
 
+func (a *aggrStatUpdate) Key() Key {
+	return a.To.Key()
+}
+
+func (a *aggrStatUpdate) ReverseKey() Key {
+	return a.From.Key()
+}
+
+type aggrStat struct {
+	Migrated bool
+	Matrix   map[StageId]uint64
+}
+
 type optimizer struct{}
 
-var first = true
+func (o *optimizer) stat(id RcvrId, dict Dictionary) aggrStat {
+	v, ok := dict.Get(id.Key())
+	if !ok {
+		return aggrStat{
+			Matrix: make(map[StageId]uint64),
+		}
+	}
+
+	return v.(aggrStat)
+}
 
 func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
-	//glog.V(1).Infof("Received stat update: %+v", msg.Data())
-	u := msg.Data().(aggrStatUpdate)
-	updateStat(localStatUpdate(u), ctx.Dict(aggrStatDict))
-	if u.From.StageId != u.To.StageId && first {
-		glog.V(1).Infof("Initiating a migration: %+v", u)
-		ctx.SendToRcvr(migrateRcvrCmdData{u.To, u.From.StageId}, msg.From())
-		first = false
+	glog.V(3).Infof("Received stat update: %+v", msg.Data())
+	update := msg.Data().(aggrStatUpdate)
+	dict := ctx.Dict(aggrStatDict)
+	stat := o.stat(update.To, dict)
+	if stat.Migrated || o.stat(update.From, dict).Migrated {
+		return
 	}
+
+	stat.Matrix[update.From.StageId] += update.Count
+	defer func() {
+		dict.Set(update.To.Key(), stat)
+	}()
+
+	max := uint64(0)
+	maxStage := StageId("")
+	for id, cnt := range stat.Matrix {
+		if max < cnt {
+			max = cnt
+			maxStage = id
+		}
+	}
+
+	if maxStage == "" || update.To.StageId == maxStage {
+		return
+	}
+
+	glog.Infof("Initiating a migration: %+v", update)
+	ctx.SendToRcvr(migrateRcvrCmdData{update.To, update.From.StageId},
+		msg.From())
+
+	stat.Migrated = true
 }
 
 func (o *optimizer) Map(msg Msg, ctx Context) MapSet {

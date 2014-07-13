@@ -38,16 +38,16 @@ func (s *stage) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 			return
 		}
 
-		switch cmd.Type {
-		case newRcvrCmd:
-			a, ok := s.actor(cmd.ActorName)
-			if !ok {
-				glog.Errorf("Cannot find actor: %v", cmd.RcvrId.ActorName)
-				return
-			}
+		a, ok := s.actor(cmd.ActorName)
+		if !ok {
+			glog.Errorf("Cannot find actor: %v", cmd.RcvrId.ActorName)
+			return
+		}
 
+		switch cmd.Type {
+		case createRcvrCmd:
 			resCh := make(chan asyncResult)
-			a.mapper.ctrlCh <- routineCmd{newRcvrCmd, nil, resCh}
+			a.mapper.ctrlCh <- routineCmd{createRcvrCmd, nil, resCh}
 			res, err := (<-resCh).get()
 			if err != nil {
 				glog.Error(err)
@@ -55,6 +55,27 @@ func (s *stage) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 			}
 
 			if err := enc.Encode(res.(RcvrId)); err != nil {
+				glog.Errorf("Cannot encode receiver id: %v", err)
+				return
+			}
+
+		case replaceRcvrCmd:
+			data := replaceRcvrCmdData{}
+			if err := dec.Decode(&data); err != nil {
+				glog.Errorf("Cannot decode the data for replace receiver command: %+v",
+					err)
+				return
+			}
+
+			resCh := make(chan asyncResult)
+			a.mapper.ctrlCh <- routineCmd{replaceRcvrCmd, data, resCh}
+			res, err := (<-resCh).get()
+			if err != nil {
+				glog.Error(err)
+				return
+			}
+
+			if err := enc.Encode(res.(receiver).id()); err != nil {
 				glog.Errorf("Cannot encode receiver id: %v", err)
 				return
 			}

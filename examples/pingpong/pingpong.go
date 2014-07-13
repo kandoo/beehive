@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/soheilhy/actor/actor"
 )
 
-var centralizedMapSet = actor.MapSet{{"PingPong", actor.Key("0")}}
+const (
+	PingPongDict = "PingPong"
+)
+
+var centralizedMapSet = actor.MapSet{{PingPongDict, "0"}}
 
 type ping int
 type pong int
@@ -27,25 +32,41 @@ func (p *pinger) Map(msg actor.Msg, ctx actor.Context) actor.MapSet {
 	return centralizedMapSet
 }
 
-var first = true
-
 func (p *pinger) Recv(msg actor.Msg, ctx actor.RecvContext) {
-	d := msg.Data()
-	switch d := d.(type) {
+	dict := ctx.Dict(PingPongDict)
+	data := msg.Data()
+	switch data := data.(type) {
 	case ping:
-		fmt.Printf("Ping %d\n", d)
-		if first {
-			time.Sleep(1 * time.Second)
+		fmt.Printf("Ping %d\n", data)
+		time.Sleep(100 * time.Millisecond)
+
+		v, ok := dict.Get("ping")
+		if !ok {
+			v = ping(0)
 		}
-		ctx.Emit(d.pong())
+		if data != v.(ping) {
+			glog.Fatalf("Invalid ping: %d != %d", data, v)
+		}
+		dict.Set("ping", data+1)
+
+		ctx.Emit(data.pong())
+
 	case pong:
-		fmt.Printf("Pong %d\n", d)
-		if first {
-			time.Sleep(1 * time.Second)
+		fmt.Printf("Pong %d\n", data)
+		time.Sleep(100 * time.Millisecond)
+
+		dict := ctx.Dict(PingPongDict)
+		v, ok := dict.Get("pong")
+		if !ok {
+			v = pong(0)
 		}
-		ctx.Emit(d.ping())
+		if data != v.(pong) {
+			glog.Fatalf("Invalid pong: %d != %d", data, v)
+		}
+		dict.Set("pong", data+1)
+
+		ctx.Emit(data.ping())
 	}
-	first = false
 }
 
 type ponger struct {

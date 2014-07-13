@@ -7,7 +7,6 @@ type State interface {
 
 // Simply a key-value store.
 type Dictionary interface {
-	Name() DictionaryName
 	Get(key Key) (Value, bool)
 	Set(key Key, val Value)
 	All() map[Key]Value
@@ -44,41 +43,37 @@ func (ms MapSet) Less(i, j int) bool {
 }
 
 func newState(name string) State {
-	return &inMemoryState{name, make(map[string]Dictionary)}
+	return &inMemoryState{name, make(map[string]*inMemoryDictionary)}
 }
 
 type inMemoryState struct {
-	name  string
-	dicts map[string]Dictionary
+	Name  string
+	Dicts map[string]*inMemoryDictionary
 }
 
 type inMemoryDictionary struct {
-	name DictionaryName
-	dict map[Key]Value
+	Name DictionaryName
+	Dict map[Key]Value
 }
 
 func (d *inMemoryDictionary) Get(k Key) (Value, bool) {
-	v, ok := d.dict[k]
+	v, ok := d.Dict[k]
 	return v, ok
 }
 
 func (d *inMemoryDictionary) Set(k Key, v Value) {
-	d.dict[k] = v
-}
-
-func (d *inMemoryDictionary) Name() DictionaryName {
-	return d.name
+	d.Dict[k] = v
 }
 
 func (d *inMemoryDictionary) All() map[Key]Value {
-	return d.dict
+	return d.Dict
 }
 
 func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
-	d, ok := s.dicts[string(name)]
+	d, ok := s.Dicts[string(name)]
 	if !ok {
 		d = &inMemoryDictionary{name, make(map[Key]Value)}
-		s.dicts[string(name)] = d
+		s.Dicts[string(name)] = d
 	}
 	return d
 }

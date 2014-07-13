@@ -113,7 +113,7 @@ func (mapr *mapper) handleCmd(cmd routineCmd) {
 		err := errors.New(fmt.Sprintf("No receiver found: %+v", id))
 		cmd.resCh <- asyncResult{nil, err}
 
-	case newRcvrCmd:
+	case createRcvrCmd:
 		r := mapr.newLocalReceiver()
 		glog.V(2).Infof("Created a new local receiver: %+v", r.id())
 		cmd.resCh <- asyncResult{r.id(), nil}
@@ -121,6 +121,10 @@ func (mapr *mapper) handleCmd(cmd routineCmd) {
 	case migrateRcvrCmd:
 		m := cmd.cmdData.(migrateRcvrCmdData)
 		mapr.migrate(m.From, m.To, cmd.resCh)
+
+	case replaceRcvrCmd:
+		d := cmd.cmdData.(replaceRcvrCmdData)
+		mapr.replaceRcvr(d, cmd.resCh)
 	}
 }
 
@@ -189,6 +193,8 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 		rcvr.enqueMsg(mh)
 		return
 	}
+
+	glog.V(2).Infof("Broadcast msg: %+v", mh.msg)
 
 	mapSet := mh.handler.Map(mh.msg, &mapr.ctx)
 
@@ -406,7 +412,7 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 	}
 
 	id := RcvrId{StageId: to, ActorName: rcvrId.ActorName}
-	if err := enc.Encode(stageRemoteCommand{newRcvrCmd, id}); err != nil {
+	if err := enc.Encode(stageRemoteCommand{createRcvrCmd, id}); err != nil {
 		glog.Errorf("Cannot encode command: %+v", err)
 		resCh <- asyncResult{nil, err}
 		return
@@ -428,14 +434,61 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 
 	glog.V(2).Infof("Created a proxy for the new receiver: %+v", newRcvr)
 
-	mapSet := mapr.mapSetOfRcvr(oldRcvr.id())
-	mapr.ctx.stage.registery.set(newRcvr.id(), mapSet)
+	if err := enc.Encode(stageRemoteCommand{replaceRcvrCmd, id}); err != nil {
+		glog.Errorf("Cannot encode replace command: %v", err)
+		return
+	}
 
-	glog.V(2).Infof("Locked the mapset %+v for %+v", mapSet, newRcvr)
+	mapSet := mapr.mapSetOfRcvr(oldRcvr.id())
+	replaceData := replaceRcvrCmdData{
+		OldRcvr: oldRcvr.id(),
+		NewRcvr: newRcvr.id(),
+		State:   oldRcvr.state().(*inMemoryState),
+		MapSet:  mapSet,
+	}
+	if err := enc.Encode(replaceData); err != nil {
+		glog.Errorf("Cannot encode replace command data: %v", err)
+		return
+	}
 
 	for _, dictKey := range mapSet {
 		mapr.setReceiver(dictKey, newRcvr)
 	}
 
 	go newRcvr.start()
+	resCh <- asyncResult{newRcvr, nil}
+}
+
+func (mapr *mapper) replaceRcvr(d replaceRcvrCmdData, resCh chan asyncResult) {
+	if !mapr.isLocalRcvr(d.NewRcvr) {
+		err := errors.New(
+			fmt.Sprintf("Cannot replace with a non-local receiver: %+v", d.NewRcvr))
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	r, ok := mapr.receiverById(d.NewRcvr)
+	if !ok {
+		err := errors.New(fmt.Sprintf("Cannot find receiver: %+v", d.NewRcvr))
+		resCh <- asyncResult{nil, err}
+		return
+	}
+
+	newState := r.state()
+	for name, oldDict := range d.State.Dicts {
+		newDict := newState.Dict(DictionaryName(name))
+		for k, v := range oldDict.All() {
+			newDict.Set(k, v)
+		}
+	}
+	glog.V(2).Infof("Replicated the state of %+v on %+v", d.OldRcvr, d.NewRcvr)
+
+	mapr.ctx.stage.registery.set(d.NewRcvr, d.MapSet)
+	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MapSet, d.NewRcvr)
+
+	for _, dictKey := range d.MapSet {
+		mapr.setReceiver(dictKey, r)
+	}
+
+	resCh <- asyncResult{r, nil}
 }

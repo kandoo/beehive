@@ -12,11 +12,19 @@ const (
 	stopCmd        routineCmdType = iota
 	startCmd                      = iota
 	findRcvrCmd                   = iota
+	createRcvrCmd                 = iota
 	migrateRcvrCmd                = iota
-	newRcvrCmd                    = iota
+	replaceRcvrCmd                = iota
 )
 
 type migrateRcvrCmdData struct {
 	From RcvrId
 	To   StageId
+}
+
+type replaceRcvrCmdData struct {
+	OldRcvr RcvrId
+	NewRcvr RcvrId
+	State   *inMemoryState
+	MapSet  MapSet
 }

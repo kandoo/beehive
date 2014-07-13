@@ -82,6 +82,18 @@ func NewStageWithConfig(cfg StageConfig) Stage {
 	return s
 }
 
+func (s *stage) init() {
+	gob.Register(inMemoryDictionary{})
+	gob.Register(inMemoryState{})
+	gob.Register(msg{})
+
+	if s.config.Instrument {
+		s.collector = newActorStatCollector(s)
+	} else {
+		s.collector = &dummyStatCollector{}
+	}
+}
+
 var (
 	defaultCfg = StageConfig{}
 )
