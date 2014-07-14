@@ -31,6 +31,11 @@ type Actor interface {
 	State() State
 	// Returns the actor name.
 	Name() ActorName
+
+	// Whether the actor is sticky.
+	Sticky() bool
+	// Sets whether the actor is sticky, i.e., should not be migrated.
+	SetSticky(sticky bool)
 }
 
 // An applications map function that maps a specific message to the set of keys
@@ -105,6 +110,7 @@ type actor struct {
 	stage    *stage
 	mapper   *mapper
 	handlers map[MsgType]Handler
+	sticky   bool
 }
 
 func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) error {
@@ -150,6 +156,14 @@ func (a *actor) State() State {
 
 func (a *actor) Name() ActorName {
 	return a.name
+}
+
+func (a *actor) SetSticky(sticky bool) {
+	a.sticky = sticky
+}
+
+func (a *actor) Sticky() bool {
+	return a.sticky
 }
 
 func (a *actor) initMapper() {

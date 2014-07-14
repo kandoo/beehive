@@ -122,7 +122,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 		s := v.(communicationStat)
 		s.add(m.Count)
 
-		if s.countSinceLastEvent() < 100 || s.timeSinceLastEvent() < 1*time.Second {
+		if s.countSinceLastEvent() < 10 || s.timeSinceLastEvent() < 1*time.Second {
 			d.Set(k, s)
 			return
 		}
