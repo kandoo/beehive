@@ -149,11 +149,11 @@ func (s *stage) handleConn(conn net.Conn) {
 func (s *stage) listen() {
 	l, err := net.Listen("tcp", s.config.StageAddr)
 	if err != nil {
-		glog.Fatal("Cannot start listener: %v", err)
+		glog.Fatalf("Cannot start listener: %v", err)
 	}
 	defer l.Close()
 
-	glog.V(1).Infof("Network server listening at: %s", s.config.StageAddr)
+	glog.Infof("Stage listening at: %s", s.config.StageAddr)
 	for {
 		c, err := l.Accept()
 		if err != nil {
