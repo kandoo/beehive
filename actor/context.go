@@ -69,7 +69,7 @@ func (ctx *recvContext) SendToRcvr(msgData interface{}, to RcvrId) {
 // Reply to thatMsg with the provided replyData.
 func (ctx *recvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
-	if m.noReply() {
+	if m.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
 
