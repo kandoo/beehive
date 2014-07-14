@@ -213,6 +213,12 @@ func (s *stage) handleMsg(m *msg) {
 	}
 }
 
+func (s *stage) startMappers() {
+	for _, a := range s.actors {
+		go a.mapper.start()
+	}
+}
+
 func (s *stage) Start(joinCh chan interface{}) error {
 	// TODO(soheil): Listen and grab and ID. Connect to etcd.
 	defer close(joinCh)
@@ -220,6 +226,7 @@ func (s *stage) Start(joinCh chan interface{}) error {
 	s.status = StageStarted
 	s.registerSignals()
 	s.connectToRegistery()
+	s.startMappers()
 
 	for {
 		select {

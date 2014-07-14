@@ -180,6 +180,4 @@ func (a *actor) initMapper() {
 		keyToRcvrs: make(map[DictionaryKey]receiver),
 		idToRcvrs:  make(map[RcvrId]receiver),
 	}
-
-	go a.mapper.start()
 }
