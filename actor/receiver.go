@@ -1,11 +1,15 @@
 package actor
 
-import "fmt"
+import (
+	"encoding/json"
+
+	"github.com/golang/glog"
+)
 
 type RcvrId struct {
-	StageId   StageId
-	ActorName ActorName
-	Id        uint32
+	StageId   StageId   `json:"stage_id"`
+	ActorName ActorName `json:"actor_name"`
+	Id        uint32    `json:"id"`
 }
 
 func (r *RcvrId) isNil() bool {
@@ -17,7 +21,20 @@ func (r *RcvrId) isDetachedId() bool {
 }
 
 func (r *RcvrId) Key() Key {
-	return Key(fmt.Sprintf("%+v", *r))
+	b, err := json.Marshal(r)
+	if err != nil {
+		glog.Fatalf("Cannot marshall a receiver ID into json: %v", err)
+	}
+	return Key(b)
+}
+
+func RcvrIdFromKey(k Key) RcvrId {
+	r := RcvrId{}
+	err := json.Unmarshal([]byte(k), &r)
+	if err != nil {
+		glog.Fatalf("Cannot unmarshall a receiver ID from json: %v", err)
+	}
+	return r
 }
 
 type receiver interface {
@@ -69,6 +86,7 @@ func (rcvr *localRcvr) start() {
 }
 
 func (rcvr *localRcvr) handleMsg(mh msgAndHandler) {
+	glog.V(2).Infof("Receiver handles a message: %+v", mh.msg)
 	mh.handler.Recv(mh.msg, &rcvr.ctx)
 	rcvr.ctx.stage.collector.collect(mh.msg.From(), rcvr.rId, mh.msg)
 }

@@ -205,6 +205,7 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 		mapr.syncReceivers(mapSet, rcvr)
 	}
 
+	glog.V(2).Infof("Sending to receiver: %v", rcvr.id())
 	rcvr.enqueMsg(mh)
 }
 
