@@ -95,7 +95,7 @@ func (s *stage) init() {
 }
 
 var (
-	defaultCfg = StageConfig{}
+	DefaultCfg = StageConfig{}
 )
 
 // Create a new stage and load its configuration from command line flags.
@@ -104,7 +104,7 @@ func NewStage() Stage {
 		flag.Parse()
 	}
 
-	return NewStageWithConfig(defaultCfg)
+	return NewStageWithConfig(DefaultCfg)
 }
 
 type StageCmd int
@@ -115,13 +115,13 @@ const (
 )
 
 func init() {
-	flag.StringVar(&defaultCfg.StageAddr, "laddr", "localhost:7767",
+	flag.StringVar(&DefaultCfg.StageAddr, "laddr", "localhost:7767",
 		"The listening address used to communicate with other nodes.")
-	flag.Var(&commaSeparatedValue{&defaultCfg.RegAddrs}, "raddrs",
+	flag.Var(&commaSeparatedValue{&DefaultCfg.RegAddrs}, "raddrs",
 		"Address of etcd machines. Separate entries with a semi-colon ';'")
-	flag.IntVar(&defaultCfg.DataChBufSize, "chsize", 1024,
+	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
 		"Buffer size of channels.")
-	flag.BoolVar(&defaultCfg.Instrument, "instrument", false,
+	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"Whether to insturment actors.")
 }
 
@@ -298,7 +298,7 @@ func (s *stage) SentToRcvr(msgData interface{}, to RcvrId) {
 // Reply to thatMsg with the provided replyData.
 func (s *stage) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
-	if m.noReply() {
+	if m.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
 
