@@ -24,7 +24,7 @@ type msg struct {
 	MsgTo   RcvrId
 }
 
-func (m *msg) noReply() bool {
+func (m *msg) NoReply() bool {
 	return m.MsgFrom.isNil()
 }
 
