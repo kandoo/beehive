@@ -50,7 +50,7 @@ type Collector struct {
 
 func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	res := m.Data().(StatResult)
-	glog.Infof("Stat results: %#v", res)
+	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
 	sw, ok := matrix.Get(key)
@@ -64,7 +64,10 @@ func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	stat, ok := sw.(SwitchStats)[res.Flow]
 	sw.(SwitchStats)[res.Flow] = res.Bytes
 
+	glog.V(2).Infof("Previous stats: %+v, Now: %+v", stat, res.Bytes)
 	if !ok || res.Bytes-stat > c.delta {
+		glog.Infof("Found an elephent flow: %+v, %+v, %+v", res, stat,
+			ctx.Stage().Id())
 		ctx.Emit(MatrixUpdate(res))
 	}
 }
@@ -106,7 +109,7 @@ func (p *Poller) Start(ctx actor.RecvContext) {
 				}
 				ctx.Emit(StatQuery{s})
 				p.switches[s] = false
-				glog.Infof("Queried switch: %+v", s)
+				glog.V(2).Infof("Queried switch: %+v", s)
 			}
 		}
 	}
@@ -129,6 +132,10 @@ type SwitchJoinHandler struct {
 }
 
 func (s *SwitchJoinHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
+	if m.From().ActorName == "" {
+		return
+	}
+
 	joined := m.Data().(SwitchJoined)
 	matrix := ctx.Dict(matrixDict)
 	key := joined.Switch.Key()
@@ -138,6 +145,7 @@ func (s *SwitchJoinHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
 		return
 	}
 	matrix.Set(key, make(SwitchStats))
+
 	s.poller.query <- StatQuery{joined.Switch}
 	glog.Infof("Switch joined: %+v", joined)
 }

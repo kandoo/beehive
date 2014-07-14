@@ -12,7 +12,13 @@ const (
 type UpdateHandler struct{}
 
 func (r *UpdateHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
-	glog.Infof("Received matrix update: %+v", m.Data().(MatrixUpdate))
+	if m.From().ActorName == "" {
+		return
+	}
+
+	u := m.Data().(MatrixUpdate)
+	glog.Infof("Received matrix update: %+v", u)
+	ctx.Emit(FlowMod{Switch: u.Switch})
 }
 
 func (r *UpdateHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {

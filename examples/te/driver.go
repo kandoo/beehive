@@ -1,18 +1,25 @@
 package main
 
 import (
+	"math/rand"
+
 	"github.com/golang/glog"
 	"github.com/soheilhy/actor/actor"
 )
 
 type FlowStat struct {
 	Flow  Flow
-	Bytes int
+	Bytes uint64
 }
 
 type SwitchState struct {
 	Switch Switch
 	Flows  []FlowStat
+}
+
+type FlowMod struct {
+	Switch Switch
+	Flow   Flow
 }
 
 const (
@@ -44,19 +51,37 @@ func (d *Driver) Stop(ctx actor.RecvContext) {
 }
 
 func (d *Driver) Recv(m actor.Msg, ctx actor.RecvContext) {
-	q := m.Data().(StatQuery)
+	if m.From().ActorName == "" {
+		return
+	}
+
+	q, ok := m.Data().(StatQuery)
+	if !ok {
+		return
+	}
+
 	s, ok := d.switches[q.Switch]
 	if !ok {
 		glog.Fatalf("No switch stored in the driver: %+v", s)
 	}
 
-	for _, f := range s.Flows {
-		glog.Infof("Emitting stat result for %#v", f)
-		ctx.Emit(StatResult{q, f.Flow, 100})
+	for i, f := range s.Flows {
+		f.Bytes += uint64(rand.Intn(maxSpike))
+		s.Flows[i] = f
+		glog.V(2).Infof("Emitting stat result for %+v", f)
+		ctx.Emit(StatResult{q, f.Flow, f.Bytes})
 	}
+
+	d.switches[q.Switch] = s
 }
 
 func (d *Driver) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	k := m.Data().(StatQuery).Switch.Key()
+	var k actor.Key
+	switch d := m.Data().(type) {
+	case StatQuery:
+		k = d.Switch.Key()
+	case FlowMod:
+		k = d.Switch.Key()
+	}
 	return actor.MapSet{{switchStateDict, k}}
 }
