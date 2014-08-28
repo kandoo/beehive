@@ -4,7 +4,9 @@ import (
 	"encoding/gob"
 	"errors"
 	"flag"
+	"net"
 	"os"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -150,6 +152,8 @@ type stage struct {
 
 	registery registery
 	collector statCollector
+
+	listener net.Listener
 }
 
 func (s *stage) Id() StageId {
@@ -170,18 +174,34 @@ func (s *stage) actor(name ActorName) (*actor, bool) {
 }
 
 func (s *stage) closeChannels() {
+	glog.Info("Closing the stage listener...")
+	s.listener.Close()
+
+	glog.Info("Stopping mappers...")
 	stopCh := make(chan asyncResult)
+	maprs := make(map[*mapper]bool)
 	for _, mhs := range s.mappers {
 		for _, mh := range mhs {
-			mh.mapr.ctrlCh <- routineCmd{stopCmd, nil, stopCh}
-			_, err := (<-stopCh).get()
+			maprs[mh.mapr] = true
+		}
+	}
+
+	for m, _ := range maprs {
+		m.ctrlCh <- routineCmd{stopCmd, nil, stopCh}
+		glog.V(3).Infof("Waiting on a mapper: %p", m)
+		select {
+		case res := <-stopCh:
+			_, err := res.get()
 			if err != nil {
-				glog.Errorf("Error in stopping a mapper: %+v", err)
+				glog.Errorf("Error in stopping a mapper: %v", err)
 			}
+		case <-time.After(time.Second * 1):
+			glog.Info("Still waiting for a mapper...")
 		}
 	}
 	close(s.dataCh)
 	close(s.ctrlCh)
+	close(s.sigCh)
 }
 
 func (s *stage) handleCmd(cmd StageCmd) {
@@ -189,9 +209,10 @@ func (s *stage) handleCmd(cmd StageCmd) {
 	case StopStage:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
 		s.status = StageStopped
-		close(s.dataCh)
-		close(s.ctrlCh)
-		close(s.sigCh)
+		s.closeChannels()
+		//close(s.dataCh)
+		//close(s.ctrlCh)
+		//close(s.sigCh)
 		return
 	case DrainStage:
 		// TODO(soheil): Implement drain.
@@ -220,7 +241,6 @@ func (s *stage) startMappers() {
 }
 
 func (s *stage) Start(joinCh chan interface{}) error {
-	// TODO(soheil): Listen and grab and ID. Connect to etcd.
 	defer close(joinCh)
 
 	s.status = StageStarted

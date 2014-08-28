@@ -81,17 +81,31 @@ func (mapr *mapper) closeChannels() {
 }
 
 func (mapr *mapper) stopReceivers() {
-	stop := routineCmd{stopCmd, nil, nil}
+	stopCh := make(chan asyncResult)
+	stopCmd := routineCmd{stopCmd, nil, stopCh}
 	if d, ok := mapr.detached(); ok {
-		d.ctrlCh <- stop
+		d.ctrlCh <- stopCmd
+		_, err := (<-stopCh).get()
+		if err != nil {
+			glog.Errorf("Error in stopping the detached thread: %v", err)
+		}
 	}
 
+	rcvrs := make(map[receiver]bool)
 	for _, v := range mapr.keyToRcvrs {
-		switch r := v.(type) {
+		rcvrs[v] = true
+	}
+
+	for k, _ := range rcvrs {
+		switch r := k.(type) {
 		case *proxyRcvr:
-			r.ctrlCh <- stop
+			r.ctrlCh <- stopCmd
 		case *localRcvr:
-			r.ctrlCh <- stop
+			r.ctrlCh <- stopCmd
+		}
+		_, err := (<-stopCh).get()
+		if err != nil {
+			glog.Errorf("Error in stopping a rcvr: %v", err)
 		}
 	}
 }
@@ -99,8 +113,10 @@ func (mapr *mapper) stopReceivers() {
 func (mapr *mapper) handleCmd(cmd routineCmd) {
 	switch cmd.cmdType {
 	case stopCmd:
+		glog.V(3).Infof("Stopping receivers of %p", mapr)
 		mapr.stopReceivers()
 		mapr.closeChannels()
+		cmd.resCh <- asyncResult{}
 
 	case findRcvrCmd:
 		id := cmd.cmdData.(RcvrId)

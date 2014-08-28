@@ -2,6 +2,7 @@ package beehive
 
 import (
 	"encoding/gob"
+	"io"
 	"net"
 
 	"github.com/golang/glog"
@@ -114,7 +115,9 @@ func (s *stage) handleDataConn(conn net.Conn, dec *gob.Decoder,
 	for {
 		m := msg{}
 		if err := dec.Decode(&m); err != nil {
-			glog.Errorf("Cannot decode message: %v", err)
+			if err != io.EOF {
+				glog.Errorf("Cannot decode message: %v", err)
+			}
 			return
 		}
 
@@ -147,18 +150,19 @@ func (s *stage) handleConn(conn net.Conn) {
 }
 
 func (s *stage) listen() {
-	l, err := net.Listen("tcp", s.config.StageAddr)
+	var err error
+	s.listener, err = net.Listen("tcp", s.config.StageAddr)
 	if err != nil {
 		glog.Fatalf("Cannot start listener: %v", err)
 	}
-	defer l.Close()
+	defer s.listener.Close()
 
 	glog.Infof("Stage listening at: %s", s.config.StageAddr)
 	for {
-		c, err := l.Accept()
+		c, err := s.listener.Accept()
 		if err != nil {
-			glog.Errorf("Error in accept %s", err)
-			continue
+			glog.V(2).Info("Listener closed.")
+			return
 		}
 		glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
 			c.LocalAddr())
