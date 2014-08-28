@@ -30,7 +30,7 @@ func (r *UpdateHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
 
 type TopologyHandler struct{}
 
-func (t *TopologyHandler) Recv(m actor.Msg, ctx actor.Context) {
+func (t *TopologyHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
 }
 
 func (t *TopologyHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
