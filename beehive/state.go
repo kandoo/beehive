@@ -1,4 +1,4 @@
-package actor
+package beehive
 
 // State is the storage for a collection of dictionaries.
 type State interface {

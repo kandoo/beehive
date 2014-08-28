@@ -1,4 +1,4 @@
-package actor
+package beehive
 
 type routineCmd struct {
 	cmdType routineCmdType
