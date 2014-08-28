@@ -22,23 +22,23 @@ type mapper struct {
 
 func (mapr *mapper) state() State {
 	if mapr.ctx.state == nil {
-		mapr.ctx.state = newState(string(mapr.ctx.actor.Name()))
+		mapr.ctx.state = newState(string(mapr.ctx.app.Name()))
 	}
 	return mapr.ctx.state
 }
 
 func (mapr *mapper) detachedRcvrId() RcvrId {
 	id := RcvrId{
-		StageId:   mapr.ctx.stage.Id(),
-		ActorName: mapr.ctx.actor.Name(),
-		Id:        detachedRcvrId,
+		StageId: mapr.ctx.stage.Id(),
+		AppName: mapr.ctx.app.Name(),
+		Id:      detachedRcvrId,
 	}
 	return id
 }
 
 func (mapr *mapper) setDetached(d *detachedRcvr) error {
 	if _, ok := mapr.detached(); ok {
-		return errors.New("Actor already has a detached handler.")
+		return errors.New("App already has a detached handler.")
 	}
 
 	mapr.idToRcvrs[mapr.detachedRcvrId()] = d
@@ -228,9 +228,9 @@ func (mapr *mapper) handleMsg(mh msgAndHandler) {
 func (mapr *mapper) nextRcvrId() RcvrId {
 	mapr.lastRId++
 	return RcvrId{
-		ActorName: mapr.ctx.actor.Name(),
-		StageId:   mapr.ctx.stage.Id(),
-		Id:        mapr.lastRId,
+		AppName: mapr.ctx.app.Name(),
+		StageId: mapr.ctx.stage.Id(),
+		Id:      mapr.lastRId,
 	}
 }
 
@@ -428,7 +428,7 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 		return
 	}
 
-	id := RcvrId{StageId: to, ActorName: rcvrId.ActorName}
+	id := RcvrId{StageId: to, AppName: rcvrId.AppName}
 	if err := enc.Encode(stageRemoteCommand{createRcvrCmd, id}); err != nil {
 		glog.Errorf("Cannot encode command: %+v", err)
 		resCh <- asyncResult{nil, err}

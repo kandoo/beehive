@@ -84,14 +84,14 @@ func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) lockActor(id RcvrId) error {
+func (g registery) lockApp(id RcvrId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
 	v := regVal{
 		StageId: id.StageId,
 		RcvrId:  id.Id,
 	}
-	k := g.path(string(id.ActorName), lockFileName)
+	k := g.path(string(id.AppName), lockFileName)
 
 	for {
 		_, err := g.Create(k, marshallRegValOrFail(v), g.ttl)
@@ -106,12 +106,12 @@ func (g registery) lockActor(id RcvrId) error {
 	}
 }
 
-func (g registery) unlockActor(id RcvrId) error {
+func (g registery) unlockApp(id RcvrId) error {
 	v := regVal{
 		StageId: id.StageId,
 		RcvrId:  id.Id,
 	}
-	k := g.path(string(id.ActorName), lockFileName)
+	k := g.path(string(id.AppName), lockFileName)
 
 	res, err := g.Get(k, false, false)
 	if err != nil {
@@ -133,15 +133,15 @@ func (g registery) unlockActor(id RcvrId) error {
 }
 
 func (g registery) set(id RcvrId, ms MapSet) regVal {
-	err := g.lockActor(id)
+	err := g.lockApp(id)
 	if err != nil {
-		glog.Fatalf("Cannot lock actor %v: %v", id, err)
+		glog.Fatalf("Cannot lock app %v: %v", id, err)
 	}
 
 	defer func() {
-		err := g.unlockActor(id)
+		err := g.unlockApp(id)
 		if err != nil {
-			glog.Fatalf("Cannot unlock actor %v: %v", id, err)
+			glog.Fatalf("Cannot unlock app %v: %v", id, err)
 		}
 	}()
 
@@ -153,7 +153,7 @@ func (g registery) set(id RcvrId, ms MapSet) regVal {
 	}
 	mv := marshallRegValOrFail(v)
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.ActorName, dk.Dict, dk.Key)
+		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
 		_, err := g.Set(k, mv, g.ttl)
 		if err != nil {
 			glog.Fatalf("Cannot set receiver: %+v", k)
@@ -163,15 +163,15 @@ func (g registery) set(id RcvrId, ms MapSet) regVal {
 }
 
 func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
-	err := g.lockActor(id)
+	err := g.lockApp(id)
 	if err != nil {
-		glog.Fatalf("Cannot lock actor %v: %v", id, err)
+		glog.Fatalf("Cannot lock app %v: %v", id, err)
 	}
 
 	defer func() {
-		err := g.unlockActor(id)
+		err := g.unlockApp(id)
 		if err != nil {
-			glog.Fatalf("Cannot unlock actor %v: %v", id, err)
+			glog.Fatalf("Cannot unlock app %v: %v", id, err)
 		}
 	}()
 
@@ -184,7 +184,7 @@ func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 	mv := marshallRegValOrFail(v)
 	validate := false
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.ActorName, dk.Dict, dk.Key)
+		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
 		res, err := g.Get(k, false, false)
 		if err != nil {
 			continue
@@ -205,7 +205,7 @@ func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 	}
 
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.ActorName, dk.Dict, dk.Key)
+		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
 		g.Create(k, mv, g.ttl)
 	}
 

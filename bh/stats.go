@@ -1,4 +1,4 @@
-package beehive
+package bh
 
 import (
 	"fmt"
@@ -16,21 +16,21 @@ type dummyStatCollector struct{}
 func (c *dummyStatCollector) collect(from, to RcvrId, msg Msg) {}
 func (c *dummyStatCollector) init(s Stage)                     {}
 
-type actorStatCollector struct {
+type appStatCollector struct {
 	stage Stage
 }
 
-func newActorStatCollector(s Stage) statCollector {
-	c := &actorStatCollector{stage: s}
-	a := s.NewActor("localStatCollector")
+func newAppStatCollector(s Stage) statCollector {
+	c := &appStatCollector{stage: s}
+	a := s.NewApp("localStatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
 	a.Handle(migrateRcvrCmdData{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
-	glog.V(1).Infof("Actor stat collector is registered.")
+	glog.V(1).Infof("App stat collector is registered.")
 	return c
 }
 
-func (c *actorStatCollector) collect(from, to RcvrId, msg Msg) {
+func (c *appStatCollector) collect(from, to RcvrId, msg Msg) {
 	switch msg.Data().(type) {
 	case localStatUpdate, aggrStatUpdate:
 		return
@@ -40,8 +40,8 @@ func (c *actorStatCollector) collect(from, to RcvrId, msg Msg) {
 		return
 	}
 
-	//glog.V(2).Infof("Stat collector collects a new message from: %+v --> %+v",
-	//from, to)
+	glog.V(3).Infof("Stat collector collects a new message from: %+v --> %+v",
+		from, to)
 	c.stage.Emit(localStatUpdate{from, to, 1})
 }
 
@@ -131,9 +131,9 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 		d.Set(k, s)
 
 	case migrateRcvrCmdData:
-		a, ok := ctx.(*recvContext).stage.actor(m.From.ActorName)
+		a, ok := ctx.(*recvContext).stage.app(m.From.AppName)
 		if !ok {
-			glog.Fatalf("Cannot find actor for migrate command: %+v", m)
+			glog.Fatalf("Cannot find app for migrate command: %+v", m)
 			return
 		}
 
@@ -190,10 +190,25 @@ func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 		dict.Set(update.To.Key(), stat)
 	}()
 
+	a, ok := ctx.Stage().(*stage).app(update.To.AppName)
+	if !ok {
+		glog.Errorf("App not found: %s", update.To.AppName)
+		return
+	}
+
+	if a.sticky {
+		return
+	}
+
 	max := uint64(0)
 	maxStage := StageId("")
 	for id, cnt := range stat.Matrix {
 		if max < cnt {
+			max = cnt
+			maxStage = id
+		}
+
+		if max == cnt && update.To.StageId == id {
 			max = cnt
 			maxStage = id
 		}

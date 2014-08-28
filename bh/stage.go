@@ -30,19 +30,19 @@ type Stage interface {
 
 	// Starts the stage and will close the waitCh once the stage stops.
 	Start(joinCh chan interface{}) error
-	// Stops the stage and all its actors.
+	// Stops the stage and all its apps.
 	Stop() error
 	// Returns the stage status.
 	Status() StageStatus
 
-	// Creates an actor with the given name. Note that actors are not active until
+	// Creates an app with the given name. Note that apps are not active until
 	// the stage is started.
-	NewActor(name ActorName) Actor
+	NewApp(name AppName) App
 
 	// Emits a message containing msgData from this stage.
 	Emit(msgData interface{})
 	// Sends a message to a specific receiver that owns a specific dictionary key.
-	SendToDictKey(msgData interface{}, to ActorName, dk DictionaryKey)
+	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	// Sends a message to a sepcific receiver.
 	SentToRcvr(msgData interface{}, to RcvrId)
 	// Replies to a message.
@@ -62,7 +62,7 @@ type StageConfig struct {
 	RegAddrs []string
 	// Buffer size in the data channel.
 	DataChBufSize int
-	// Whether to instrument actors on the stage.
+	// Whether to instrument apps on the stage.
 	Instrument bool
 }
 
@@ -74,7 +74,7 @@ func NewStageWithConfig(cfg StageConfig) Stage {
 		config:  cfg,
 		dataCh:  make(chan *msg, cfg.DataChBufSize),
 		ctrlCh:  make(chan StageCmd),
-		actors:  make(map[ActorName]*actor, 0),
+		apps:    make(map[AppName]*app, 0),
 		mappers: make(map[MsgType][]mapperAndHandler),
 	}
 
@@ -90,7 +90,7 @@ func (s *stage) init() {
 	gob.Register(msg{})
 
 	if s.config.Instrument {
-		s.collector = newActorStatCollector(s)
+		s.collector = newAppStatCollector(s)
 	} else {
 		s.collector = &dummyStatCollector{}
 	}
@@ -124,7 +124,7 @@ func init() {
 	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
 		"Buffer size of channels.")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
-		"Whether to insturment actors.")
+		"Whether to insturment apps.")
 }
 
 const (
@@ -147,7 +147,7 @@ type stage struct {
 	ctrlCh chan StageCmd
 	sigCh  chan os.Signal
 
-	actors  map[ActorName]*actor
+	apps    map[AppName]*app
 	mappers map[MsgType][]mapperAndHandler
 
 	registery registery
@@ -168,8 +168,8 @@ func (s *stage) isIsol() bool {
 	return s.registery.connected()
 }
 
-func (s *stage) actor(name ActorName) (*actor, bool) {
-	a, ok := s.actors[name]
+func (s *stage) app(name AppName) (*app, bool) {
+	a, ok := s.apps[name]
 	return a, ok
 }
 
@@ -220,8 +220,8 @@ func (s *stage) handleCmd(cmd StageCmd) {
 	}
 }
 
-func (s *stage) registerActor(a *actor) {
-	s.actors[a.Name()] = a
+func (s *stage) registerApp(a *app) {
+	s.apps[a.Name()] = a
 }
 
 func (s *stage) registerHandler(t MsgType, m *mapper, h Handler) {
@@ -235,7 +235,7 @@ func (s *stage) handleMsg(m *msg) {
 }
 
 func (s *stage) startMappers() {
-	for _, a := range s.actors {
+	for _, a := range s.apps {
 		go a.mapper.start()
 	}
 }
@@ -284,14 +284,14 @@ func (s *stage) Status() StageStatus {
 	return s.status
 }
 
-func (s *stage) NewActor(name ActorName) Actor {
-	a := &actor{
+func (s *stage) NewApp(name AppName) App {
+	a := &app{
 		name:     name,
 		stage:    s,
 		handlers: make(map[MsgType]Handler),
 	}
 	a.initMapper()
-	s.registerActor(a)
+	s.registerApp(a)
 	return a
 }
 
@@ -304,15 +304,15 @@ func (s *stage) emitMsg(msg *msg) {
 	case msg.isBroadCast():
 		s.dataCh <- msg
 	case msg.isUnicast():
-		a, ok := s.actor(msg.To().ActorName)
+		a, ok := s.app(msg.To().AppName)
 		if !ok {
-			glog.Fatalf("Application not found: %s", msg.To().ActorName)
+			glog.Fatalf("Application not found: %s", msg.To().AppName)
 		}
 		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
 }
 
-func (s *stage) SendToDictKey(msgData interface{}, to ActorName,
+func (s *stage) SendToDictKey(msgData interface{}, to AppName,
 	dk DictionaryKey) {
 	// TODO(soheil): Implement this stage.SendTo.
 	glog.Fatalf("Not implemented yet.")

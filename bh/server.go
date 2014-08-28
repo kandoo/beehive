@@ -39,9 +39,9 @@ func (s *stage) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 			return
 		}
 
-		a, ok := s.actor(cmd.ActorName)
+		a, ok := s.app(cmd.AppName)
 		if !ok {
-			glog.Errorf("Cannot find actor: %v", cmd.RcvrId.ActorName)
+			glog.Errorf("Cannot find app: %v", cmd.RcvrId.AppName)
 			return
 		}
 
@@ -93,9 +93,9 @@ func (s *stage) handleDataConn(conn net.Conn, dec *gob.Decoder,
 		return
 	}
 
-	a, ok := s.actor(to.ActorName)
+	a, ok := s.app(to.AppName)
 	if !ok {
-		glog.Errorf("Cannot find actor: %s", to.ActorName)
+		glog.Errorf("Cannot find app: %s", to.AppName)
 		return
 	}
 

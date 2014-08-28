@@ -6,11 +6,11 @@ import (
 	"github.com/golang/glog"
 )
 
-type ActorName string
+type AppName string
 
-// Actors simply process and exchange messages. Actor methods are not
+// Apps simply process and exchange messages. App methods are not
 // thread-safe and we assume that neither are its map and receive functions.
-type Actor interface {
+type App interface {
 	// Handles a specific message type using the handler. If msgType is an
 	// name of msgType's reflection type.
 	// instnace of MsgType, we use it as the type. Otherwise, we use the qualified
@@ -20,21 +20,21 @@ type Actor interface {
 	// the qualified name of msgType's reflection type.
 	HandleFunc(msgType interface{}, m Map, r Recv) error
 
-	// Regsiters the actor's detached handler.
+	// Regsiters the app's detached handler.
 	Detached(h DetachedHandler) error
 	// Registers the detached handler using functions.
 	DetachedFunc(start Start, stop Stop, r Recv) error
 
-	// Returns the state of this actor that is shared among all instances and the
-	// map function. This state is NOT thread-safe and actors must synchronize for
+	// Returns the state of this app that is shared among all instances and the
+	// map function. This state is NOT thread-safe and apps must synchronize for
 	// themselves.
 	State() State
-	// Returns the actor name.
-	Name() ActorName
+	// Returns the app name.
+	Name() AppName
 
-	// Whether the actor is sticky.
+	// Whether the app is sticky.
 	Sticky() bool
-	// Sets whether the actor is sticky, i.e., should not be migrated.
+	// Sets whether the app is sticky, i.e., should not be migrated.
 	SetSticky(sticky bool)
 }
 
@@ -56,7 +56,7 @@ type Handler interface {
 // Detached handlers, in contrast to normal Handlers with Map and Recv, start in
 // their own go-routine and emit messages. They do not listen on a particular
 // message and only recv replys in their receive functions.
-// Note that each actor can have only one detached handler.
+// Note that each app can have only one detached handler.
 type DetachedHandler interface {
 	// Starts the handler. Note that this will run in a separate goroutine, and
 	// you can block.
@@ -105,25 +105,25 @@ func (h *funcDetached) Recv(m Msg, c RecvContext) {
 	h.recvFunc(m, c)
 }
 
-type actor struct {
-	name     ActorName
+type app struct {
+	name     AppName
 	stage    *stage
 	mapper   *mapper
 	handlers map[MsgType]Handler
 	sticky   bool
 }
 
-func (a *actor) HandleFunc(msgType interface{}, m Map, r Recv) error {
+func (a *app) HandleFunc(msgType interface{}, m Map, r Recv) error {
 	return a.Handle(msgType, &funcHandler{m, r})
 }
 
-func (a *actor) DetachedFunc(start Start, stop Stop, rcv Recv) error {
+func (a *app) DetachedFunc(start Start, stop Stop, rcv Recv) error {
 	return a.Detached(&funcDetached{start, stop, rcv})
 }
 
-func (a *actor) Handle(msg interface{}, h Handler) error {
+func (a *app) Handle(msg interface{}, h Handler) error {
 	if a.mapper == nil {
-		glog.Fatalf("Actor's mapper is nil!")
+		glog.Fatalf("App's mapper is nil!")
 	}
 
 	t := msgType(msg)
@@ -131,7 +131,7 @@ func (a *actor) Handle(msg interface{}, h Handler) error {
 	return a.registerHandler(t, h)
 }
 
-func (a *actor) registerHandler(t MsgType, h Handler) error {
+func (a *app) registerHandler(t MsgType, h Handler) error {
 	_, ok := a.handlers[t]
 	if ok {
 		return errors.New("A handler for this message type already exists.")
@@ -142,31 +142,31 @@ func (a *actor) registerHandler(t MsgType, h Handler) error {
 	return nil
 }
 
-func (a *actor) handler(t MsgType) Handler {
+func (a *app) handler(t MsgType) Handler {
 	return a.handlers[t]
 }
 
-func (a *actor) Detached(h DetachedHandler) error {
+func (a *app) Detached(h DetachedHandler) error {
 	return a.mapper.registerDetached(h)
 }
 
-func (a *actor) State() State {
+func (a *app) State() State {
 	return a.mapper.state()
 }
 
-func (a *actor) Name() ActorName {
+func (a *app) Name() AppName {
 	return a.name
 }
 
-func (a *actor) SetSticky(sticky bool) {
+func (a *app) SetSticky(sticky bool) {
 	a.sticky = sticky
 }
 
-func (a *actor) Sticky() bool {
+func (a *app) Sticky() bool {
 	return a.sticky
 }
 
-func (a *actor) initMapper() {
+func (a *app) initMapper() {
 	// TODO(soheil): Maybe stop the previous mapper if any?
 	a.mapper = &mapper{
 		asyncRoutine: asyncRoutine{
@@ -175,7 +175,7 @@ func (a *actor) initMapper() {
 		},
 		ctx: context{
 			stage: a.stage,
-			actor: a,
+			app:   a,
 		},
 		keyToRcvrs: make(map[DictionaryKey]receiver),
 		idToRcvrs:  make(map[RcvrId]receiver),

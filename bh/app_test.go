@@ -55,8 +55,8 @@ func TestStage(t *testing.T) {
 	}()
 
 	stage := NewStage()
-	actor := stage.NewActor("MyActor")
-	actor.Handle(MyMsg(0), &MyHandler{})
+	app := stage.NewApp("MyApp")
+	app.Handle(MyMsg(0), &MyHandler{})
 
 	stageWCh := make(chan interface{})
 	go stage.Start(stageWCh)

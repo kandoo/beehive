@@ -15,7 +15,7 @@ type Context interface {
 type RecvContext interface {
 	Context
 	Emit(msgData interface{})
-	SendToDictKey(msgData interface{}, to ActorName, dk DictionaryKey)
+	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	SendToRcvr(msgData interface{}, to RcvrId)
 	ReplyTo(msg Msg, replyData interface{}) error
 }
@@ -23,7 +23,7 @@ type RecvContext interface {
 type context struct {
 	state State
 	stage *stage
-	actor *actor
+	app   *app
 }
 
 type recvContext struct {
@@ -33,7 +33,7 @@ type recvContext struct {
 
 func (ctx *context) State() State {
 	if ctx.state == nil {
-		ctx.state = newState(string(ctx.actor.Name()))
+		ctx.state = newState(string(ctx.app.Name()))
 	}
 
 	return ctx.state
@@ -52,7 +52,7 @@ func (ctx *recvContext) Emit(msgData interface{}) {
 	ctx.stage.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{}))
 }
 
-func (ctx *recvContext) SendToDictKey(msgData interface{}, to ActorName,
+func (ctx *recvContext) SendToDictKey(msgData interface{}, to AppName,
 	dk DictionaryKey) {
 
 	// TODO(soheil): Implement send to.

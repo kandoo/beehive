@@ -7,13 +7,13 @@ import (
 )
 
 type RcvrId struct {
-	StageId   StageId   `json:"stage_id"`
-	ActorName ActorName `json:"actor_name"`
-	Id        uint32    `json:"id"`
+	StageId StageId `json:"stage_id"`
+	AppName AppName `json:"app_name"`
+	Id      uint32  `json:"id"`
 }
 
 func (r *RcvrId) isNil() bool {
-	return len(r.StageId) == 0 && len(r.ActorName) == 0 && r.Id == 0
+	return len(r.StageId) == 0 && len(r.AppName) == 0 && r.Id == 0
 }
 
 func (r *RcvrId) isDetachedId() bool {
