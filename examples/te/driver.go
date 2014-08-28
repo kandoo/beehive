@@ -4,7 +4,7 @@ import (
 	"math/rand"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 type FlowStat struct {
@@ -41,16 +41,16 @@ func NewDriver(startingSwitchId, numberOfSwitches int) *Driver {
 	return d
 }
 
-func (d *Driver) Start(ctx actor.RecvContext) {
+func (d *Driver) Start(ctx bh.RecvContext) {
 	for s, _ := range d.switches {
 		ctx.Emit(SwitchJoined{s})
 	}
 }
 
-func (d *Driver) Stop(ctx actor.RecvContext) {
+func (d *Driver) Stop(ctx bh.RecvContext) {
 }
 
-func (d *Driver) Recv(m actor.Msg, ctx actor.RecvContext) {
+func (d *Driver) Recv(m bh.Msg, ctx bh.RecvContext) {
 	if m.From().ActorName == "" {
 		return
 	}
@@ -75,13 +75,13 @@ func (d *Driver) Recv(m actor.Msg, ctx actor.RecvContext) {
 	d.switches[q.Switch] = s
 }
 
-func (d *Driver) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	var k actor.Key
+func (d *Driver) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+	var k bh.Key
 	switch d := m.Data().(type) {
 	case StatQuery:
 		k = d.Switch.Key()
 	case FlowMod:
 		k = d.Switch.Key()
 	}
-	return actor.MapSet{{switchStateDict, k}}
+	return bh.MapSet{{switchStateDict, k}}
 }

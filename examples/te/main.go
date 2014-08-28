@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 const (
@@ -17,10 +17,10 @@ var (
 	elephantProb float64
 )
 
-func createStage(config actor.StageConfig, minDriver, maxDriver int,
+func createStage(config bh.StageConfig, minDriver, maxDriver int,
 	minCol, maxCol int, stickyCollector bool, lockRouter bool,
 	joinCh chan interface{}) {
-	s := actor.NewStageWithConfig(config)
+	s := bh.NewStageWithConfig(config)
 
 	c := s.NewActor("Collector")
 	p := NewPoller(1 * time.Second)
@@ -85,7 +85,7 @@ func main() {
 
 	joinChannels := make([]chan interface{}, 0)
 
-	config := actor.DefaultCfg
+	config := bh.DefaultCfg
 	for s := 0; s < *nstages; s++ {
 		config.StageAddr = fmt.Sprintf(lAddr, port)
 		port++

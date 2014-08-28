@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 // Binary operator.
@@ -36,14 +36,14 @@ type Calculator struct{}
 
 // Operations are mapped based on their type. With this mapping, additions are
 // all handled on the same stage, and so are subtractions.
-func (c *Calculator) Map(msg actor.Msg, ctx actor.Context) actor.MapSet {
+func (c *Calculator) Map(msg bh.Msg, ctx bh.Context) bh.MapSet {
 	op := msg.Data().(Op)
-	return actor.MapSet{
-		{"Op", actor.Key(strconv.Itoa(int(op.OpT)))},
+	return bh.MapSet{
+		{"Op", bh.Key(strconv.Itoa(int(op.OpT)))},
 	}
 }
 
-func (c *Calculator) Recv(msg actor.Msg, ctx actor.RecvContext) {
+func (c *Calculator) Recv(msg bh.Msg, ctx bh.RecvContext) {
 	op := msg.Data().(Op)
 	res := c.calc(op)
 	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, res)
@@ -62,7 +62,7 @@ func (c *Calculator) calc(op Op) int {
 
 type Generator struct{}
 
-func (g *Generator) Start(ctx actor.RecvContext) {
+func (g *Generator) Start(ctx bh.RecvContext) {
 	fmt.Println("Generator started.")
 
 	ctx.Emit(Op{1, 2, Add})
@@ -78,16 +78,16 @@ func (g *Generator) Start(ctx actor.RecvContext) {
 	fmt.Println("Emitted sub.")
 }
 
-func (g *Generator) Stop(ctx actor.RecvContext) {
+func (g *Generator) Stop(ctx bh.RecvContext) {
 	fmt.Println("Generator stopped.")
 }
 
-func (g *Generator) Recv(msg actor.Msg, ctx actor.RecvContext) {
+func (g *Generator) Recv(msg bh.Msg, ctx bh.RecvContext) {
 	fmt.Printf("The result is: %d\n", msg.Data().(int))
 }
 
 func main() {
-	s := actor.NewStage()
+	s := bh.NewStage()
 	a := s.NewActor("Calc")
 	a.Handle(Op{}, &Calculator{})
 	a.Detached(&Generator{})

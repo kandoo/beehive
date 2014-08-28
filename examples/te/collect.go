@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 type IPV4 uint32
@@ -15,8 +15,8 @@ func (s Switch) String() string {
 	return strconv.FormatUint(uint64(s), 10)
 }
 
-func (s Switch) Key() actor.Key {
-	return actor.Key(s.String())
+func (s Switch) Key() bh.Key {
+	return bh.Key(s.String())
 }
 
 type Flow struct {
@@ -48,7 +48,7 @@ type Collector struct {
 	poller *Poller
 }
 
-func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
+func (c *Collector) Recv(m bh.Msg, ctx bh.RecvContext) {
 	res := m.Data().(StatResult)
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
@@ -72,8 +72,8 @@ func (c *Collector) Recv(m actor.Msg, ctx actor.RecvContext) {
 	}
 }
 
-func (c *Collector) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	return actor.MapSet{{matrixDict, m.Data().(StatResult).Switch.Key()}}
+func (c *Collector) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+	return bh.MapSet{{matrixDict, m.Data().(StatResult).Switch.Key()}}
 }
 
 type Poller struct {
@@ -94,7 +94,7 @@ func NewPoller(timeout time.Duration) *Poller {
 	}
 }
 
-func (p *Poller) Start(ctx actor.RecvContext) {
+func (p *Poller) Start(ctx bh.RecvContext) {
 	for {
 		select {
 		case q := <-p.query:
@@ -115,13 +115,13 @@ func (p *Poller) Start(ctx actor.RecvContext) {
 	}
 }
 
-func (p *Poller) Stop(ctx actor.RecvContext) {
+func (p *Poller) Stop(ctx bh.RecvContext) {
 	join := make(chan bool)
 	p.quit <- join
 	<-join
 }
 
-func (p *Poller) Recv(m actor.Msg, ctx actor.RecvContext) {}
+func (p *Poller) Recv(m bh.Msg, ctx bh.RecvContext) {}
 
 type SwitchJoined struct {
 	Switch Switch
@@ -131,7 +131,7 @@ type SwitchJoinHandler struct {
 	poller *Poller
 }
 
-func (s *SwitchJoinHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
+func (s *SwitchJoinHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
 	if m.From().ActorName == "" {
 		return
 	}
@@ -150,6 +150,8 @@ func (s *SwitchJoinHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
 	glog.Infof("Switch joined: %+v", joined)
 }
 
-func (s *SwitchJoinHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	return actor.MapSet{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
+func (s *SwitchJoinHandler) Map(m bh.Msg,
+	ctx bh.Context) bh.MapSet {
+
+	return bh.MapSet{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
 }

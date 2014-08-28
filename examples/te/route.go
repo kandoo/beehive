@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/golang/glog"
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 const (
@@ -11,7 +11,7 @@ const (
 
 type UpdateHandler struct{}
 
-func (r *UpdateHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
+func (r *UpdateHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
 	if m.From().ActorName == "" {
 		return
 	}
@@ -21,18 +21,18 @@ func (r *UpdateHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
 	ctx.Emit(FlowMod{Switch: u.Switch})
 }
 
-func (r *UpdateHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	return actor.MapSet{
-		{matrixDict, actor.Key("0")},
-		{topologyDict, actor.Key("0")},
+func (r *UpdateHandler) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+	return bh.MapSet{
+		{matrixDict, bh.Key("0")},
+		{topologyDict, bh.Key("0")},
 	}
 }
 
 type TopologyHandler struct{}
 
-func (t *TopologyHandler) Recv(m actor.Msg, ctx actor.RecvContext) {
+func (t *TopologyHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
 }
 
-func (t *TopologyHandler) Map(m actor.Msg, ctx actor.Context) actor.MapSet {
-	return actor.MapSet{{topologyDict, actor.Key("0")}}
+func (t *TopologyHandler) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+	return bh.MapSet{{topologyDict, bh.Key("0")}}
 }

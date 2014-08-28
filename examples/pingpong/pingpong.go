@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/actor/actor"
+	"github.com/soheilhy/beehive/bh"
 )
 
 const (
 	PingPongDict = "PingPong"
 )
 
-var centralizedMapSet = actor.MapSet{{PingPongDict, "0"}}
+var centralizedMapSet = bh.MapSet{{PingPongDict, "0"}}
 
 type ping int
 type pong int
@@ -28,11 +28,11 @@ func (p pong) ping() ping {
 
 type pinger struct{}
 
-func (p *pinger) Map(msg actor.Msg, ctx actor.Context) actor.MapSet {
+func (p *pinger) Map(msg bh.Msg, ctx bh.Context) bh.MapSet {
 	return centralizedMapSet
 }
 
-func (p *pinger) Recv(msg actor.Msg, ctx actor.RecvContext) {
+func (p *pinger) Recv(msg bh.Msg, ctx bh.RecvContext) {
 	dict := ctx.Dict(PingPongDict)
 	data := msg.Data()
 	switch data := data.(type) {
@@ -77,7 +77,7 @@ func main() {
 	shouldPing := flag.Bool("ping", false, "Whether to ping.")
 	shouldPong := flag.Bool("pong", false, "Whether to pong.")
 
-	s := actor.NewStage()
+	s := bh.NewStage()
 
 	pingAtor := s.NewActor("Ping")
 	pingAtor.Handle(pong(0), &pinger{})
