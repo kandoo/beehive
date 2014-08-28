@@ -7,13 +7,13 @@ import (
 )
 
 type RcvrId struct {
-	StageId StageId `json:"stage_id"`
+	HiveId  HiveId  `json:"hive_id"`
 	AppName AppName `json:"app_name"`
 	Id      uint32  `json:"id"`
 }
 
 func (r *RcvrId) isNil() bool {
-	return len(r.StageId) == 0 && len(r.AppName) == 0 && r.Id == 0
+	return len(r.HiveId) == 0 && len(r.AppName) == 0 && r.Id == 0
 }
 
 func (r *RcvrId) isDetachedId() bool {
@@ -88,7 +88,7 @@ func (rcvr *localRcvr) start() {
 func (rcvr *localRcvr) handleMsg(mh msgAndHandler) {
 	glog.V(2).Infof("Receiver handles a message: %+v", mh.msg)
 	mh.handler.Recv(mh.msg, &rcvr.ctx)
-	rcvr.ctx.stage.collector.collect(mh.msg.From(), rcvr.rId, mh.msg)
+	rcvr.ctx.hive.collector.collect(mh.msg.From(), rcvr.rId, mh.msg)
 }
 
 func (rcvr *localRcvr) handleCmd(cmd routineCmd) bool {

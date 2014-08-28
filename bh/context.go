@@ -7,7 +7,7 @@ import (
 )
 
 type Context interface {
-	Stage() Stage
+	Hive() Hive
 	State() State
 	Dict(n DictionaryName) Dictionary
 }
@@ -22,7 +22,7 @@ type RecvContext interface {
 
 type context struct {
 	state State
-	stage *stage
+	hive  *hive
 	app   *app
 }
 
@@ -43,13 +43,13 @@ func (ctx *context) Dict(n DictionaryName) Dictionary {
 	return ctx.State().Dict(n)
 }
 
-func (ctx *context) Stage() Stage {
-	return ctx.stage
+func (ctx *context) Hive() Hive {
+	return ctx.hive
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.
 func (ctx *recvContext) Emit(msgData interface{}) {
-	ctx.stage.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{}))
+	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{}))
 }
 
 func (ctx *recvContext) SendToDictKey(msgData interface{}, to AppName,
@@ -57,13 +57,13 @@ func (ctx *recvContext) SendToDictKey(msgData interface{}, to AppName,
 
 	// TODO(soheil): Implement send to.
 	msg := newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{})
-	ctx.stage.emitMsg(msg)
+	ctx.hive.emitMsg(msg)
 
 	glog.Fatal("Sendto is not implemented.")
 }
 
 func (ctx *recvContext) SendToRcvr(msgData interface{}, to RcvrId) {
-	ctx.stage.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), to))
+	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), to))
 }
 
 // Reply to thatMsg with the provided replyData.

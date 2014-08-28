@@ -21,7 +21,7 @@ func (h *MyHandler) Map(m Msg, c Context) MapSet {
 	return MapSet{{"D", Key(strconv.Itoa(v % kHandlers))}}
 }
 
-var testStageCh chan interface{} = make(chan interface{})
+var testHiveCh chan interface{} = make(chan interface{})
 
 func (h *MyHandler) Recv(m Msg, c RecvContext) {
 	hash := int(m.Data().(MyMsg)) % kHandlers
@@ -40,35 +40,35 @@ func (h *MyHandler) Recv(m Msg, c RecvContext) {
 	}
 
 	if i == kMsgs/kHandlers {
-		testStageCh <- true
+		testHiveCh <- true
 	}
 }
 
-func TestStage(t *testing.T) {
+func TestHive(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(1)
 
-	testStageCh = make(chan interface{})
+	testHiveCh = make(chan interface{})
 	defer func() {
-		close(testStageCh)
-		testStageCh = nil
+		close(testHiveCh)
+		testHiveCh = nil
 	}()
 
-	stage := NewStage()
-	app := stage.NewApp("MyApp")
+	hive := NewHive()
+	app := hive.NewApp("MyApp")
 	app.Handle(MyMsg(0), &MyHandler{})
 
-	stageWCh := make(chan interface{})
-	go stage.Start(stageWCh)
+	hiveWCh := make(chan interface{})
+	go hive.Start(hiveWCh)
 
 	for i := 1; i <= kMsgs; i++ {
-		stage.Emit(MyMsg(i))
+		hive.Emit(MyMsg(i))
 	}
 
 	for i := 0; i < kHandlers; i++ {
-		<-testStageCh
+		<-testHiveCh
 	}
 
-	stage.Stop()
-	<-stageWCh
+	hive.Stop()
+	<-hiveWCh
 }

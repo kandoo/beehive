@@ -19,7 +19,7 @@ const (
 
 type migrateRcvrCmdData struct {
 	From RcvrId
-	To   StageId
+	To   HiveId
 }
 
 type replaceRcvrCmdData struct {

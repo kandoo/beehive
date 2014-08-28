@@ -14,15 +14,15 @@ type statCollector interface {
 type dummyStatCollector struct{}
 
 func (c *dummyStatCollector) collect(from, to RcvrId, msg Msg) {}
-func (c *dummyStatCollector) init(s Stage)                     {}
+func (c *dummyStatCollector) init(h Hive)                      {}
 
 type appStatCollector struct {
-	stage Stage
+	hive Hive
 }
 
-func newAppStatCollector(s Stage) statCollector {
-	c := &appStatCollector{stage: s}
-	a := s.NewApp("localStatCollector")
+func newAppStatCollector(h Hive) statCollector {
+	c := &appStatCollector{hive: h}
+	a := h.NewApp("localStatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
 	a.Handle(migrateRcvrCmdData{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
@@ -42,7 +42,7 @@ func (c *appStatCollector) collect(from, to RcvrId, msg Msg) {
 
 	glog.V(3).Infof("Stat collector collects a new message from: %+v --> %+v",
 		from, to)
-	c.stage.Emit(localStatUpdate{from, to, 1})
+	c.hive.Emit(localStatUpdate{from, to, 1})
 }
 
 const (
@@ -98,7 +98,7 @@ func (u *localStatUpdate) Key() Key {
 }
 
 func (u *localStatUpdate) localCommunication() bool {
-	return u.From.StageId == u.To.StageId
+	return u.From.HiveId == u.To.HiveId
 }
 
 func (u *localStatUpdate) selfCommunication() bool {
@@ -131,7 +131,7 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 		d.Set(k, s)
 
 	case migrateRcvrCmdData:
-		a, ok := ctx.(*recvContext).stage.app(m.From.AppName)
+		a, ok := ctx.(*recvContext).hive.app(m.From.AppName)
 		if !ok {
 			glog.Fatalf("Cannot find app for migrate command: %+v", m)
 			return
@@ -156,7 +156,7 @@ func (a *aggrStatUpdate) ReverseKey() Key {
 
 type aggrStat struct {
 	Migrated bool
-	Matrix   map[StageId]uint64
+	Matrix   map[HiveId]uint64
 }
 
 type optimizer struct{}
@@ -185,12 +185,12 @@ func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 		return
 	}
 
-	stat.Matrix[update.From.StageId] += update.Count
+	stat.Matrix[update.From.HiveId] += update.Count
 	defer func() {
 		dict.Set(update.To.Key(), stat)
 	}()
 
-	a, ok := ctx.Stage().(*stage).app(update.To.AppName)
+	a, ok := ctx.Hive().(*hive).app(update.To.AppName)
 	if !ok {
 		glog.Errorf("App not found: %s", update.To.AppName)
 		return
@@ -201,25 +201,25 @@ func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 	}
 
 	max := uint64(0)
-	maxStage := StageId("")
+	maxHive := HiveId("")
 	for id, cnt := range stat.Matrix {
 		if max < cnt {
 			max = cnt
-			maxStage = id
+			maxHive = id
 		}
 
-		if max == cnt && update.To.StageId == id {
+		if max == cnt && update.To.HiveId == id {
 			max = cnt
-			maxStage = id
+			maxHive = id
 		}
 	}
 
-	if maxStage == "" || update.To.StageId == maxStage {
+	if maxHive == "" || update.To.HiveId == maxHive {
 		return
 	}
 
 	glog.Infof("Initiating a migration: %+v", update)
-	ctx.SendToRcvr(migrateRcvrCmdData{update.To, maxStage}, msg.From())
+	ctx.SendToRcvr(migrateRcvrCmdData{update.To, maxHive}, msg.From())
 
 	stat.Migrated = true
 }

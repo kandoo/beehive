@@ -15,31 +15,31 @@ const (
 	dataHandshake
 )
 
-type stageHandshake struct {
+type hiveHandshake struct {
 	Type handShakeType
 }
 
-type stageRemoteCommand struct {
+type hiveRemoteCommand struct {
 	Type routineCmdType
 	RcvrId
 }
 
-func (s *stage) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
+func (h *hive) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 	enc *gob.Encoder) {
 
 	for {
-		var cmd stageRemoteCommand
+		var cmd hiveRemoteCommand
 		if err := dec.Decode(&cmd); err != nil {
 			glog.Errorf("Cannot decode the command: %v", err)
 			return
 		}
 
-		if cmd.StageId != s.id {
-			glog.Errorf("Command is not for this stage: %+v", cmd)
+		if cmd.HiveId != h.id {
+			glog.Errorf("Command is not for this hive: %+v", cmd)
 			return
 		}
 
-		a, ok := s.app(cmd.AppName)
+		a, ok := h.app(cmd.AppName)
 		if !ok {
 			glog.Errorf("Cannot find app: %v", cmd.RcvrId.AppName)
 			return
@@ -84,7 +84,7 @@ func (s *stage) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 	}
 }
 
-func (s *stage) handleDataConn(conn net.Conn, dec *gob.Decoder,
+func (h *hive) handleDataConn(conn net.Conn, dec *gob.Decoder,
 	enc *gob.Encoder) {
 
 	var to RcvrId
@@ -93,7 +93,7 @@ func (s *stage) handleDataConn(conn net.Conn, dec *gob.Decoder,
 		return
 	}
 
-	a, ok := s.app(to.AppName)
+	a, ok := h.app(to.AppName)
 	if !ok {
 		glog.Errorf("Cannot find app: %s", to.AppName)
 		return
@@ -126,13 +126,13 @@ func (s *stage) handleDataConn(conn net.Conn, dec *gob.Decoder,
 	}
 }
 
-func (s *stage) handleConn(conn net.Conn) {
+func (h *hive) handleConn(conn net.Conn) {
 	defer conn.Close()
 
 	dec := gob.NewDecoder(conn)
 	enc := gob.NewEncoder(conn)
 
-	var hs stageHandshake
+	var hs hiveHandshake
 	err := dec.Decode(&hs)
 	if err != nil {
 		glog.Errorf("Cannot decode server handshake: %+v", err)
@@ -143,29 +143,29 @@ func (s *stage) handleConn(conn net.Conn) {
 
 	switch hs.Type {
 	case ctrlHandshake:
-		s.handleCtrlConn(conn, dec, enc)
+		h.handleCtrlConn(conn, dec, enc)
 	case dataHandshake:
-		s.handleDataConn(conn, dec, enc)
+		h.handleDataConn(conn, dec, enc)
 	}
 }
 
-func (s *stage) listen() {
+func (h *hive) listen() {
 	var err error
-	s.listener, err = net.Listen("tcp", s.config.StageAddr)
+	h.listener, err = net.Listen("tcp", h.config.HiveAddr)
 	if err != nil {
 		glog.Fatalf("Cannot start listener: %v", err)
 	}
-	defer s.listener.Close()
+	defer h.listener.Close()
 
-	glog.Infof("Stage listening at: %s", s.config.StageAddr)
+	glog.Infof("Hive listening at: %s", h.config.HiveAddr)
 	for {
-		c, err := s.listener.Accept()
+		c, err := h.listener.Accept()
 		if err != nil {
 			glog.V(2).Info("Listener closed.")
 			return
 		}
 		glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
 			c.LocalAddr())
-		go s.handleConn(c)
+		go h.handleConn(c)
 	}
 }

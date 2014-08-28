@@ -22,7 +22,7 @@ type registery struct {
 	ttl    uint64
 }
 
-func (s *stage) connectToRegistery() {
+func (s *hive) connectToRegistery() {
 	if len(s.config.RegAddrs) == 0 {
 		return
 	}
@@ -39,12 +39,12 @@ func (g registery) connected() bool {
 }
 
 type regVal struct {
-	StageId StageId `json:"stage_id"`
-	RcvrId  uint32  `json:"rcvr_id"`
+	HiveId HiveId `json:"hive_id"`
+	RcvrId uint32 `json:"rcvr_id"`
 }
 
 func (this *regVal) Eq(that *regVal) bool {
-	return this.StageId == that.StageId && this.RcvrId == that.RcvrId
+	return this.HiveId == that.HiveId && this.RcvrId == that.RcvrId
 }
 
 func unmarshallRegVal(d string) (regVal, error) {
@@ -88,8 +88,8 @@ func (g registery) lockApp(id RcvrId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
 	v := regVal{
-		StageId: id.StageId,
-		RcvrId:  id.Id,
+		HiveId: id.HiveId,
+		RcvrId: id.Id,
 	}
 	k := g.path(string(id.AppName), lockFileName)
 
@@ -108,8 +108,8 @@ func (g registery) lockApp(id RcvrId) error {
 
 func (g registery) unlockApp(id RcvrId) error {
 	v := regVal{
-		StageId: id.StageId,
-		RcvrId:  id.Id,
+		HiveId: id.HiveId,
+		RcvrId: id.Id,
 	}
 	k := g.path(string(id.AppName), lockFileName)
 
@@ -148,8 +148,8 @@ func (g registery) set(id RcvrId, ms MapSet) regVal {
 	sort.Sort(ms)
 
 	v := regVal{
-		StageId: id.StageId,
-		RcvrId:  id.Id,
+		HiveId: id.HiveId,
+		RcvrId: id.Id,
 	}
 	mv := marshallRegValOrFail(v)
 	for _, dk := range ms {
@@ -178,8 +178,8 @@ func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 	sort.Sort(ms)
 
 	v := regVal{
-		StageId: id.StageId,
-		RcvrId:  id.Id,
+		HiveId: id.HiveId,
+		RcvrId: id.Id,
 	}
 	mv := marshallRegValOrFail(v)
 	validate := false

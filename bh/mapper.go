@@ -29,7 +29,7 @@ func (mapr *mapper) state() State {
 
 func (mapr *mapper) detachedRcvrId() RcvrId {
 	id := RcvrId{
-		StageId: mapr.ctx.stage.Id(),
+		HiveId:  mapr.ctx.hive.Id(),
 		AppName: mapr.ctx.app.Name(),
 		Id:      detachedRcvrId,
 	}
@@ -229,7 +229,7 @@ func (mapr *mapper) nextRcvrId() RcvrId {
 	mapr.lastRId++
 	return RcvrId{
 		AppName: mapr.ctx.app.Name(),
-		StageId: mapr.ctx.stage.Id(),
+		HiveId:  mapr.ctx.hive.Id(),
 		Id:      mapr.lastRId,
 	}
 }
@@ -238,40 +238,40 @@ func (mapr *mapper) nextRcvrId() RcvrId {
 // returns the ID of the owner of this map set.
 func (mapr *mapper) lock(mapSet MapSet, force bool) RcvrId {
 	id := mapr.nextRcvrId()
-	if mapr.ctx.stage.isIsol() {
+	if mapr.ctx.hive.isIsol() {
 		return id
 	}
 
 	var v regVal
 	if force {
-		v = mapr.ctx.stage.registery.set(id, mapSet)
+		v = mapr.ctx.hive.registery.set(id, mapSet)
 	} else {
-		v = mapr.ctx.stage.registery.storeOrGet(id, mapSet)
+		v = mapr.ctx.hive.registery.storeOrGet(id, mapSet)
 	}
 
-	if v.StageId == id.StageId && v.RcvrId == id.Id {
+	if v.HiveId == id.HiveId && v.RcvrId == id.Id {
 		return id
 	}
 
 	mapr.lastRId--
-	id.StageId = v.StageId
+	id.HiveId = v.HiveId
 	id.Id = v.RcvrId
 	return id
 }
 
 func (mapr *mapper) lockKey(dk DictionaryKey, rcvr receiver) bool {
 	mapr.setReceiver(dk, rcvr)
-	if mapr.ctx.stage.isIsol() {
+	if mapr.ctx.hive.isIsol() {
 		return true
 	}
 
-	mapr.ctx.stage.registery.storeOrGet(rcvr.id(), []DictionaryKey{dk})
+	mapr.ctx.hive.registery.storeOrGet(rcvr.id(), []DictionaryKey{dk})
 
 	return true
 }
 
 func (mapr *mapper) isLocalRcvr(id RcvrId) bool {
-	return mapr.ctx.stage.Id() == id.StageId
+	return mapr.ctx.hive.Id() == id.HiveId
 }
 
 func (mapr *mapper) defaultLocalRcvr(id RcvrId) localRcvr {
@@ -385,7 +385,7 @@ func (mapr *mapper) mapSetOfRcvr(id RcvrId) MapSet {
 	return ms
 }
 
-func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
+func (mapr *mapper) migrate(rcvrId RcvrId, to HiveId, resCh chan asyncResult) {
 	if rcvrId.isDetachedId() {
 		err := errors.New(fmt.Sprintf("Cannot migrate detached: %+v", rcvrId))
 		resCh <- asyncResult{nil, err}
@@ -411,7 +411,7 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 
 	// TODO(soheil): There is a possibility of a deadlock. If the number of
 	// migrrations pass the control channel's buffer size.
-	conn, err := dialStage(to)
+	conn, err := dialHive(to)
 	if err != nil {
 		resCh <- asyncResult{nil, err}
 		return
@@ -422,14 +422,14 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 	enc := gob.NewEncoder(conn)
 	dec := gob.NewDecoder(conn)
 
-	if err := enc.Encode(stageHandshake{ctrlHandshake}); err != nil {
+	if err := enc.Encode(hiveHandshake{ctrlHandshake}); err != nil {
 		glog.Errorf("Cannot encode handshake: %+v", err)
 		resCh <- asyncResult{nil, err}
 		return
 	}
 
-	id := RcvrId{StageId: to, AppName: rcvrId.AppName}
-	if err := enc.Encode(stageRemoteCommand{createRcvrCmd, id}); err != nil {
+	id := RcvrId{HiveId: to, AppName: rcvrId.AppName}
+	if err := enc.Encode(hiveRemoteCommand{createRcvrCmd, id}); err != nil {
 		glog.Errorf("Cannot encode command: %+v", err)
 		resCh <- asyncResult{nil, err}
 		return
@@ -451,7 +451,7 @@ func (mapr *mapper) migrate(rcvrId RcvrId, to StageId, resCh chan asyncResult) {
 
 	glog.V(2).Infof("Created a proxy for the new receiver: %+v", newRcvr)
 
-	if err := enc.Encode(stageRemoteCommand{replaceRcvrCmd, id}); err != nil {
+	if err := enc.Encode(hiveRemoteCommand{replaceRcvrCmd, id}); err != nil {
 		glog.Errorf("Cannot encode replace command: %v", err)
 		return
 	}
@@ -500,7 +500,7 @@ func (mapr *mapper) replaceRcvr(d replaceRcvrCmdData, resCh chan asyncResult) {
 	}
 	glog.V(2).Infof("Replicated the state of %+v on %+v", d.OldRcvr, d.NewRcvr)
 
-	mapr.ctx.stage.registery.set(d.NewRcvr, d.MapSet)
+	mapr.ctx.hive.registery.set(d.NewRcvr, d.MapSet)
 	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MapSet, d.NewRcvr)
 
 	for _, dictKey := range d.MapSet {

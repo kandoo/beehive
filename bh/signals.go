@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-func (s *stage) registerSignals() {
+func (s *hive) registerSignals() {
 	s.sigCh = make(chan os.Signal, 1)
 	signal.Notify(s.sigCh,
 		syscall.SIGHUP,

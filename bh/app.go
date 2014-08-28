@@ -107,7 +107,7 @@ func (h *funcDetached) Recv(m Msg, c RecvContext) {
 
 type app struct {
 	name     AppName
-	stage    *stage
+	hive     *hive
 	mapper   *mapper
 	handlers map[MsgType]Handler
 	sticky   bool
@@ -127,7 +127,7 @@ func (a *app) Handle(msg interface{}, h Handler) error {
 	}
 
 	t := msgType(msg)
-	a.stage.RegisterMsg(msg)
+	a.hive.RegisterMsg(msg)
 	return a.registerHandler(t, h)
 }
 
@@ -138,7 +138,7 @@ func (a *app) registerHandler(t MsgType, h Handler) error {
 	}
 
 	a.handlers[t] = h
-	a.stage.registerHandler(t, a.mapper, h)
+	a.hive.registerHandler(t, a.mapper, h)
 	return nil
 }
 
@@ -170,12 +170,12 @@ func (a *app) initMapper() {
 	// TODO(soheil): Maybe stop the previous mapper if any?
 	a.mapper = &mapper{
 		asyncRoutine: asyncRoutine{
-			dataCh: make(chan msgAndHandler, a.stage.config.DataChBufSize),
+			dataCh: make(chan msgAndHandler, a.hive.config.DataChBufSize),
 			ctrlCh: make(chan routineCmd),
 		},
 		ctx: context{
-			stage: a.stage,
-			app:   a,
+			hive: a.hive,
+			app:  a,
 		},
 		keyToRcvrs: make(map[DictionaryKey]receiver),
 		idToRcvrs:  make(map[RcvrId]receiver),

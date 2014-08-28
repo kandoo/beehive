@@ -33,7 +33,7 @@ func (r *proxyRcvr) handleMsg(mh msgAndHandler) {
 	}
 }
 
-func dialStage(id StageId) (net.Conn, error) {
+func dialHive(id HiveId) (net.Conn, error) {
 	step := time.Duration(waitStepInMs)
 	waitMs := minWaitInMs
 	retries := 0
@@ -67,14 +67,14 @@ func dialStage(id StageId) (net.Conn, error) {
 		}
 	}
 
-	return nil, errors.New(fmt.Sprintf("Cannot connect to remote stage: %+v", id))
+	return nil, errors.New(fmt.Sprintf("Cannot connect to remote hive: %+v", id))
 }
 
 func (r *proxyRcvr) dial() {
 	// FIXME(soheil): This can't scale. We can only support 65k remote receivers.
-	// There should be one connection per remote stage and with that we can
+	// There should be one connection per remote hive and with that we can
 	// support 65k remote controllers.
-	conn, err := dialStage(r.rId.StageId)
+	conn, err := dialHive(r.rId.HiveId)
 	if err != nil {
 		glog.Fatalf("Cannot connect to peer: %v", err)
 	}
@@ -83,7 +83,7 @@ func (r *proxyRcvr) dial() {
 	r.encoder = gob.NewEncoder(r.conn)
 	r.decoder = gob.NewDecoder(r.conn)
 
-	if err = r.encoder.Encode(stageHandshake{dataHandshake}); err != nil {
+	if err = r.encoder.Encode(hiveHandshake{dataHandshake}); err != nil {
 		glog.Fatalf("Cannot handshake with peer: %v", err)
 	}
 
