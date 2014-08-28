@@ -89,6 +89,8 @@ func HandlersInPackage(pkg *ast.Package) ([]*Handler, error) {
 	return handlers, nil
 }
 
+// Generates map function for the given handlers into the writer. Handlers must
+// be all of the same package.
 func GenerateMap(w io.Writer, handlers []*Handler) error {
 	var fileBuf bytes.Buffer
 
