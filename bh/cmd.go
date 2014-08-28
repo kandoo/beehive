@@ -1,4 +1,4 @@
-package beehive
+package bh
 
 type routineCmd struct {
 	cmdType routineCmdType

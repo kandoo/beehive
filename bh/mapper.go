@@ -1,4 +1,4 @@
-package beehive
+package bh
 
 import (
 	"encoding/gob"

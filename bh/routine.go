@@ -1,4 +1,4 @@
-package beehive
+package bh
 
 type msgAndHandler struct {
 	msg     *msg

@@ -21,4 +21,4 @@ shards throughout the cluster.
    [Inst. A3]    [Inst. B3]  [Inst. B4]
 */
 
-package beehive
+package bh
