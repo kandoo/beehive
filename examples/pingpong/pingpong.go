@@ -40,14 +40,14 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 		fmt.Printf("Ping %d\n", data)
 		time.Sleep(100 * time.Millisecond)
 
-		v, ok := dict.Get("ping")
-		if !ok {
+		v, err := dict.Get("ping")
+		if err != nil {
 			v = ping(0)
 		}
 		if data != v.(ping) {
 			glog.Fatalf("Invalid ping: %d != %d", data, v)
 		}
-		dict.Set("ping", data+1)
+		dict.Put("ping", data+1)
 
 		ctx.Emit(data.pong())
 
@@ -56,14 +56,14 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 		time.Sleep(100 * time.Millisecond)
 
 		dict := ctx.Dict(PingPongDict)
-		v, ok := dict.Get("pong")
-		if !ok {
+		v, err := dict.Get("pong")
+		if err != nil {
 			v = pong(0)
 		}
 		if data != v.(pong) {
 			glog.Fatalf("Invalid pong: %d != %d", data, v)
 		}
-		dict.Set("pong", data+1)
+		dict.Put("pong", data+1)
 
 		ctx.Emit(data.ping())
 	}

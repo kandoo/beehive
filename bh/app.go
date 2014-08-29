@@ -38,6 +38,16 @@ type App interface {
 	SetSticky(sticky bool)
 }
 
+// This is the list of dictionary keys returned by the map functions.
+type MapSet []DictionaryKey
+
+func (ms MapSet) Len() int      { return len(ms) }
+func (ms MapSet) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
+func (ms MapSet) Less(i, j int) bool {
+	return ms[i].Dict < ms[j].Dict ||
+		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
+}
+
 // An applications map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
 // called sequentially.

@@ -75,7 +75,7 @@ func marshallRegValOrFail(v regVal) string {
 }
 
 const (
-	keyFmtStr    = "/theatre/%s/%s/%s"
+	keyFmtStr    = "/beehive/%s/%s/%s"
 	expireAction = "expire"
 	lockFileName = "__lock__"
 )

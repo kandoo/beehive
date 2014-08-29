@@ -115,20 +115,20 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 	case localStatUpdate:
 		d := ctx.Dict(localStatDict)
 		k := m.Key()
-		v, ok := d.Get(k)
-		if !ok {
+		v, err := d.Get(k)
+		if err != nil {
 			v = newCommunicationStat(m)
 		}
 		s := v.(communicationStat)
 		s.add(m.Count)
 
 		if s.countSinceLastEvent() < 10 || s.timeSinceLastEvent() < 1*time.Second {
-			d.Set(k, s)
+			d.Put(k, s)
 			return
 		}
 
 		ctx.Emit(s.toAggrStat())
-		d.Set(k, s)
+		d.Put(k, s)
 
 	case migrateBeeCmdData:
 		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
@@ -162,8 +162,8 @@ type aggrStat struct {
 type optimizer struct{}
 
 func (o *optimizer) stat(id BeeId, dict Dictionary) aggrStat {
-	v, ok := dict.Get(id.Key())
-	if !ok {
+	v, err := dict.Get(id.Key())
+	if err != nil {
 		return aggrStat{
 			Matrix: make(map[HiveId]uint64),
 		}
@@ -187,7 +187,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 
 	stat.Matrix[update.From.HiveId] += update.Count
 	defer func() {
-		dict.Set(update.To.Key(), stat)
+		dict.Put(update.To.Key(), stat)
 	}()
 
 	a, ok := ctx.Hive().(*hive).app(update.To.AppName)

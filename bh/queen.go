@@ -389,7 +389,7 @@ func (q *qee) mapSetOfBee(id BeeId) MapSet {
 
 func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
 	if beeId.isDetachedId() {
-		err := errors.New(fmt.Sprintf("Cannot migrate detached: %+v", beeId))
+		err := errors.New(fmt.Sprintf("Cannot migrate a detached: %+v", beeId))
 		resCh <- asyncResult{nil, err}
 		return
 	}
@@ -470,6 +470,12 @@ func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
 		return
 	}
 
+	newId := BeeId{}
+	if err := dec.Decode(&newId); err != nil {
+		glog.Errorf("Cannot replace the bee: %v", err)
+		return
+	}
+
 	for _, dictKey := range mapSet {
 		q.setBee(dictKey, newBee)
 	}
@@ -496,9 +502,9 @@ func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan asyncResult) {
 	newState := r.state()
 	for name, oldDict := range d.State.Dicts {
 		newDict := newState.Dict(DictionaryName(name))
-		for k, v := range oldDict.All() {
-			newDict.Set(k, v)
-		}
+		oldDict.ForEach(func(k Key, v Value) {
+			newDict.Put(k, v)
+		})
 	}
 	glog.V(2).Infof("Replicated the state of %+v on %+v", d.OldBee, d.NewBee)
 

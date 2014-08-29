@@ -27,12 +27,14 @@ func (h *MyHandler) Rcv(m Msg, c RcvContext) {
 	hash := int(m.Data().(MyMsg)) % kHandlers
 	d := c.State().Dict("D")
 	k := Key(strconv.Itoa(hash))
-	v, ok := d.Get(k)
-	if !ok {
+	v, err := d.Get(k)
+	if err != nil {
 		v = 0
 	}
 	i := v.(int) + 1
-	d.Set(k, i)
+	if err = d.Put(k, i); err != nil {
+		panic(fmt.Sprintf("Cannot change the key: %v", err))
+	}
 
 	id := c.(*rcvContext).bee.id().Id % uint32(kHandlers)
 	if id != uint32(hash) {

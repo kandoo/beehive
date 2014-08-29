@@ -53,8 +53,8 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
-	sw, ok := matrix.Get(key)
-	if !ok {
+	sw, err := matrix.Get(key)
+	if err != nil {
 		glog.Errorf("No such switch in matrix: %+v", res)
 		return
 	}
@@ -139,12 +139,12 @@ func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	joined := m.Data().(SwitchJoined)
 	matrix := ctx.Dict(matrixDict)
 	key := joined.Switch.Key()
-	_, ok := matrix.Get(key)
-	if ok {
+	_, err := matrix.Get(key)
+	if err != nil {
 		glog.Errorf("Switch already exists in matrix: %+v", joined)
 		return
 	}
-	matrix.Set(key, make(SwitchStats))
+	matrix.Put(key, make(SwitchStats))
 
 	s.poller.query <- StatQuery{joined.Switch}
 	glog.Infof("Switch joined: %+v", joined)
