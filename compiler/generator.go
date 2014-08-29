@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	recvFunc = "Recv"
+	recvFunc = "Rcv"
 	mapFunc  = "Map"
 
-	msgType    = "actor.Msg"
-	mapSetType = "actor.MapSet"
+	msgType    = "bh.Msg"
+	mapSetType = "bh.MapSet"
 
-	rcvCtxType = "actor.RecvContext"
-	mapCtxType = "actor.Context"
+	rcvCtxType = "bh.RcvContext"
+	mapCtxType = "bh.MapContext"
 
 	dictFunc    = "Dict"
 	dictGetFunc = "Get"
@@ -22,7 +22,7 @@ const (
 	generatedComment = "// __generated_by_beehive__"
 )
 
-func generateMapFromRecv(h *Handler) *Handler {
+func generateMapFromRcv(h *Handler) *Handler {
 	m := h.Rcv
 	m.Name = &ast.Ident{
 		Name: mapFunc,
@@ -68,7 +68,7 @@ func generateMapFromRecv(h *Handler) *Handler {
 	}
 
 	h.Map = m
-	h.Imports = []string{"github.com/soheilhy/actor/actor"}
+	h.Imports = []string{"github.com/soheilhy/beehive/bh"}
 	return h
 }
 

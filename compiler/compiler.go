@@ -17,7 +17,7 @@ import (
 // Represents a message handler.
 type Handler struct {
 	Type    ast.Expr      // Type of the handler.
-	Rcv     *ast.FuncDecl // Recv function of the handler. Cannot be nil.
+	Rcv     *ast.FuncDecl // Rcv function of the handler. Cannot be nil.
 	Map     *ast.FuncDecl // Map function of the handler. Can be nil.
 	Imports []string      // Packages that must be imported for the map function.
 	Package string        // Package name of this handler.
@@ -117,7 +117,7 @@ func GenerateMap(w io.Writer, handlers []*Handler) error {
 			continue
 		}
 
-		h = generateMapFromRecv(h)
+		h = generateMapFromRcv(h)
 		fmt.Fprintf(&mapBuf, "%s\n", generatedComment)
 		printer.Fprint(&mapBuf, fset, h.Map)
 		fmt.Fprintln(&mapBuf)
