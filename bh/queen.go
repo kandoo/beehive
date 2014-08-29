@@ -282,7 +282,7 @@ func (q *qee) defaultLocalBee(id BeeId) localBee {
 			dataCh: make(chan msgAndHandler, cap(q.dataCh)),
 			ctrlCh: make(chan routineCmd),
 		},
-		ctx: rcvContext{mapContext: q.ctx},
+		ctx: q.ctx.newRcvContext(),
 		rId: id,
 	}
 }
@@ -340,15 +340,15 @@ func (q *qee) findOrCreateBee(id BeeId) bee {
 
 	var bee bee
 	if q.isLocalBee(id) {
-		r := &l
-		r.ctx.bee = r
-		bee = r
+		b := &l
+		b.ctx.bee = b
+		bee = b
 	} else {
-		r := &proxyBee{
+		b := &proxyBee{
 			localBee: l,
 		}
-		r.ctx.bee = r
-		bee = r
+		b.ctx.bee = b
+		bee = b
 	}
 
 	q.idToBees[id] = bee

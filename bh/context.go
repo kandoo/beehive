@@ -31,6 +31,14 @@ type rcvContext struct {
 	bee bee
 }
 
+// Creates a new receiver context.
+func (mc mapContext) newRcvContext() rcvContext {
+	rc := rcvContext{mapContext: mc}
+	// We need to reset the state for the new bees.
+	rc.state = nil
+	return rc
+}
+
 func (ctx *mapContext) State() State {
 	if ctx.state == nil {
 		ctx.state = newState(string(ctx.app.Name()))
