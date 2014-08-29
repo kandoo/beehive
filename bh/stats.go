@@ -8,13 +8,13 @@ import (
 )
 
 type statCollector interface {
-	collect(from, to RcvrId, msg Msg)
+	collect(from, to BeeId, msg Msg)
 }
 
 type dummyStatCollector struct{}
 
-func (c *dummyStatCollector) collect(from, to RcvrId, msg Msg) {}
-func (c *dummyStatCollector) init(h Hive)                      {}
+func (c *dummyStatCollector) collect(from, to BeeId, msg Msg) {}
+func (c *dummyStatCollector) init(h Hive)                     {}
 
 type appStatCollector struct {
 	hive Hive
@@ -24,13 +24,13 @@ func newAppStatCollector(h Hive) statCollector {
 	c := &appStatCollector{hive: h}
 	a := h.NewApp("localStatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
-	a.Handle(migrateRcvrCmdData{}, &localStatCollector{})
+	a.Handle(migrateBeeCmdData{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
 	glog.V(1).Infof("App stat collector is registered.")
 	return c
 }
 
-func (c *appStatCollector) collect(from, to RcvrId, msg Msg) {
+func (c *appStatCollector) collect(from, to BeeId, msg Msg) {
 	switch msg.Data().(type) {
 	case localStatUpdate, aggrStatUpdate:
 		return
@@ -52,14 +52,14 @@ const (
 )
 
 type localStatUpdate struct {
-	From  RcvrId
-	To    RcvrId
+	From  BeeId
+	To    BeeId
 	Count uint64
 }
 
 type communicationStat struct {
-	from      RcvrId
-	to        RcvrId
+	from      BeeId
+	to        BeeId
 	count     uint64
 	lastCount uint64
 	lastEvent time.Time
@@ -105,12 +105,12 @@ func (u *localStatUpdate) selfCommunication() bool {
 	return u.From == u.To
 }
 
-func (c *localStatCollector) Map(msg Msg, ctx Context) MapSet {
+func (c *localStatCollector) Map(msg Msg, ctx MapContext) MapSet {
 	u := msg.Data().(localStatUpdate)
 	return MapSet{{localStatDict, u.Key()}}
 }
 
-func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
+func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 	switch m := msg.Data().(type) {
 	case localStatUpdate:
 		d := ctx.Dict(localStatDict)
@@ -130,15 +130,15 @@ func (c *localStatCollector) Recv(msg Msg, ctx RecvContext) {
 		ctx.Emit(s.toAggrStat())
 		d.Set(k, s)
 
-	case migrateRcvrCmdData:
-		a, ok := ctx.(*recvContext).hive.app(m.From.AppName)
+	case migrateBeeCmdData:
+		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
 		if !ok {
 			glog.Fatalf("Cannot find app for migrate command: %+v", m)
 			return
 		}
 
 		resCh := make(chan asyncResult)
-		a.mapper.ctrlCh <- routineCmd{migrateRcvrCmd, m, resCh}
+		a.qee.ctrlCh <- routineCmd{migrateBeeCmd, m, resCh}
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}
@@ -161,18 +161,18 @@ type aggrStat struct {
 
 type optimizer struct{}
 
-func (o *optimizer) stat(id RcvrId, dict Dictionary) aggrStat {
+func (o *optimizer) stat(id BeeId, dict Dictionary) aggrStat {
 	v, ok := dict.Get(id.Key())
 	if !ok {
 		return aggrStat{
-			Matrix: make(map[StageId]uint64),
+			Matrix: make(map[HiveId]uint64),
 		}
 	}
 
 	return v.(aggrStat)
 }
 
-func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
+func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
 	update := msg.Data().(aggrStatUpdate)
 	if update.To.isDetachedId() {
@@ -219,11 +219,11 @@ func (o *optimizer) Recv(msg Msg, ctx RecvContext) {
 	}
 
 	glog.Infof("Initiating a migration: %+v", update)
-	ctx.SendToRcvr(migrateRcvrCmdData{update.To, maxHive}, msg.From())
+	ctx.SendToBee(migrateBeeCmdData{update.To, maxHive}, msg.From())
 
 	stat.Migrated = true
 }
 
-func (o *optimizer) Map(msg Msg, ctx Context) MapSet {
+func (o *optimizer) Map(msg Msg, ctx MapContext) MapSet {
 	return MapSet{{aggrStatDict, "Centeralized"}}
 }

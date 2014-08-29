@@ -11,8 +11,8 @@ const (
 
 type UpdateHandler struct{}
 
-func (r *UpdateHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
-	if m.From().ActorName == "" {
+func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
+	if m.From().AppName == "" {
 		return
 	}
 
@@ -21,7 +21,7 @@ func (r *UpdateHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
 	ctx.Emit(FlowMod{Switch: u.Switch})
 }
 
-func (r *UpdateHandler) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
 	return bh.MapSet{
 		{matrixDict, bh.Key("0")},
 		{topologyDict, bh.Key("0")},
@@ -30,9 +30,9 @@ func (r *UpdateHandler) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
 
 type TopologyHandler struct{}
 
-func (t *TopologyHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
+func (t *TopologyHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
 }
 
-func (t *TopologyHandler) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+func (t *TopologyHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
 	return bh.MapSet{{topologyDict, bh.Key("0")}}
 }

@@ -1,11 +1,11 @@
 package bh
 
-type detachedRcvr struct {
-	localRcvr
+type detachedBee struct {
+	localBee
 	h DetachedHandler
 }
 
-func (r *detachedRcvr) start() {
+func (r *detachedBee) start() {
 	go r.h.Start(&r.ctx)
 	defer r.h.Stop(&r.ctx)
 
@@ -28,6 +28,6 @@ func (r *detachedRcvr) start() {
 	}
 }
 
-func (r *detachedRcvr) handleMsg(mh msgAndHandler) {
-	r.h.Recv(mh.msg, &r.ctx)
+func (r *detachedBee) handleMsg(mh msgAndHandler) {
+	r.h.Rcv(mh.msg, &r.ctx)
 }

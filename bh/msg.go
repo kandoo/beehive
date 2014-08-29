@@ -10,9 +10,9 @@ type Msg interface {
 	// Data stored in the message.
 	Data() interface{}
 	// Source of the message.
-	From() RcvrId
+	From() BeeId
 	// Destination of the message.
-	To() RcvrId
+	To() BeeId
 }
 
 type MsgType string
@@ -20,8 +20,8 @@ type MsgType string
 type msg struct {
 	MsgData interface{}
 	MsgType MsgType
-	MsgFrom RcvrId
-	MsgTo   RcvrId
+	MsgFrom BeeId
+	MsgTo   BeeId
 }
 
 func (m *msg) NoReply() bool {
@@ -44,11 +44,11 @@ func (m *msg) Data() interface{} {
 	return m.MsgData
 }
 
-func (m *msg) To() RcvrId {
+func (m *msg) To() BeeId {
 	return m.MsgTo
 }
 
-func (m *msg) From() RcvrId {
+func (m *msg) From() BeeId {
 	return m.MsgFrom
 }
 
@@ -56,7 +56,7 @@ func msgType(d interface{}) MsgType {
 	return MsgType(reflect.TypeOf(d).String())
 }
 
-func newMsgFromData(data interface{}, from RcvrId, to RcvrId) *msg {
+func newMsgFromData(data interface{}, from BeeId, to BeeId) *msg {
 	return &msg{
 		MsgType: msgType(data),
 		MsgData: data,

@@ -40,11 +40,11 @@ func (g registery) connected() bool {
 
 type regVal struct {
 	HiveId HiveId `json:"hive_id"`
-	RcvrId uint32 `json:"rcvr_id"`
+	BeeId  uint32 `json:"bee_id"`
 }
 
 func (this *regVal) Eq(that *regVal) bool {
-	return this.HiveId == that.HiveId && this.RcvrId == that.RcvrId
+	return this.HiveId == that.HiveId && this.BeeId == that.BeeId
 }
 
 func unmarshallRegVal(d string) (regVal, error) {
@@ -84,12 +84,12 @@ func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) lockApp(id RcvrId) error {
+func (g registery) lockApp(id BeeId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
 	v := regVal{
 		HiveId: id.HiveId,
-		RcvrId: id.Id,
+		BeeId:  id.Id,
 	}
 	k := g.path(string(id.AppName), lockFileName)
 
@@ -106,10 +106,10 @@ func (g registery) lockApp(id RcvrId) error {
 	}
 }
 
-func (g registery) unlockApp(id RcvrId) error {
+func (g registery) unlockApp(id BeeId) error {
 	v := regVal{
 		HiveId: id.HiveId,
-		RcvrId: id.Id,
+		BeeId:  id.Id,
 	}
 	k := g.path(string(id.AppName), lockFileName)
 
@@ -132,7 +132,7 @@ func (g registery) unlockApp(id RcvrId) error {
 	return nil
 }
 
-func (g registery) set(id RcvrId, ms MapSet) regVal {
+func (g registery) set(id BeeId, ms MapSet) regVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -149,20 +149,20 @@ func (g registery) set(id RcvrId, ms MapSet) regVal {
 
 	v := regVal{
 		HiveId: id.HiveId,
-		RcvrId: id.Id,
+		BeeId:  id.Id,
 	}
 	mv := marshallRegValOrFail(v)
 	for _, dk := range ms {
 		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
 		_, err := g.Set(k, mv, g.ttl)
 		if err != nil {
-			glog.Fatalf("Cannot set receiver: %+v", k)
+			glog.Fatalf("Cannot set bee: %+v", k)
 		}
 	}
 	return v
 }
 
-func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
+func (g registery) storeOrGet(id BeeId, ms MapSet) regVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -179,7 +179,7 @@ func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 
 	v := regVal{
 		HiveId: id.HiveId,
-		RcvrId: id.Id,
+		BeeId:  id.Id,
 	}
 	mv := marshallRegValOrFail(v)
 	validate := false
@@ -196,7 +196,7 @@ func (g registery) storeOrGet(id RcvrId, ms MapSet) regVal {
 		}
 
 		if validate {
-			glog.Fatalf("Incosistencies for receiver %v: %v, %v", id, v, resV)
+			glog.Fatalf("Incosistencies for bee %v: %v, %v", id, v, resV)
 		}
 
 		v = resV

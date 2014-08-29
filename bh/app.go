@@ -18,12 +18,12 @@ type App interface {
 	// Hanldes a specific message type using the map and receive functions. If
 	// msgType is an instnace of MsgType, we use it as the type. Otherwise, we use
 	// the qualified name of msgType's reflection type.
-	HandleFunc(msgType interface{}, m Map, r Recv) error
+	HandleFunc(msgType interface{}, m Map, r Rcv) error
 
 	// Regsiters the app's detached handler.
 	Detached(h DetachedHandler) error
 	// Registers the detached handler using functions.
-	DetachedFunc(start Start, stop Stop, r Recv) error
+	DetachedFunc(start Start, stop Stop, r Rcv) error
 
 	// Returns the state of this app that is shared among all instances and the
 	// map function. This state is NOT thread-safe and apps must synchronize for
@@ -41,89 +41,89 @@ type App interface {
 // An applications map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
 // called sequentially.
-type Map func(m Msg, c Context) MapSet
+type Map func(m Msg, c MapContext) MapSet
 
 // An application recv function that handles a message. This method is called in
 // parallel for different map-sets and sequentially within a map-set.
-type Recv func(m Msg, c RecvContext)
+type Rcv func(m Msg, c RcvContext)
 
 // The interface msg handlers should implement.
 type Handler interface {
-	Map(m Msg, c Context) MapSet
-	Recv(m Msg, c RecvContext)
+	Map(m Msg, c MapContext) MapSet
+	Rcv(m Msg, c RcvContext)
 }
 
-// Detached handlers, in contrast to normal Handlers with Map and Recv, start in
+// Detached handlers, in contrast to normal Handlers with Map and Rcv, start in
 // their own go-routine and emit messages. They do not listen on a particular
 // message and only recv replys in their receive functions.
 // Note that each app can have only one detached handler.
 type DetachedHandler interface {
 	// Starts the handler. Note that this will run in a separate goroutine, and
 	// you can block.
-	Start(ctx RecvContext)
+	Start(ctx RcvContext)
 	// Stops the handler. This should notify the start method perhaps using a
 	// channel.
-	Stop(ctx RecvContext)
+	Stop(ctx RcvContext)
 	// Receives replies to messages emitted in this handler.
-	Recv(m Msg, ctx RecvContext)
+	Rcv(m Msg, ctx RcvContext)
 }
 
 // Start function of a detached handler.
-type Start func(ctx RecvContext)
+type Start func(ctx RcvContext)
 
 // Stop function of a detached handler.
-type Stop func(ctx RecvContext)
+type Stop func(ctx RcvContext)
 
 type funcHandler struct {
 	mapFunc  Map
-	recvFunc Recv
+	recvFunc Rcv
 }
 
-func (h *funcHandler) Map(m Msg, c Context) MapSet {
+func (h *funcHandler) Map(m Msg, c MapContext) MapSet {
 	return h.mapFunc(m, c)
 }
 
-func (h *funcHandler) Recv(m Msg, c RecvContext) {
+func (h *funcHandler) Rcv(m Msg, c RcvContext) {
 	h.recvFunc(m, c)
 }
 
 type funcDetached struct {
 	startFunc Start
 	stopFunc  Stop
-	recvFunc  Recv
+	recvFunc  Rcv
 }
 
-func (h *funcDetached) Start(c RecvContext) {
+func (h *funcDetached) Start(c RcvContext) {
 	h.startFunc(c)
 }
 
-func (h *funcDetached) Stop(c RecvContext) {
+func (h *funcDetached) Stop(c RcvContext) {
 	h.stopFunc(c)
 }
 
-func (h *funcDetached) Recv(m Msg, c RecvContext) {
+func (h *funcDetached) Rcv(m Msg, c RcvContext) {
 	h.recvFunc(m, c)
 }
 
 type app struct {
 	name     AppName
 	hive     *hive
-	mapper   *mapper
+	qee      *qee
 	handlers map[MsgType]Handler
 	sticky   bool
 }
 
-func (a *app) HandleFunc(msgType interface{}, m Map, r Recv) error {
+func (a *app) HandleFunc(msgType interface{}, m Map, r Rcv) error {
 	return a.Handle(msgType, &funcHandler{m, r})
 }
 
-func (a *app) DetachedFunc(start Start, stop Stop, rcv Recv) error {
+func (a *app) DetachedFunc(start Start, stop Stop, rcv Rcv) error {
 	return a.Detached(&funcDetached{start, stop, rcv})
 }
 
 func (a *app) Handle(msg interface{}, h Handler) error {
-	if a.mapper == nil {
-		glog.Fatalf("App's mapper is nil!")
+	if a.qee == nil {
+		glog.Fatalf("App's qee is nil!")
 	}
 
 	t := msgType(msg)
@@ -138,7 +138,7 @@ func (a *app) registerHandler(t MsgType, h Handler) error {
 	}
 
 	a.handlers[t] = h
-	a.hive.registerHandler(t, a.mapper, h)
+	a.hive.registerHandler(t, a.qee, h)
 	return nil
 }
 
@@ -147,11 +147,11 @@ func (a *app) handler(t MsgType) Handler {
 }
 
 func (a *app) Detached(h DetachedHandler) error {
-	return a.mapper.registerDetached(h)
+	return a.qee.registerDetached(h)
 }
 
 func (a *app) State() State {
-	return a.mapper.state()
+	return a.qee.state()
 }
 
 func (a *app) Name() AppName {
@@ -166,18 +166,18 @@ func (a *app) Sticky() bool {
 	return a.sticky
 }
 
-func (a *app) initMapper() {
-	// TODO(soheil): Maybe stop the previous mapper if any?
-	a.mapper = &mapper{
+func (a *app) initQee() {
+	// TODO(soheil): Maybe stop the previous qee if any?
+	a.qee = &qee{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, a.hive.config.DataChBufSize),
 			ctrlCh: make(chan routineCmd),
 		},
-		ctx: context{
+		ctx: mapContext{
 			hive: a.hive,
 			app:  a,
 		},
-		keyToRcvrs: make(map[DictionaryKey]receiver),
-		idToRcvrs:  make(map[RcvrId]receiver),
+		keyToBees: make(map[DictionaryKey]bee),
+		idToBees:  make(map[BeeId]bee),
 	}
 }

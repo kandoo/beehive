@@ -41,17 +41,17 @@ func NewDriver(startingSwitchId, numberOfSwitches int) *Driver {
 	return d
 }
 
-func (d *Driver) Start(ctx bh.RecvContext) {
+func (d *Driver) Start(ctx bh.RcvContext) {
 	for s, _ := range d.switches {
 		ctx.Emit(SwitchJoined{s})
 	}
 }
 
-func (d *Driver) Stop(ctx bh.RecvContext) {
+func (d *Driver) Stop(ctx bh.RcvContext) {
 }
 
-func (d *Driver) Recv(m bh.Msg, ctx bh.RecvContext) {
-	if m.From().ActorName == "" {
+func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) {
+	if m.From().AppName == "" {
 		return
 	}
 
@@ -75,7 +75,7 @@ func (d *Driver) Recv(m bh.Msg, ctx bh.RecvContext) {
 	d.switches[q.Switch] = s
 }
 
-func (d *Driver) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
 	var k bh.Key
 	switch d := m.Data().(type) {
 	case StatQuery:

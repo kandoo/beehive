@@ -9,22 +9,22 @@ type routineCmd struct {
 type routineCmdType int
 
 const (
-	stopCmd        routineCmdType = iota
-	startCmd                      = iota
-	findRcvrCmd                   = iota
-	createRcvrCmd                 = iota
-	migrateRcvrCmd                = iota
-	replaceRcvrCmd                = iota
+	stopCmd       routineCmdType = iota
+	startCmd                     = iota
+	findBeeCmd                   = iota
+	createBeeCmd                 = iota
+	migrateBeeCmd                = iota
+	replaceBeeCmd                = iota
 )
 
-type migrateRcvrCmdData struct {
-	From RcvrId
+type migrateBeeCmdData struct {
+	From BeeId
 	To   HiveId
 }
 
-type replaceRcvrCmdData struct {
-	OldRcvr RcvrId
-	NewRcvr RcvrId
-	State   *inMemoryState
-	MapSet  MapSet
+type replaceBeeCmdData struct {
+	OldBee BeeId
+	NewBee BeeId
+	State  *inMemoryState
+	MapSet MapSet
 }

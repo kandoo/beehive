@@ -5,7 +5,7 @@ type msgAndHandler struct {
 	handler Handler
 }
 
-// The base structure shared between mappers and receivers.
+// The base structure shared between qees and bees.
 type asyncRoutine struct {
 	dataCh chan msgAndHandler
 	ctrlCh chan routineCmd

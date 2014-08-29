@@ -19,14 +19,14 @@ const (
 	maxRetries                 = 3
 )
 
-type proxyRcvr struct {
-	localRcvr
+type proxyBee struct {
+	localBee
 	conn    net.Conn
 	encoder *gob.Encoder
 	decoder *gob.Decoder
 }
 
-func (r *proxyRcvr) handleMsg(mh msgAndHandler) {
+func (r *proxyBee) handleMsg(mh msgAndHandler) {
 	mh.msg.MsgTo = r.rId
 	if err := r.encoder.Encode(mh.msg); err != nil {
 		glog.Errorf("Cannot encode message: %v", err)
@@ -70,8 +70,8 @@ func dialHive(id HiveId) (net.Conn, error) {
 	return nil, errors.New(fmt.Sprintf("Cannot connect to remote hive: %+v", id))
 }
 
-func (r *proxyRcvr) dial() {
-	// FIXME(soheil): This can't scale. We can only support 65k remote receivers.
+func (r *proxyBee) dial() {
+	// FIXME(soheil): This can't scale. We can only support 65k remote bees.
 	// There should be one connection per remote hive and with that we can
 	// support 65k remote controllers.
 	conn, err := dialHive(r.rId.HiveId)
@@ -88,25 +88,25 @@ func (r *proxyRcvr) dial() {
 	}
 
 	if err = r.encoder.Encode(r.rId); err != nil {
-		glog.Fatalf("Cannot encode receiver: %v", err)
+		glog.Fatalf("Cannot encode bee: %v", err)
 	}
 
-	id := RcvrId{}
+	id := BeeId{}
 	if err = r.decoder.Decode(&id); err != nil || r.rId != id {
-		glog.Fatalf("Peer cannot find receiver: %v", r.rId)
+		glog.Fatalf("Peer cannot find bee: %v", r.rId)
 	}
 
-	glog.V(2).Infof("Proxy connected to remote receiver %+v", r.rId)
+	glog.V(2).Infof("Proxy connected to remote bee %+v", r.rId)
 }
 
-func (r *proxyRcvr) hangup() {
+func (r *proxyBee) hangup() {
 	if r.conn != nil {
 		r.conn.Close()
 	}
 }
 
 // TODO(soheil): Maybe start should return an error.
-func (r *proxyRcvr) start() {
+func (r *proxyBee) start() {
 	r.dial()
 	defer r.hangup()
 

@@ -36,14 +36,14 @@ type Calculator struct{}
 
 // Operations are mapped based on their type. With this mapping, additions are
 // all handled on the same stage, and so are subtractions.
-func (c *Calculator) Map(msg bh.Msg, ctx bh.Context) bh.MapSet {
+func (c *Calculator) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
 	op := msg.Data().(Op)
 	return bh.MapSet{
 		{"Op", bh.Key(strconv.Itoa(int(op.OpT)))},
 	}
 }
 
-func (c *Calculator) Recv(msg bh.Msg, ctx bh.RecvContext) {
+func (c *Calculator) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 	op := msg.Data().(Op)
 	res := c.calc(op)
 	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, res)
@@ -62,7 +62,7 @@ func (c *Calculator) calc(op Op) int {
 
 type Generator struct{}
 
-func (g *Generator) Start(ctx bh.RecvContext) {
+func (g *Generator) Start(ctx bh.RcvContext) {
 	fmt.Println("Generator started.")
 
 	ctx.Emit(Op{1, 2, Add})
@@ -78,22 +78,22 @@ func (g *Generator) Start(ctx bh.RecvContext) {
 	fmt.Println("Emitted sub.")
 }
 
-func (g *Generator) Stop(ctx bh.RecvContext) {
+func (g *Generator) Stop(ctx bh.RcvContext) {
 	fmt.Println("Generator stopped.")
 }
 
-func (g *Generator) Recv(msg bh.Msg, ctx bh.RecvContext) {
+func (g *Generator) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 	fmt.Printf("The result is: %d\n", msg.Data().(int))
 }
 
 func main() {
-	s := bh.NewStage()
-	a := s.NewActor("Calc")
+	h := bh.NewHive()
+	a := h.NewApp("Calc")
 	a.Handle(Op{}, &Calculator{})
 	a.Detached(&Generator{})
 
 	joinCh := make(chan interface{})
-	go s.Start(joinCh)
+	go h.Start(joinCh)
 	fmt.Println("Stage started.")
 
 	<-joinCh

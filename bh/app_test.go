@@ -7,23 +7,23 @@ import (
 	"testing"
 )
 
-type MyMsg int
-
-type MyHandler struct{}
-
 const (
 	kHandlers int = 10
 	kMsgs         = 1000000
 )
 
-func (h *MyHandler) Map(m Msg, c Context) MapSet {
+var testHiveCh chan interface{} = make(chan interface{})
+
+type MyMsg int
+
+type MyHandler struct{}
+
+func (h *MyHandler) Map(m Msg, c MapContext) MapSet {
 	v := int(m.Data().(MyMsg))
 	return MapSet{{"D", Key(strconv.Itoa(v % kHandlers))}}
 }
 
-var testHiveCh chan interface{} = make(chan interface{})
-
-func (h *MyHandler) Recv(m Msg, c RecvContext) {
+func (h *MyHandler) Rcv(m Msg, c RcvContext) {
 	hash := int(m.Data().(MyMsg)) % kHandlers
 	d := c.State().Dict("D")
 	k := Key(strconv.Itoa(hash))
@@ -34,7 +34,7 @@ func (h *MyHandler) Recv(m Msg, c RecvContext) {
 	i := v.(int) + 1
 	d.Set(k, i)
 
-	id := c.(*recvContext).rcvr.id().Id % uint32(kHandlers)
+	id := c.(*rcvContext).bee.id().Id % uint32(kHandlers)
 	if id != uint32(hash) {
 		panic(fmt.Sprintf("Invalid message %v received in %v.", m, id))
 	}

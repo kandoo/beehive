@@ -28,11 +28,11 @@ func (p pong) ping() ping {
 
 type pinger struct{}
 
-func (p *pinger) Map(msg bh.Msg, ctx bh.Context) bh.MapSet {
+func (p *pinger) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
 	return centralizedMapSet
 }
 
-func (p *pinger) Recv(msg bh.Msg, ctx bh.RecvContext) {
+func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 	dict := ctx.Dict(PingPongDict)
 	data := msg.Data()
 	switch data := data.(type) {
@@ -77,23 +77,23 @@ func main() {
 	shouldPing := flag.Bool("ping", false, "Whether to ping.")
 	shouldPong := flag.Bool("pong", false, "Whether to pong.")
 
-	s := bh.NewStage()
+	h := bh.NewHive()
 
-	pingAtor := s.NewActor("Ping")
+	pingAtor := h.NewApp("Ping")
 	pingAtor.Handle(pong(0), &pinger{})
 
-	pongAtor := s.NewActor("Pong")
+	pongAtor := h.NewApp("Pong")
 	pongAtor.Handle(ping(0), &ponger{})
 
 	if *shouldPing {
-		s.Emit(ping(0))
+		h.Emit(ping(0))
 	}
 
 	if *shouldPong {
-		s.Emit(pong(0))
+		h.Emit(pong(0))
 	}
 
 	join := make(chan interface{})
-	go s.Start(join)
+	go h.Start(join)
 	<-join
 }

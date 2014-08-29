@@ -6,32 +6,32 @@ import (
 	"github.com/golang/glog"
 )
 
-type Context interface {
+type MapContext interface {
 	Hive() Hive
 	State() State
 	Dict(n DictionaryName) Dictionary
 }
 
-type RecvContext interface {
-	Context
+type RcvContext interface {
+	MapContext
 	Emit(msgData interface{})
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
-	SendToRcvr(msgData interface{}, to RcvrId)
+	SendToBee(msgData interface{}, to BeeId)
 	ReplyTo(msg Msg, replyData interface{}) error
 }
 
-type context struct {
+type mapContext struct {
 	state State
 	hive  *hive
 	app   *app
 }
 
-type recvContext struct {
-	context
-	rcvr receiver
+type rcvContext struct {
+	mapContext
+	bee bee
 }
 
-func (ctx *context) State() State {
+func (ctx *mapContext) State() State {
 	if ctx.state == nil {
 		ctx.state = newState(string(ctx.app.Name()))
 	}
@@ -39,40 +39,40 @@ func (ctx *context) State() State {
 	return ctx.state
 }
 
-func (ctx *context) Dict(n DictionaryName) Dictionary {
+func (ctx *mapContext) Dict(n DictionaryName) Dictionary {
 	return ctx.State().Dict(n)
 }
 
-func (ctx *context) Hive() Hive {
+func (ctx *mapContext) Hive() Hive {
 	return ctx.hive
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.
-func (ctx *recvContext) Emit(msgData interface{}) {
-	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{}))
+func (ctx *rcvContext) Emit(msgData interface{}) {
+	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), BeeId{}))
 }
 
-func (ctx *recvContext) SendToDictKey(msgData interface{}, to AppName,
+func (ctx *rcvContext) SendToDictKey(msgData interface{}, to AppName,
 	dk DictionaryKey) {
 
 	// TODO(soheil): Implement send to.
-	msg := newMsgFromData(msgData, ctx.rcvr.id(), RcvrId{})
+	msg := newMsgFromData(msgData, ctx.bee.id(), BeeId{})
 	ctx.hive.emitMsg(msg)
 
 	glog.Fatal("Sendto is not implemented.")
 }
 
-func (ctx *recvContext) SendToRcvr(msgData interface{}, to RcvrId) {
-	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.rcvr.id(), to))
+func (ctx *rcvContext) SendToBee(msgData interface{}, to BeeId) {
+	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), to))
 }
 
 // Reply to thatMsg with the provided replyData.
-func (ctx *recvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
+func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
 	if m.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	ctx.SendToRcvr(replyData, m.From())
+	ctx.SendToBee(replyData, m.From())
 	return nil
 }

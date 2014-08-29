@@ -48,7 +48,7 @@ type Collector struct {
 	poller *Poller
 }
 
-func (c *Collector) Recv(m bh.Msg, ctx bh.RecvContext) {
+func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	res := m.Data().(StatResult)
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
@@ -67,12 +67,12 @@ func (c *Collector) Recv(m bh.Msg, ctx bh.RecvContext) {
 	glog.V(2).Infof("Previous stats: %+v, Now: %+v", stat, res.Bytes)
 	if !ok || res.Bytes-stat > c.delta {
 		glog.Infof("Found an elephent flow: %+v, %+v, %+v", res, stat,
-			ctx.Stage().Id())
+			ctx.Hive().Id())
 		ctx.Emit(MatrixUpdate(res))
 	}
 }
 
-func (c *Collector) Map(m bh.Msg, ctx bh.Context) bh.MapSet {
+func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
 	return bh.MapSet{{matrixDict, m.Data().(StatResult).Switch.Key()}}
 }
 
@@ -94,7 +94,7 @@ func NewPoller(timeout time.Duration) *Poller {
 	}
 }
 
-func (p *Poller) Start(ctx bh.RecvContext) {
+func (p *Poller) Start(ctx bh.RcvContext) {
 	for {
 		select {
 		case q := <-p.query:
@@ -115,13 +115,13 @@ func (p *Poller) Start(ctx bh.RecvContext) {
 	}
 }
 
-func (p *Poller) Stop(ctx bh.RecvContext) {
+func (p *Poller) Stop(ctx bh.RcvContext) {
 	join := make(chan bool)
 	p.quit <- join
 	<-join
 }
 
-func (p *Poller) Recv(m bh.Msg, ctx bh.RecvContext) {}
+func (p *Poller) Rcv(m bh.Msg, ctx bh.RcvContext) {}
 
 type SwitchJoined struct {
 	Switch Switch
@@ -131,8 +131,8 @@ type SwitchJoinHandler struct {
 	poller *Poller
 }
 
-func (s *SwitchJoinHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
-	if m.From().ActorName == "" {
+func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
+	if m.From().AppName == "" {
 		return
 	}
 
@@ -151,7 +151,7 @@ func (s *SwitchJoinHandler) Recv(m bh.Msg, ctx bh.RecvContext) {
 }
 
 func (s *SwitchJoinHandler) Map(m bh.Msg,
-	ctx bh.Context) bh.MapSet {
+	ctx bh.MapContext) bh.MapSet {
 
 	return bh.MapSet{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
 }

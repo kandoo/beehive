@@ -21,7 +21,7 @@ type hiveHandshake struct {
 
 type hiveRemoteCommand struct {
 	Type routineCmdType
-	RcvrId
+	BeeId
 }
 
 func (h *hive) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
@@ -41,43 +41,43 @@ func (h *hive) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 
 		a, ok := h.app(cmd.AppName)
 		if !ok {
-			glog.Errorf("Cannot find app: %v", cmd.RcvrId.AppName)
+			glog.Errorf("Cannot find app: %v", cmd.BeeId.AppName)
 			return
 		}
 
 		switch cmd.Type {
-		case createRcvrCmd:
+		case createBeeCmd:
 			resCh := make(chan asyncResult)
-			a.mapper.ctrlCh <- routineCmd{createRcvrCmd, nil, resCh}
+			a.qee.ctrlCh <- routineCmd{createBeeCmd, nil, resCh}
 			res, err := (<-resCh).get()
 			if err != nil {
 				glog.Error(err)
 				return
 			}
 
-			if err := enc.Encode(res.(RcvrId)); err != nil {
-				glog.Errorf("Cannot encode receiver id: %v", err)
+			if err := enc.Encode(res.(BeeId)); err != nil {
+				glog.Errorf("Cannot encode bee id: %v", err)
 				return
 			}
 
-		case replaceRcvrCmd:
-			data := replaceRcvrCmdData{}
+		case replaceBeeCmd:
+			data := replaceBeeCmdData{}
 			if err := dec.Decode(&data); err != nil {
-				glog.Errorf("Cannot decode the data for replace receiver command: %+v",
+				glog.Errorf("Cannot decode the data for replace bee command: %+v",
 					err)
 				return
 			}
 
 			resCh := make(chan asyncResult)
-			a.mapper.ctrlCh <- routineCmd{replaceRcvrCmd, data, resCh}
+			a.qee.ctrlCh <- routineCmd{replaceBeeCmd, data, resCh}
 			res, err := (<-resCh).get()
 			if err != nil {
 				glog.Error(err)
 				return
 			}
 
-			if err := enc.Encode(res.(receiver).id()); err != nil {
-				glog.Errorf("Cannot encode receiver id: %v", err)
+			if err := enc.Encode(res.(bee).id()); err != nil {
+				glog.Errorf("Cannot encode bee id: %v", err)
 				return
 			}
 		}
@@ -87,9 +87,9 @@ func (h *hive) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
 func (h *hive) handleDataConn(conn net.Conn, dec *gob.Decoder,
 	enc *gob.Encoder) {
 
-	var to RcvrId
+	var to BeeId
 	if err := dec.Decode(&to); err != nil {
-		glog.Errorf("Cannot decode the target receiver id for data conn: %+v", err)
+		glog.Errorf("Cannot decode the target bee id for data conn: %+v", err)
 		return
 	}
 
@@ -100,17 +100,17 @@ func (h *hive) handleDataConn(conn net.Conn, dec *gob.Decoder,
 	}
 
 	resCh := make(chan asyncResult)
-	a.mapper.ctrlCh <- routineCmd{findRcvrCmd, to, resCh}
+	a.qee.ctrlCh <- routineCmd{findBeeCmd, to, resCh}
 	res, err := (<-resCh).get()
 	if err != nil {
 		glog.Error(err)
 		return
 	}
 
-	rcvr := res.(receiver)
-	id := rcvr.id()
+	bee := res.(bee)
+	id := bee.id()
 	enc.Encode(id)
-	glog.V(2).Infof("Encoded receiver id: %+v", id)
+	glog.V(2).Infof("Encoded bee id: %+v", id)
 
 	for {
 		m := msg{}
@@ -122,7 +122,7 @@ func (h *hive) handleDataConn(conn net.Conn, dec *gob.Decoder,
 		}
 
 		glog.V(3).Infof("Received a message from peer: %+v", m)
-		a.mapper.dataCh <- msgAndHandler{&m, a.handlers[m.Type()]}
+		a.qee.dataCh <- msgAndHandler{&m, a.handlers[m.Type()]}
 	}
 }
 

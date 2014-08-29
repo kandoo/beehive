@@ -41,10 +41,10 @@ type Hive interface {
 
 	// Emits a message containing msgData from this hive.
 	Emit(msgData interface{})
-	// Sends a message to a specific receiver that owns a specific dictionary key.
+	// Sends a message to a specific bee that owns a specific dictionary key.
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
-	// Sends a message to a sepcific receiver.
-	SentToRcvr(msgData interface{}, to RcvrId)
+	// Sends a message to a sepcific bee.
+	SentToBee(msgData interface{}, to BeeId)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
 
@@ -69,13 +69,13 @@ type HiveConfig struct {
 // Creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h := &hive{
-		id:      HiveId(cfg.HiveAddr),
-		status:  HiveStopped,
-		config:  cfg,
-		dataCh:  make(chan *msg, cfg.DataChBufSize),
-		ctrlCh:  make(chan HiveCmd),
-		apps:    make(map[AppName]*app, 0),
-		mappers: make(map[MsgType][]mapperAndHandler),
+		id:     HiveId(cfg.HiveAddr),
+		status: HiveStopped,
+		config: cfg,
+		dataCh: make(chan *msg, cfg.DataChBufSize),
+		ctrlCh: make(chan HiveCmd),
+		apps:   make(map[AppName]*app, 0),
+		qees:   make(map[MsgType][]qeeAndHandler),
 	}
 
 	h.init()
@@ -128,12 +128,12 @@ func init() {
 }
 
 const (
-	kInitialMappers   = 10
-	kInitialReceivers = 10
+	kInitialQees = 10
+	kInitialBees = 10
 )
 
-type mapperAndHandler struct {
-	mapr    *mapper
+type qeeAndHandler struct {
+	q       *qee
 	handler Handler
 }
 
@@ -147,8 +147,8 @@ type hive struct {
 	ctrlCh chan HiveCmd
 	sigCh  chan os.Signal
 
-	apps    map[AppName]*app
-	mappers map[MsgType][]mapperAndHandler
+	apps map[AppName]*app
+	qees map[MsgType][]qeeAndHandler
 
 	registery registery
 	collector statCollector
@@ -177,26 +177,26 @@ func (h *hive) closeChannels() {
 	glog.Info("Closing the hive listener...")
 	h.listener.Close()
 
-	glog.Info("Stopping mappers...")
+	glog.Info("Stopping qees...")
 	stopCh := make(chan asyncResult)
-	maprs := make(map[*mapper]bool)
-	for _, mhs := range h.mappers {
+	qs := make(map[*qee]bool)
+	for _, mhs := range h.qees {
 		for _, mh := range mhs {
-			maprs[mh.mapr] = true
+			qs[mh.q] = true
 		}
 	}
 
-	for m, _ := range maprs {
+	for m, _ := range qs {
 		m.ctrlCh <- routineCmd{stopCmd, nil, stopCh}
-		glog.V(3).Infof("Waiting on a mapper: %p", m)
+		glog.V(3).Infof("Waiting on a qee: %p", m)
 		select {
 		case res := <-stopCh:
 			_, err := res.get()
 			if err != nil {
-				glog.Errorf("Error in stopping a mapper: %v", err)
+				glog.Errorf("Error in stopping a qee: %v", err)
 			}
 		case <-time.After(time.Second * 1):
-			glog.Info("Still waiting for a mapper...")
+			glog.Info("Still waiting for a qee...")
 		}
 	}
 	close(h.dataCh)
@@ -224,19 +224,19 @@ func (h *hive) registerApp(a *app) {
 	h.apps[a.Name()] = a
 }
 
-func (h *hive) registerHandler(t MsgType, m *mapper, hdl Handler) {
-	h.mappers[t] = append(h.mappers[t], mapperAndHandler{m, hdl})
+func (h *hive) registerHandler(t MsgType, m *qee, hdl Handler) {
+	h.qees[t] = append(h.qees[t], qeeAndHandler{m, hdl})
 }
 
 func (h *hive) handleMsg(m *msg) {
-	for _, mh := range h.mappers[m.Type()] {
-		mh.mapr.dataCh <- msgAndHandler{m, mh.handler}
+	for _, mh := range h.qees[m.Type()] {
+		mh.q.dataCh <- msgAndHandler{m, mh.handler}
 	}
 }
 
-func (h *hive) startMappers() {
+func (h *hive) startQees() {
 	for _, a := range h.apps {
-		go a.mapper.start()
+		go a.qee.start()
 	}
 }
 
@@ -246,7 +246,7 @@ func (h *hive) Start(joinCh chan interface{}) error {
 	h.status = HiveStarted
 	h.registerSignals()
 	h.connectToRegistery()
-	h.startMappers()
+	h.startQees()
 
 	for {
 		select {
@@ -290,7 +290,7 @@ func (h *hive) NewApp(name AppName) App {
 		hive:     h,
 		handlers: make(map[MsgType]Handler),
 	}
-	a.initMapper()
+	a.initQee()
 	h.registerApp(a)
 	return a
 }
@@ -308,7 +308,7 @@ func (h *hive) emitMsg(msg *msg) {
 		if !ok {
 			glog.Fatalf("Application not found: %h", msg.To().AppName)
 		}
-		a.mapper.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
+		a.qee.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
 }
 
@@ -318,8 +318,8 @@ func (h *hive) SendToDictKey(msgData interface{}, to AppName,
 	glog.Fatalf("Not implemented yet.")
 }
 
-func (h *hive) SentToRcvr(msgData interface{}, to RcvrId) {
-	h.emitMsg(newMsgFromData(msgData, RcvrId{}, to))
+func (h *hive) SentToBee(msgData interface{}, to BeeId) {
+	h.emitMsg(newMsgFromData(msgData, BeeId{}, to))
 }
 
 // Reply to thatMsg with the provided replyData.
@@ -329,6 +329,6 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	h.emitMsg(newMsgFromData(replyData, RcvrId{}, m.From()))
+	h.emitMsg(newMsgFromData(replyData, BeeId{}, m.From()))
 	return nil
 }
