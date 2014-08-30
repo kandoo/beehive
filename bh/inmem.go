@@ -5,10 +5,10 @@ import "errors"
 // A simple dictionary that uses in memory maps.
 type inMemoryState struct {
 	Name  string
-	Dicts map[string]*inMemoryDictionary
+	Dicts map[DictionaryName]*inMemoryDictionary
 }
 
-func (s *inMemoryState) StartTx() error {
+func (s *inMemoryState) BeginTx() error {
 	return errors.New("In memory state does not support transactions.")
 }
 
@@ -21,10 +21,10 @@ func (s *inMemoryState) AbortTx() error {
 }
 
 func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
-	d, ok := s.Dicts[string(name)]
+	d, ok := s.Dicts[name]
 	if !ok {
 		d = &inMemoryDictionary{name, make(map[Key]Value)}
-		s.Dicts[string(name)] = d
+		s.Dicts[name] = d
 	}
 	return d
 }

@@ -24,7 +24,7 @@ type qee struct {
 
 func (q *qee) state() State {
 	if q.ctx.state == nil {
-		q.ctx.state = newState(string(q.ctx.app.Name()))
+		q.ctx.state = newState(q.ctx.app)
 	}
 	return q.ctx.state
 }

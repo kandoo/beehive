@@ -41,7 +41,7 @@ func (mc mapContext) newRcvContext() rcvContext {
 
 func (ctx *mapContext) State() State {
 	if ctx.state == nil {
-		ctx.state = newState(string(ctx.app.Name()))
+		ctx.state = newState(ctx.app)
 	}
 
 	return ctx.state

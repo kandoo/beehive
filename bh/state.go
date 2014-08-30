@@ -9,7 +9,7 @@ type State interface {
 	Dict(name DictionaryName) Dictionary
 	// Starts a transaction for this state. Transactions span multiple
 	// dictionaries.
-	StartTx() error
+	BeginTx() error
 	// Commits the current transaction.
 	CommitTx() error
 	// Aborts the transaction.
@@ -46,6 +46,13 @@ func (dk *DictionaryKey) String() string {
 	return string(dk.Dict) + "/" + string(dk.Key)
 }
 
-func newState(name string) State {
-	return &inMemoryState{name, make(map[string]*inMemoryDictionary)}
+func newState(a *app) State {
+	if a.PersistentState() {
+		return a.hive.stateMan.newState(a)
+	}
+
+	return &inMemoryState{
+		string(a.Name()),
+		make(map[DictionaryName]*inMemoryDictionary),
+	}
 }

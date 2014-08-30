@@ -96,6 +96,8 @@ func (h *hive) init() {
 	} else {
 		h.collector = &dummyStatCollector{}
 	}
+
+	h.stateMan = newPersistentStateManager(h)
 }
 
 var (
@@ -127,6 +129,8 @@ func init() {
 		"Buffer size of channels.")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"Whether to insturment apps.")
+	flag.StringVar(&DefaultCfg.DBDir, "dbdir", "/tmp",
+		"Where to store persistent state data.")
 }
 
 const (
@@ -156,6 +160,8 @@ type hive struct {
 	collector statCollector
 
 	listener net.Listener
+
+	stateMan *persistentStateManager
 }
 
 func (h *hive) Id() HiveId {
@@ -206,20 +212,27 @@ func (h *hive) closeChannels() {
 	close(h.sigCh)
 }
 
-func (h *hive) handleCmd(cmd HiveCmd) {
+type step int
+
+const (
+	stop step = iota + 1
+	next      = iota
+)
+
+func (h *hive) handleCmd(cmd HiveCmd) step {
 	switch cmd {
 	case StopHive:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
 		h.status = HiveStopped
 		h.closeChannels()
-		//close(h.dataCh)
-		//close(h.ctrlCh)
-		//close(h.sigCh)
-		return
+		h.stateMan.closeDBs()
+		return stop
 	case DrainHive:
 		// TODO(soheil): Implement drain.
 		glog.Fatalf("Drain Hive is not implemented.")
 	}
+
+	return next
 }
 
 func (h *hive) registerApp(a *app) {
@@ -261,7 +274,10 @@ func (h *hive) Start(joinCh chan interface{}) error {
 			if !ok {
 				return errors.New("Control channel is closed.")
 			}
-			h.handleCmd(cmd)
+
+			if h.handleCmd(cmd) == stop {
+				return nil
+			}
 		case <-joinCh:
 			glog.Fatalf("Hive'h join channel should not be used nor closed.")
 		}

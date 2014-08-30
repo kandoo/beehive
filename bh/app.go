@@ -36,6 +36,11 @@ type App interface {
 	Sticky() bool
 	// Sets whether the app is sticky, i.e., should not be migrated.
 	SetSticky(sticky bool)
+
+	// Whether to use PersistentState.
+	PersistentState() bool
+	// Whether to use persistent state.
+	SetPersistentState(p bool)
 }
 
 // This is the list of dictionary keys returned by the map functions.
@@ -116,11 +121,12 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) {
 }
 
 type app struct {
-	name     AppName
-	hive     *hive
-	qee      *qee
-	handlers map[MsgType]Handler
-	sticky   bool
+	name       AppName
+	hive       *hive
+	qee        *qee
+	handlers   map[MsgType]Handler
+	sticky     bool
+	persistent bool
 }
 
 func (a *app) HandleFunc(msgType interface{}, m Map, r Rcv) error {
@@ -174,6 +180,14 @@ func (a *app) SetSticky(sticky bool) {
 
 func (a *app) Sticky() bool {
 	return a.sticky
+}
+
+func (a *app) PersistentState() bool {
+	return a.persistent
+}
+
+func (a *app) SetPersistentState(p bool) {
+	a.persistent = p
 }
 
 func (a *app) initQee() {
