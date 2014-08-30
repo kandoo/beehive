@@ -1,6 +1,8 @@
 package bh
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"time"
 
@@ -58,37 +60,56 @@ type localStatUpdate struct {
 }
 
 type communicationStat struct {
-	from      BeeId
-	to        BeeId
-	count     uint64
-	lastCount uint64
-	lastEvent time.Time
+	From      BeeId
+	To        BeeId
+	Count     uint64
+	LastCount uint64
+	LastEvent time.Time
 }
 
 func newCommunicationStat(u localStatUpdate) communicationStat {
 	return communicationStat{u.From, u.To, 0, 0, time.Time{}}
 }
 
+func communicationStatFromBytes(b []byte) communicationStat {
+	buf := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(buf)
+	var c communicationStat
+	// We ignore the error here.
+	dec.Decode(&c)
+	return c
+}
+
+func (c *communicationStat) Bytes() []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(&c)
+	if err != nil {
+		return nil
+	}
+	return buf.Bytes()
+}
+
 func (s *communicationStat) add(count uint64) {
-	s.count += count
+	s.Count += count
 }
 
 func (s *communicationStat) toAggrStat() aggrStatUpdate {
-	if s.from.isNil() {
+	if s.From.isNil() {
 		panic(s)
 	}
-	u := aggrStatUpdate{s.from, s.to, s.count}
-	s.lastEvent = time.Now()
-	s.lastCount = s.count
+	u := aggrStatUpdate{s.From, s.To, s.Count}
+	s.LastEvent = time.Now()
+	s.LastCount = s.Count
 	return u
 }
 
 func (s *communicationStat) countSinceLastEvent() uint64 {
-	return s.count - s.lastCount
+	return s.Count - s.LastCount
 }
 
 func (s *communicationStat) timeSinceLastEvent() time.Duration {
-	return time.Now().Sub(s.lastEvent)
+	return time.Now().Sub(s.LastEvent)
 }
 
 type localStatCollector struct{}
@@ -116,19 +137,22 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 		d := ctx.Dict(localStatDict)
 		k := m.Key()
 		v, err := d.Get(k)
-		if err != nil {
-			v = newCommunicationStat(m)
+		var s communicationStat
+		if err == nil {
+			// We can ignore the error here.
+			s = communicationStatFromBytes([]byte(v))
+		} else {
+			s = newCommunicationStat(m)
 		}
-		s := v.(communicationStat)
 		s.add(m.Count)
 
 		if s.countSinceLastEvent() < 10 || s.timeSinceLastEvent() < 1*time.Second {
-			d.Put(k, s)
+			d.Put(k, Value(s.Bytes()))
 			return
 		}
 
 		ctx.Emit(s.toAggrStat())
-		d.Put(k, s)
+		d.Put(k, Value(s.Bytes()))
 
 	case migrateBeeCmdData:
 		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
@@ -159,6 +183,21 @@ type aggrStat struct {
 	Matrix   map[HiveId]uint64
 }
 
+func aggrStatFromBytes(b []byte) aggrStat {
+	buf := bytes.NewBuffer(b)
+	dec := gob.NewDecoder(buf)
+	var s aggrStat
+	dec.Decode(&s)
+	return s
+}
+
+func (s *aggrStat) Bytes() []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	enc.Encode(s)
+	return buf.Bytes()
+}
+
 type optimizer struct{}
 
 func (o *optimizer) stat(id BeeId, dict Dictionary) aggrStat {
@@ -169,8 +208,14 @@ func (o *optimizer) stat(id BeeId, dict Dictionary) aggrStat {
 		}
 	}
 
-	return v.(aggrStat)
+	return aggrStatFromBytes([]byte(v))
 }
+
+type HiveIdSlice []HiveId
+
+func (s HiveIdSlice) Len() int           { return len(s) }
+func (s HiveIdSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s HiveIdSlice) Less(i, j int) bool { return s[i] < s[j] }
 
 func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
@@ -187,7 +232,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 
 	stat.Matrix[update.From.HiveId] += update.Count
 	defer func() {
-		dict.Put(update.To.Key(), stat)
+		dict.Put(update.To.Key(), stat.Bytes())
 	}()
 
 	a, ok := ctx.Hive().(*hive).app(update.To.AppName)

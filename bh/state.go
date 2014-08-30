@@ -1,10 +1,19 @@
 package bh
 
-import "errors"
-
-// State is the storage for a collection of dictionaries.
+// State is the storage for a collection of dictionaries. State support
+// transactions. However, note that since the state is modified by a single
+// thread, transactions are there mostly for programming convenience. For the
+// same reason, each thread can only have one active transaction.
 type State interface {
+	// Returns a dictionary for this state. Creates one if it does not exist.
 	Dict(name DictionaryName) Dictionary
+	// Starts a transaction for this state. Transactions span multiple
+	// dictionaries.
+	StartTx() error
+	// Commits the current transaction.
+	CommitTx() error
+	// Aborts the transaction.
+	AbortTx() error
 }
 
 type IterFn func(k Key, v Value)
@@ -24,7 +33,7 @@ type DictionaryName string
 type Key string
 
 // Dictionary values can be anything.
-type Value interface{}
+type Value []byte
 
 type DictionaryKey struct {
 	Dict DictionaryName
@@ -39,47 +48,4 @@ func (dk *DictionaryKey) String() string {
 
 func newState(name string) State {
 	return &inMemoryState{name, make(map[string]*inMemoryDictionary)}
-}
-
-type inMemoryState struct {
-	Name  string
-	Dicts map[string]*inMemoryDictionary
-}
-
-type inMemoryDictionary struct {
-	Name DictionaryName
-	Dict map[Key]Value
-}
-
-func (d *inMemoryDictionary) Get(k Key) (Value, error) {
-	v, ok := d.Dict[k]
-	if !ok {
-		return v, errors.New("Key does not exist.")
-	}
-	return v, nil
-}
-
-func (d *inMemoryDictionary) Put(k Key, v Value) error {
-	d.Dict[k] = v
-	return nil
-}
-
-func (d *inMemoryDictionary) Del(k Key) error {
-	delete(d.Dict, k)
-	return nil
-}
-
-func (d *inMemoryDictionary) ForEach(f IterFn) {
-	for k, v := range d.Dict {
-		f(k, v)
-	}
-}
-
-func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
-	d, ok := s.Dicts[string(name)]
-	if !ok {
-		d = &inMemoryDictionary{name, make(map[Key]Value)}
-		s.Dicts[string(name)] = d
-	}
-	return d
 }

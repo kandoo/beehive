@@ -64,6 +64,8 @@ type HiveConfig struct {
 	DataChBufSize int
 	// Whether to instrument apps on the hive.
 	Instrument bool
+	// Is the path of the directory for storing persistent application state.
+	DBDir string
 }
 
 // Creates a new hive based on the given configuration.
