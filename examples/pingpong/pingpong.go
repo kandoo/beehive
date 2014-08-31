@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"time"
@@ -15,15 +16,34 @@ const (
 
 var centralizedMapSet = bh.MapSet{{PingPongDict, "0"}}
 
-type ping int
-type pong int
+type Pxng struct {
+	Seq int
+}
+
+func (p *Pxng) decode(b []byte) {
+	p.Seq = int(binary.LittleEndian.Uint64(b))
+}
+
+func (p *Pxng) encode() []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(p.Seq))
+	return b
+}
+
+type ping struct {
+	Pxng
+}
+
+type pong struct {
+	Pxng
+}
 
 func (p ping) pong() pong {
-	return pong(p + 1)
+	return pong{Pxng{p.Seq + 1}}
 }
 
 func (p pong) ping() ping {
-	return ping(p + 1)
+	return ping{Pxng{p.Seq + 1}}
 }
 
 type pinger struct{}
@@ -37,34 +57,44 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 	data := msg.Data()
 	switch data := data.(type) {
 	case ping:
-		fmt.Printf("Ping %d\n", data)
+		fmt.Printf("Rx Ping %d\n", data.Seq)
 		time.Sleep(100 * time.Millisecond)
 
 		v, err := dict.Get("ping")
-		if err != nil {
-			v = ping(0)
+		var p ping
+		if err == nil {
+			p.decode(v)
 		}
-		if data != v.(ping) {
-			glog.Fatalf("Invalid ping: %d != %d", data, v)
-		}
-		dict.Put("ping", data+1)
 
+		if data != p {
+			glog.Fatalf("Invalid ping: %d != %d", data, p.Seq)
+		}
+
+		p.Seq += 1
+		dict.Put("ping", p.encode())
+
+		fmt.Printf("Tx Pong %d\n", data.Seq)
 		ctx.Emit(data.pong())
 
 	case pong:
-		fmt.Printf("Pong %d\n", data)
+		fmt.Printf("Rx Pong %d\n", data.Seq)
 		time.Sleep(100 * time.Millisecond)
 
 		dict := ctx.Dict(PingPongDict)
 		v, err := dict.Get("pong")
-		if err != nil {
-			v = pong(0)
+		var p pong
+		if err == nil {
+			p.decode(v)
 		}
-		if data != v.(pong) {
-			glog.Fatalf("Invalid pong: %d != %d", data, v)
-		}
-		dict.Put("pong", data+1)
 
+		if data != p {
+			glog.Fatalf("Invalid pong: %d != %d", data, p)
+		}
+
+		p.Seq += 1
+		dict.Put("pong", p.encode())
+
+		fmt.Printf("Tx Ping %d\n", data.Seq)
 		ctx.Emit(data.ping())
 	}
 }
@@ -80,17 +110,17 @@ func main() {
 	h := bh.NewHive()
 
 	pingAtor := h.NewApp("Ping")
-	pingAtor.Handle(pong(0), &pinger{})
+	pingAtor.Handle(pong{}, &pinger{})
 
 	pongAtor := h.NewApp("Pong")
-	pongAtor.Handle(ping(0), &ponger{})
+	pongAtor.Handle(ping{}, &ponger{})
 
 	if *shouldPing {
-		h.Emit(ping(0))
+		h.Emit(ping{})
 	}
 
 	if *shouldPong {
-		h.Emit(pong(0))
+		h.Emit(pong{})
 	}
 
 	join := make(chan interface{})
