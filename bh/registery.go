@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	regPrefix = "theatre"
-	regTtl    = 0
+	regPrefix    = "beehive"
+	regTtl       = 0
+	keyFmtStr    = "/" + regPrefix + "/apps/%s/%s/%s"
+	expireAction = "expire"
+	lockFileName = "__lock__"
 )
 
 type registery struct {
@@ -22,15 +25,15 @@ type registery struct {
 	ttl    uint64
 }
 
-func (s *hive) connectToRegistery() {
-	if len(s.config.RegAddrs) == 0 {
+func (h *hive) connectToRegistery() {
+	if len(h.config.RegAddrs) == 0 {
 		return
 	}
 
 	// TODO(soheil): Add TLS registery.
-	s.registery = registery{etcd.NewClient(s.config.RegAddrs), regPrefix, regTtl}
-	if ok := s.registery.SyncCluster(); !ok {
-		glog.Fatalf("Cannot connect to registery nodes: %s", s.config.RegAddrs)
+	h.registery = registery{etcd.NewClient(h.config.RegAddrs), regPrefix, regTtl}
+	if ok := h.registery.SyncCluster(); !ok {
+		glog.Fatalf("Cannot connect to registery nodes: %s", h.config.RegAddrs)
 	}
 }
 
@@ -38,22 +41,28 @@ func (g registery) connected() bool {
 	return g.Client == nil
 }
 
-type regVal struct {
+type hiveRegVal HiveId
+
+func (g *registery) registerHive(h *hive) {
+
+}
+
+type beeRegVal struct {
 	HiveId HiveId `json:"hive_id"`
 	BeeId  uint32 `json:"bee_id"`
 }
 
-func (this *regVal) Eq(that *regVal) bool {
+func (this *beeRegVal) Eq(that *beeRegVal) bool {
 	return this.HiveId == that.HiveId && this.BeeId == that.BeeId
 }
 
-func unmarshallRegVal(d string) (regVal, error) {
-	var v regVal
+func unmarshallRegVal(d string) (beeRegVal, error) {
+	var v beeRegVal
 	err := json.Unmarshal([]byte(d), &v)
 	return v, err
 }
 
-func unmarshallRegValOrFail(d string) regVal {
+func unmarshallRegValOrFail(d string) beeRegVal {
 	v, err := unmarshallRegVal(d)
 	if err != nil {
 		glog.Fatalf("Cannot unmarshall registery value %v: %v", d, err)
@@ -61,24 +70,18 @@ func unmarshallRegValOrFail(d string) regVal {
 	return v
 }
 
-func marshallRegVal(v regVal) (string, error) {
+func marshallRegVal(v beeRegVal) (string, error) {
 	b, err := json.Marshal(v)
 	return string(b), err
 }
 
-func marshallRegValOrFail(v regVal) string {
+func marshallRegValOrFail(v beeRegVal) string {
 	d, err := marshallRegVal(v)
 	if err != nil {
 		glog.Fatalf("Cannot marshall registery value %v: %v", v, err)
 	}
 	return d
 }
-
-const (
-	keyFmtStr    = "/beehive/%s/%s/%s"
-	expireAction = "expire"
-	lockFileName = "__lock__"
-)
 
 func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
@@ -87,7 +90,7 @@ func (g registery) path(elem ...string) string {
 func (g registery) lockApp(id BeeId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
-	v := regVal{
+	v := beeRegVal{
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}
@@ -107,7 +110,7 @@ func (g registery) lockApp(id BeeId) error {
 }
 
 func (g registery) unlockApp(id BeeId) error {
-	v := regVal{
+	v := beeRegVal{
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}
@@ -132,7 +135,7 @@ func (g registery) unlockApp(id BeeId) error {
 	return nil
 }
 
-func (g registery) set(id BeeId, ms MapSet) regVal {
+func (g registery) set(id BeeId, ms MapSet) beeRegVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -147,7 +150,7 @@ func (g registery) set(id BeeId, ms MapSet) regVal {
 
 	sort.Sort(ms)
 
-	v := regVal{
+	v := beeRegVal{
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}
@@ -162,7 +165,7 @@ func (g registery) set(id BeeId, ms MapSet) regVal {
 	return v
 }
 
-func (g registery) storeOrGet(id BeeId, ms MapSet) regVal {
+func (g registery) storeOrGet(id BeeId, ms MapSet) beeRegVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -177,7 +180,7 @@ func (g registery) storeOrGet(id BeeId, ms MapSet) regVal {
 
 	sort.Sort(ms)
 
-	v := regVal{
+	v := beeRegVal{
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}

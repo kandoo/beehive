@@ -13,7 +13,7 @@ const (
 	msgs         = 1000000
 )
 
-var testHiveCh chan interface{} = make(chan interface{})
+var testHiveCh = make(chan interface{})
 
 type MyMsg int
 

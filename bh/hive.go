@@ -44,7 +44,7 @@ type Hive interface {
 	// Sends a message to a specific bee that owns a specific dictionary key.
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	// Sends a message to a sepcific bee.
-	SentToBee(msgData interface{}, to BeeId)
+	SendToBee(msgData interface{}, to BeeId)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
 
@@ -56,16 +56,13 @@ type Hive interface {
 
 // Configuration of a hive.
 type HiveConfig struct {
-	// Listening address of the hive.
-	HiveAddr string
-	// Reigstery service addresses.
-	RegAddrs []string
-	// Buffer size in the data channel.
-	DataChBufSize int
-	// Whether to instrument apps on the hive.
-	Instrument bool
-	// Is the path of the directory for storing persistent application state.
-	DBDir string
+	HiveAddr        string        // Listening address of the hive.
+	RegAddrs        []string      // Reigstery service addresses.
+	DataChBufSize   int           // Buffer size in the data channel.
+	Instrument      bool          // Whether to instrument apps on the hive.
+	DBDir           string        // Directory to persist application state.
+	HBQueryInterval time.Duration // Heartbeating interval.
+	HBDeadTimeout   time.Duration // When to announce a bee dead.
 }
 
 // Creates a new hive based on the given configuration.
@@ -97,6 +94,7 @@ func (h *hive) init() {
 		h.collector = &dummyStatCollector{}
 	}
 
+	startHeartbeatHandler(h)
 	h.stateMan = newPersistentStateManager(h)
 }
 
@@ -131,12 +129,11 @@ func init() {
 		"Whether to insturment apps.")
 	flag.StringVar(&DefaultCfg.DBDir, "dbdir", "/tmp",
 		"Where to store persistent state data.")
+	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
+		1*time.Second, "Heartbeat interval.")
+	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout", 15*time.Second,
+		"The timeout after which a non-responsive bee is announced dead.")
 }
-
-const (
-	kInitialQees = 10
-	kInitialBees = 10
-)
 
 type qeeAndHandler struct {
 	q       *qee
@@ -158,10 +155,9 @@ type hive struct {
 
 	registery registery
 	collector statCollector
+	stateMan  *persistentStateManager
 
 	listener net.Listener
-
-	stateMan *persistentStateManager
 }
 
 func (h *hive) Id() HiveId {
@@ -310,6 +306,7 @@ func (h *hive) NewApp(name AppName) App {
 	}
 	a.initQee()
 	h.registerApp(a)
+	a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
 	return a
 }
 
@@ -336,7 +333,7 @@ func (h *hive) SendToDictKey(msgData interface{}, to AppName,
 	glog.Fatalf("Not implemented yet.")
 }
 
-func (h *hive) SentToBee(msgData interface{}, to BeeId) {
+func (h *hive) SendToBee(msgData interface{}, to BeeId) {
 	h.emitMsg(newMsgFromData(msgData, BeeId{}, to))
 }
 

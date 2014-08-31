@@ -244,7 +244,7 @@ func (q *qee) lock(mapSet MapSet, force bool) BeeId {
 		return id
 	}
 
-	var v regVal
+	var v beeRegVal
 	if force {
 		v = q.ctx.hive.registery.set(id, mapSet)
 	} else {
@@ -349,6 +349,8 @@ func (q *qee) findOrCreateBee(id BeeId) bee {
 		}
 		b.ctx.bee = b
 		bee = b
+
+		startHeartbeatBee(id, q.ctx.hive)
 	}
 
 	q.idToBees[id] = bee

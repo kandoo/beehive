@@ -24,7 +24,7 @@ type appStatCollector struct {
 
 func newAppStatCollector(h Hive) statCollector {
 	c := &appStatCollector{hive: h}
-	a := h.NewApp("localStatCollector")
+	a := h.NewApp("StatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
 	a.Handle(migrateBeeCmdData{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
