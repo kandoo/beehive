@@ -13,16 +13,19 @@ import (
 
 const (
 	regPrefix    = "beehive"
+	regAppDir    = "apps"
+	regHiveDir   = "hives"
 	regTtl       = 0
-	keyFmtStr    = "/" + regPrefix + "/apps/%s/%s/%s"
 	expireAction = "expire"
 	lockFileName = "__lock__"
 )
 
 type registery struct {
 	*etcd.Client
-	prefix string
-	ttl    uint64
+	prefix  string
+	hiveDir string
+	appDir  string
+	ttl     uint64
 }
 
 func (h *hive) connectToRegistery() {
@@ -31,7 +34,13 @@ func (h *hive) connectToRegistery() {
 	}
 
 	// TODO(soheil): Add TLS registery.
-	h.registery = registery{etcd.NewClient(h.config.RegAddrs), regPrefix, regTtl}
+	h.registery = registery{
+		Client:  etcd.NewClient(h.config.RegAddrs),
+		prefix:  regPrefix,
+		hiveDir: regHiveDir,
+		appDir:  regAppDir,
+		ttl:     regTtl,
+	}
 	if ok := h.registery.SyncCluster(); !ok {
 		glog.Fatalf("Cannot connect to registery nodes: %s", h.config.RegAddrs)
 	}
@@ -87,6 +96,14 @@ func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
 
+func (g registery) appPath(elem ...string) string {
+	return g.prefix + "/" + g.appDir + "/" + strings.Join(elem, "/")
+}
+
+func (g registery) hivePath(elem ...string) string {
+	return g.prefix + "/" + g.hiveDir + "/" + strings.Join(elem, "/")
+}
+
 func (g registery) lockApp(id BeeId) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
@@ -94,7 +111,7 @@ func (g registery) lockApp(id BeeId) error {
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}
-	k := g.path(string(id.AppName), lockFileName)
+	k := g.appPath(string(id.AppName), lockFileName)
 
 	for {
 		_, err := g.Create(k, marshallRegValOrFail(v), g.ttl)
@@ -114,7 +131,7 @@ func (g registery) unlockApp(id BeeId) error {
 		HiveId: id.HiveId,
 		BeeId:  id.Id,
 	}
-	k := g.path(string(id.AppName), lockFileName)
+	k := g.appPath(string(id.AppName), lockFileName)
 
 	res, err := g.Get(k, false, false)
 	if err != nil {
@@ -156,7 +173,7 @@ func (g registery) set(id BeeId, ms MapSet) beeRegVal {
 	}
 	mv := marshallRegValOrFail(v)
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
+		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
 		_, err := g.Set(k, mv, g.ttl)
 		if err != nil {
 			glog.Fatalf("Cannot set bee: %+v", k)
@@ -187,7 +204,7 @@ func (g registery) storeOrGet(id BeeId, ms MapSet) beeRegVal {
 	mv := marshallRegValOrFail(v)
 	validate := false
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
+		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
 		res, err := g.Get(k, false, false)
 		if err != nil {
 			continue
@@ -208,7 +225,7 @@ func (g registery) storeOrGet(id BeeId, ms MapSet) beeRegVal {
 	}
 
 	for _, dk := range ms {
-		k := fmt.Sprintf(keyFmtStr, id.AppName, dk.Dict, dk.Key)
+		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
 		g.Create(k, mv, g.ttl)
 	}
 
