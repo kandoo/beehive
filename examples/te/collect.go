@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/gob"
 	"strconv"
 	"time"
 
@@ -39,6 +41,24 @@ type MatrixUpdate StatResult
 
 type SwitchStats map[Flow]uint64
 
+func (s *SwitchStats) decode(b []byte) {
+	dec := gob.NewDecoder(bytes.NewBuffer(b))
+	err := dec.Decode(s)
+	if err != nil {
+		glog.Fatalf("Cannot decode buffer %v", err)
+	}
+}
+
+func (s *SwitchStats) encode() []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(s)
+	if err != nil {
+		glog.Fatalf("Error in encoding the stats %v", err)
+	}
+	return buf.Bytes()
+}
+
 const (
 	matrixDict = "Matrix"
 )
@@ -53,7 +73,7 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
-	sw, err := matrix.Get(key)
+	v, err := matrix.Get(key)
 	if err != nil {
 		glog.Errorf("No such switch in matrix: %+v", res)
 		return
@@ -61,8 +81,10 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 
 	c.poller.query <- StatQuery{res.Switch}
 
-	stat, ok := sw.(SwitchStats)[res.Flow]
-	sw.(SwitchStats)[res.Flow] = res.Bytes
+	var sw SwitchStats
+	sw.decode(v)
+	stat, ok := sw[res.Flow]
+	sw[res.Flow] = res.Bytes
 
 	glog.V(2).Infof("Previous stats: %+v, Now: %+v", stat, res.Bytes)
 	if !ok || res.Bytes-stat > c.delta {
@@ -70,6 +92,8 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 			ctx.Hive().Id())
 		ctx.Emit(MatrixUpdate(res))
 	}
+
+	matrix.Put(key, sw.encode())
 }
 
 func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
@@ -144,7 +168,8 @@ func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
 		glog.Errorf("Switch already exists in matrix: %+v", joined)
 		return
 	}
-	matrix.Put(key, make(SwitchStats))
+	sw := make(SwitchStats)
+	matrix.Put(key, sw.encode())
 
 	s.poller.query <- StatQuery{joined.Switch}
 	glog.Infof("Switch joined: %+v", joined)

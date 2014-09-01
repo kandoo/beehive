@@ -123,7 +123,7 @@ func main() {
 		h.Emit(pong{})
 	}
 
-	join := make(chan interface{})
+	join := make(chan bool)
 	go h.Start(join)
 	<-join
 }

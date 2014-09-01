@@ -92,7 +92,7 @@ func main() {
 	a.Handle(Op{}, &Calculator{})
 	a.Detached(&Generator{})
 
-	joinCh := make(chan interface{})
+	joinCh := make(chan bool)
 	go h.Start(joinCh)
 	fmt.Println("Stage started.")
 

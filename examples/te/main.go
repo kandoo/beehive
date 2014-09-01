@@ -19,7 +19,7 @@ var (
 
 func createHive(config bh.HiveConfig, minDriver, maxDriver int,
 	minCol, maxCol int, stickyCollector bool, lockRouter bool,
-	joinCh chan interface{}) {
+	joinCh chan bool) {
 	h := bh.NewHiveWithConfig(config)
 
 	c := h.NewApp("Collector")
@@ -83,14 +83,14 @@ func main() {
 		collectorPerHive = *nswitches / *nhives
 	}
 
-	joinChannels := make([]chan interface{}, 0)
+	joinChannels := make([]chan bool, 0)
 
 	config := bh.DefaultCfg
 	for h := 0; h < *nhives; h++ {
 		config.HiveAddr = fmt.Sprintf(lAddr, port)
 		port++
 
-		jCh := make(chan interface{})
+		jCh := make(chan bool)
 		joinChannels = append(joinChannels, jCh)
 
 		if *centCol && h == 0 {

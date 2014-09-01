@@ -18,7 +18,7 @@ func hiveWithAddressForRegisteryTests(addr string, t *testing.T) *hive {
 
 func TestRegisteryUnregisterHive(t *testing.T) {
 	h := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
-	joinCh := make(chan interface{})
+	joinCh := make(chan bool)
 	maybeSkipRegisteryTest(h, t)
 
 	go h.Start(joinCh)
@@ -68,11 +68,11 @@ func TestRegisteryWatchHives(t *testing.T) {
 	h2 := hiveWithAddressForRegisteryTests(h2Id, t)
 	maybeSkipRegisteryTest(h2, t)
 
-	joinCh1 := make(chan interface{})
+	joinCh1 := make(chan bool)
 	go h1.Start(joinCh1)
 	h1.waitUntilStarted()
 
-	joinCh2 := make(chan interface{})
+	joinCh2 := make(chan bool)
 	go h2.Start(joinCh2)
 	h2.waitUntilStarted()
 

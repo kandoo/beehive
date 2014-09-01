@@ -29,7 +29,7 @@ type Hive interface {
 	Id() HiveId
 
 	// Starts the hive and will close the waitCh once the hive stops.
-	Start(joinCh chan interface{}) error
+	Start(joinCh chan bool) error
 	// Stops the hive and all its apps.
 	Stop() error
 	// Returns the hive status.
@@ -263,7 +263,7 @@ func (h *hive) startListener() {
 	go h.listen()
 }
 
-func (h *hive) Start(joinCh chan interface{}) error {
+func (h *hive) Start(joinCh chan bool) error {
 	defer close(joinCh)
 
 	h.status = HiveStarted

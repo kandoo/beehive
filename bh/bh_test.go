@@ -72,8 +72,8 @@ func TestHive(t *testing.T) {
 	app := hive.NewApp("MyApp")
 	app.Handle(MyMsg(0), &MyHandler{})
 
-	hiveWCh := make(chan interface{})
-	go hive.Start(hiveWCh)
+	joinCh := make(chan bool)
+	go hive.Start(joinCh)
 
 	for i := 1; i <= msgs; i++ {
 		hive.Emit(MyMsg(i))
@@ -84,5 +84,5 @@ func TestHive(t *testing.T) {
 	}
 
 	hive.Stop()
-	<-hiveWCh
+	<-joinCh
 }
