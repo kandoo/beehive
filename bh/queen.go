@@ -240,7 +240,7 @@ func (q *qee) nextBeeId() BeeId {
 // returns the ID of the owner of this map set.
 func (q *qee) lock(mapSet MapSet, force bool) BeeId {
 	id := q.nextBeeId()
-	if q.ctx.hive.isIsol() {
+	if q.ctx.hive.isolated() {
 		return id
 	}
 
@@ -263,7 +263,7 @@ func (q *qee) lock(mapSet MapSet, force bool) BeeId {
 
 func (q *qee) lockKey(dk DictionaryKey, bee bee) bool {
 	q.setBee(dk, bee)
-	if q.ctx.hive.isIsol() {
+	if q.ctx.hive.isolated() {
 		return true
 	}
 

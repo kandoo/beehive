@@ -30,8 +30,9 @@ type registery struct {
 	hiveTtl       uint64
 	appDir        string
 	appTtl        uint64
-	cancelWatchCh chan bool
-	cancelTtlCh   chan bool
+	watchCancelCh chan bool
+	watchJoinCh   chan bool
+	ttlCancelCh   chan chan bool
 }
 
 func (h *hive) connectToRegistery() {
@@ -55,29 +56,53 @@ func (h *hive) connectToRegistery() {
 	}
 
 	h.registery.registerHive()
+	h.registery.startPollers()
 }
 
 func (g *registery) disconnect() {
+	if !g.connected() {
+		return
+	}
 
+	g.watchCancelCh <- true
+	<-g.watchJoinCh
+
+	cancelRes := make(chan bool)
+	g.ttlCancelCh <- cancelRes
+	<-cancelRes
+
+	g.unregisterHive()
 }
 
 func (g registery) connected() bool {
-	return g.Client == nil
+	return g.Client != nil
 }
 
-type hiveRegVal HiveId
+func (g *registery) hiveRegKeyVal() (string, string) {
+	v := string(g.hive.Id())
+	return g.hivePath(v), v
+}
 
 func (g *registery) registerHive() {
-	v := string(g.hive.Id())
-	k := g.hivePath(v)
+	k, v := g.hiveRegKeyVal()
 	if _, err := g.Create(k, v, g.hiveTtl); err != nil {
-		glog.Fatalf("Error in registering hive entry in the registery: %v", err)
+		glog.Fatalf("Error in registering hive entry: %v", err)
 	}
+}
 
-	g.cancelTtlCh = make(chan bool)
+func (g *registery) unregisterHive() {
+	k, _ := g.hiveRegKeyVal()
+	if _, err := g.Delete(k, false); err != nil {
+		glog.Fatalf("Error in unregistering hive entry: %v", err)
+	}
+}
+
+func (g *registery) startPollers() {
+	g.ttlCancelCh = make(chan chan bool)
 	go g.updateTtl()
 
-	g.cancelWatchCh = make(chan bool)
+	g.watchCancelCh = make(chan bool)
+	g.watchJoinCh = make(chan bool)
 	go g.watchHives()
 }
 
@@ -89,11 +114,11 @@ func (g *registery) updateTtl() {
 
 	for {
 		select {
-		case <-g.cancelTtlCh:
+		case ch := <-g.ttlCancelCh:
+			ch <- true
 			return
 		case <-time.After(time.Duration(waitTimeout) * time.Second):
-			v := string(g.hive.Id())
-			k := g.hivePath(v)
+			k, v := g.hiveRegKeyVal()
 			if _, err := g.Update(k, v, g.hiveTtl); err != nil {
 				glog.Fatalf("Error in updating hive entry in the registery: %v", err)
 			}
@@ -103,6 +128,25 @@ func (g *registery) updateTtl() {
 }
 
 func (g *registery) watchHives() {
+	resCh := make(chan *etcd.Response)
+	joinCh := make(chan bool)
+	go func() {
+		g.Watch(g.hivePath(), 0, false, resCh, g.watchCancelCh)
+		joinCh <- true
+	}()
+
+	for {
+		select {
+		case <-joinCh:
+			g.watchJoinCh <- true
+			return
+		case res := <-resCh:
+			if res == nil {
+				continue
+			}
+			g.hive.Emit(res)
+		}
+	}
 }
 
 type beeRegVal struct {

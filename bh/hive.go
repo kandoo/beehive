@@ -111,11 +111,17 @@ func NewHive() Hive {
 	return NewHiveWithConfig(DefaultCfg)
 }
 
-type HiveCmd int
+type HiveCmd struct {
+	Type  HiveCmdType
+	ResCh chan interface{}
+}
+
+type HiveCmdType int
 
 const (
-	StopHive  HiveCmd = iota
-	DrainHive         = iota
+	StopHive  HiveCmdType = iota
+	DrainHive             = iota
+	PingHive              = iota
 )
 
 func init() {
@@ -168,8 +174,8 @@ func (h *hive) RegisterMsg(msg interface{}) {
 	gob.Register(msg)
 }
 
-func (h *hive) isIsol() bool {
-	return h.registery.connected()
+func (h *hive) isolated() bool {
+	return !h.registery.connected()
 }
 
 func (h *hive) app(name AppName) (*app, bool) {
@@ -211,21 +217,24 @@ func (h *hive) closeChannels() {
 type step int
 
 const (
-	stop step = iota + 1
+	stop step = iota
 	next      = iota
 )
 
 func (h *hive) handleCmd(cmd HiveCmd) step {
-	switch cmd {
+	switch cmd.Type {
 	case StopHive:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
 		h.status = HiveStopped
+		h.registery.disconnect()
 		h.closeChannels()
 		h.stateMan.closeDBs()
 		return stop
 	case DrainHive:
 		// TODO(soheil): Implement drain.
 		glog.Fatalf("Drain Hive is not implemented.")
+	case PingHive:
+		cmd.ResCh <- true
 	}
 
 	return next
@@ -278,6 +287,7 @@ func (h *hive) Start(joinCh chan interface{}) error {
 			glog.Fatalf("Hive'h join channel should not be used nor closed.")
 		}
 	}
+
 	return nil
 }
 
@@ -290,12 +300,21 @@ func (h *hive) Stop() error {
 		return errors.New("Hive is already stopped.")
 	}
 
-	h.ctrlCh <- StopHive
+	h.ctrlCh <- HiveCmd{Type: StopHive}
 	return nil
 }
 
 func (h *hive) Status() HiveStatus {
 	return h.status
+}
+
+func (h *hive) waitUntilStarted() {
+	ch := make(chan interface{})
+	h.ctrlCh <- HiveCmd{
+		Type:  PingHive,
+		ResCh: ch,
+	}
+	<-ch
 }
 
 func (h *hive) NewApp(name AppName) App {
