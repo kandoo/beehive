@@ -12,6 +12,18 @@ import (
 	"github.com/golang/glog"
 )
 
+// Emitted when a hive joins the cluster. Note that this message is emitted on
+// all hives.
+type HiveJoined struct {
+	HiveId HiveId // The ID of the hive.
+}
+
+// Emitted when a hive leaves the cluster. Note that this event is emitted on
+// all hives.
+type HiveLeft struct {
+	HiveId HiveId // The ID of the hive.
+}
+
 const (
 	regPrefix    = "beehive"
 	regAppDir    = "apps"
@@ -55,6 +67,8 @@ func (h *hive) connectToRegistery() {
 		glog.Fatalf("Cannot connect to registery nodes: %s", h.config.RegAddrs)
 	}
 
+	h.RegisterMsg(HiveJoined{})
+	h.RegisterMsg(HiveLeft{})
 	h.registery.registerHive()
 	h.registery.startPollers()
 }
@@ -131,7 +145,7 @@ func (g *registery) watchHives() {
 	resCh := make(chan *etcd.Response)
 	joinCh := make(chan bool)
 	go func() {
-		g.Watch(g.hivePath(), 0, false, resCh, g.watchCancelCh)
+		g.Watch(g.hivePath(), 0, true, resCh, g.watchCancelCh)
 		joinCh <- true
 	}()
 
@@ -144,7 +158,19 @@ func (g *registery) watchHives() {
 			if res == nil {
 				continue
 			}
-			g.hive.Emit(res)
+
+			switch res.Action {
+			case "create":
+				if res.PrevNode == nil {
+					g.hive.Emit(HiveJoined{g.hiveIdFromPath(res.Node.Key)})
+				}
+			case "delete":
+				if res.PrevNode != nil {
+					g.hive.Emit(HiveLeft{g.hiveIdFromPath(res.Node.Key)})
+				}
+			default:
+				glog.V(2).Infof("Received an update from registery: %+v", *res)
+			}
 		}
 	}
 }
@@ -195,6 +221,11 @@ func (g registery) appPath(elem ...string) string {
 
 func (g registery) hivePath(elem ...string) string {
 	return g.prefix + "/" + g.hiveDir + "/" + strings.Join(elem, "/")
+}
+
+func (g registery) hiveIdFromPath(path string) HiveId {
+	prefixLen := len(g.hivePath()) + 1
+	return HiveId(path[prefixLen:])
 }
 
 func (g registery) lockApp(id BeeId) error {

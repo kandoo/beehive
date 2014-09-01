@@ -16,29 +16,7 @@ func hiveWithAddressForRegisteryTests(addr string, t *testing.T) *hive {
 	return NewHiveWithConfig(cfg).(*hive)
 }
 
-func TestRegistery(t *testing.T) {
-	h1 := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
-	maybeSkipRegisteryTest(h1, t)
-
-	h2 := hiveWithAddressForRegisteryTests("127.0.0.1:32772", t)
-	maybeSkipRegisteryTest(h2, t)
-
-	joinCh1 := make(chan interface{})
-	go h1.Start(joinCh1)
-	h1.waitUntilStarted()
-
-	joinCh2 := make(chan interface{})
-	go h2.Start(joinCh2)
-	h2.waitUntilStarted()
-
-	h1.Stop()
-	<-joinCh1
-
-	h2.Stop()
-	<-joinCh2
-}
-
-func TestRegisteryUnregister(t *testing.T) {
+func TestRegisteryUnregisterHive(t *testing.T) {
 	h := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
 	joinCh := make(chan interface{})
 	maybeSkipRegisteryTest(h, t)
@@ -53,4 +31,62 @@ func TestRegisteryUnregister(t *testing.T) {
 	if err == nil {
 		t.Errorf("Registery entry is not removed.")
 	}
+}
+
+type testRegisteryWatchHandler struct {
+	resCh chan HiveId
+}
+
+func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) {
+	switch d := msg.Data().(type) {
+	case HiveJoined:
+		h.resCh <- d.HiveId
+	case HiveLeft:
+		h.resCh <- d.HiveId
+	}
+}
+
+func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MapSet {
+	return MapSet{{"W", Key(ctx.Hive().Id())}}
+}
+
+func TestRegisteryWatchHives(t *testing.T) {
+	h1 := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
+	maybeSkipRegisteryTest(h1, t)
+
+	watchCh := make(chan HiveId)
+
+	app := h1.NewApp("RegisteryWatchHandler")
+	hndlr := &testRegisteryWatchHandler{
+		resCh: watchCh,
+	}
+	app.Handle(HiveJoined{}, hndlr)
+	app.Handle(HiveLeft{}, hndlr)
+
+	h2Id := "127.0.0.1:32772"
+	h2 := hiveWithAddressForRegisteryTests(h2Id, t)
+	maybeSkipRegisteryTest(h2, t)
+
+	joinCh1 := make(chan interface{})
+	go h1.Start(joinCh1)
+	h1.waitUntilStarted()
+
+	joinCh2 := make(chan interface{})
+	go h2.Start(joinCh2)
+	h2.waitUntilStarted()
+
+	h2.Stop()
+	<-joinCh2
+
+	id := <-watchCh
+	if id != HiveId(h2Id) {
+		t.Errorf("Invalid hive joined: %v", id)
+	}
+	id = <-watchCh
+	if id != HiveId(h2Id) {
+		t.Errorf("Invalid hive left: %v", id)
+	}
+
+	h1.Stop()
+	<-joinCh1
 }
