@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-etcd/etcd"
 	"github.com/golang/glog"
@@ -15,17 +16,22 @@ const (
 	regPrefix    = "beehive"
 	regAppDir    = "apps"
 	regHiveDir   = "hives"
-	regTtl       = 0
+	regAppTtl    = 0
+	regHiveTtl   = 60
 	expireAction = "expire"
 	lockFileName = "__lock__"
 )
 
 type registery struct {
 	*etcd.Client
-	prefix  string
-	hiveDir string
-	appDir  string
-	ttl     uint64
+	hive          *hive
+	prefix        string
+	hiveDir       string
+	hiveTtl       uint64
+	appDir        string
+	appTtl        uint64
+	cancelWatchCh chan bool
+	cancelTtlCh   chan bool
 }
 
 func (h *hive) connectToRegistery() {
@@ -36,14 +42,23 @@ func (h *hive) connectToRegistery() {
 	// TODO(soheil): Add TLS registery.
 	h.registery = registery{
 		Client:  etcd.NewClient(h.config.RegAddrs),
+		hive:    h,
 		prefix:  regPrefix,
 		hiveDir: regHiveDir,
+		hiveTtl: regHiveTtl,
 		appDir:  regAppDir,
-		ttl:     regTtl,
+		appTtl:  regAppTtl,
 	}
+
 	if ok := h.registery.SyncCluster(); !ok {
 		glog.Fatalf("Cannot connect to registery nodes: %s", h.config.RegAddrs)
 	}
+
+	h.registery.registerHive()
+}
+
+func (g *registery) disconnect() {
+
 }
 
 func (g registery) connected() bool {
@@ -52,8 +67,42 @@ func (g registery) connected() bool {
 
 type hiveRegVal HiveId
 
-func (g *registery) registerHive(h *hive) {
+func (g *registery) registerHive() {
+	v := string(g.hive.Id())
+	k := g.hivePath(v)
+	if _, err := g.Create(k, v, g.hiveTtl); err != nil {
+		glog.Fatalf("Error in registering hive entry in the registery: %v", err)
+	}
 
+	g.cancelTtlCh = make(chan bool)
+	go g.updateTtl()
+
+	g.cancelWatchCh = make(chan bool)
+	go g.watchHives()
+}
+
+func (g *registery) updateTtl() {
+	waitTimeout := g.hiveTtl / 2
+	if waitTimeout == 0 {
+		waitTimeout = 1
+	}
+
+	for {
+		select {
+		case <-g.cancelTtlCh:
+			return
+		case <-time.After(time.Duration(waitTimeout) * time.Second):
+			v := string(g.hive.Id())
+			k := g.hivePath(v)
+			if _, err := g.Update(k, v, g.hiveTtl); err != nil {
+				glog.Fatalf("Error in updating hive entry in the registery: %v", err)
+			}
+			glog.V(1).Infof("Hive %s's TTL updated in registery", g.hive.Id())
+		}
+	}
+}
+
+func (g *registery) watchHives() {
 }
 
 type beeRegVal struct {
@@ -114,7 +163,7 @@ func (g registery) lockApp(id BeeId) error {
 	k := g.appPath(string(id.AppName), lockFileName)
 
 	for {
-		_, err := g.Create(k, marshallRegValOrFail(v), g.ttl)
+		_, err := g.Create(k, marshallRegValOrFail(v), g.appTtl)
 		if err == nil {
 			return nil
 		}
@@ -174,7 +223,7 @@ func (g registery) set(id BeeId, ms MapSet) beeRegVal {
 	mv := marshallRegValOrFail(v)
 	for _, dk := range ms {
 		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		_, err := g.Set(k, mv, g.ttl)
+		_, err := g.Set(k, mv, g.appTtl)
 		if err != nil {
 			glog.Fatalf("Cannot set bee: %+v", k)
 		}
@@ -226,7 +275,7 @@ func (g registery) storeOrGet(id BeeId, ms MapSet) beeRegVal {
 
 	for _, dk := range ms {
 		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		g.Create(k, mv, g.ttl)
+		g.Create(k, mv, g.appTtl)
 	}
 
 	return v
