@@ -51,10 +51,11 @@ func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MapSet {
 }
 
 func TestRegisteryWatchHives(t *testing.T) {
-	h1 := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
+	h1Id := "127.0.0.1:32771"
+	h1 := hiveWithAddressForRegisteryTests(h1Id, t)
 	maybeSkipRegisteryTest(h1, t)
 
-	watchCh := make(chan HiveId)
+	watchCh := make(chan HiveId, 3)
 
 	app := h1.NewApp("RegisteryWatchHandler")
 	hndlr := &testRegisteryWatchHandler{
@@ -79,6 +80,10 @@ func TestRegisteryWatchHives(t *testing.T) {
 	<-joinCh2
 
 	id := <-watchCh
+	if id != HiveId(h1Id) {
+		t.Errorf("Invalid hive joined: %v", id)
+	}
+	id = <-watchCh
 	if id != HiveId(h2Id) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}

@@ -142,6 +142,15 @@ func (g *registery) updateTtl() {
 }
 
 func (g *registery) watchHives() {
+	res, err := g.Get(g.hivePath(), false, true)
+	if err != nil {
+		glog.Fatalf("Cannot find the hive directory: %v", err)
+	}
+
+	for _, n := range res.Node.Nodes {
+		g.hive.Emit(HiveJoined{g.hiveIdFromPath(n.Key)})
+	}
+
 	resCh := make(chan *etcd.Response)
 	joinCh := make(chan bool)
 	go func() {

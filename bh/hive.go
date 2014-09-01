@@ -78,7 +78,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	}
 
 	h.init()
-	go h.listen()
 
 	return h
 }
@@ -260,10 +259,15 @@ func (h *hive) startQees() {
 	}
 }
 
+func (h *hive) startListener() {
+	go h.listen()
+}
+
 func (h *hive) Start(joinCh chan interface{}) error {
 	defer close(joinCh)
 
 	h.status = HiveStarted
+	h.startListener()
 	h.registerSignals()
 	h.connectToRegistery()
 	h.startQees()
