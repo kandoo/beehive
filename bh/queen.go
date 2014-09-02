@@ -192,6 +192,17 @@ func (q *qee) anyBee(ms MapSet) bee {
 	return nil
 }
 
+func (q *qee) callMap(mh msgAndHandler) (ms MapSet) {
+	defer func() {
+		if r := recover(); r != nil {
+			glog.Errorf("Error in map of %s: %v", q.ctx.app.Name(), r)
+			ms = nil
+		}
+	}()
+
+	return mh.handler.Map(mh.msg, &q.ctx)
+}
+
 func (q *qee) handleMsg(mh msgAndHandler) {
 	if mh.msg.isUnicast() {
 		glog.V(2).Infof("Unicast msg: %+v", mh.msg)
@@ -214,7 +225,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("Broadcast msg: %+v", mh.msg)
 
-	mapSet := mh.handler.Map(mh.msg, &q.ctx)
+	mapSet := q.callMap(mh)
 	if mapSet == nil {
 		glog.V(2).Infof("Message dropped: %+v", mh)
 		return

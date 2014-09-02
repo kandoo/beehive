@@ -2,6 +2,7 @@ package bh
 
 import (
 	"encoding/json"
+	"runtime/debug"
 
 	"github.com/golang/glog"
 )
@@ -85,9 +86,32 @@ func (bee *localBee) start() {
 	}
 }
 
+func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
+	stack bool) {
+	glog.Errorf("Error in %s: %v", bee.rId.AppName, err)
+	if stack {
+		glog.Errorf("%s", debug.Stack())
+	}
+
+	bee.ctx.State().AbortTx()
+}
+
 func (bee *localBee) handleMsg(mh msgAndHandler) {
+	defer func() {
+		if r := recover(); r != nil {
+			bee.recoverFromError(mh, r, true)
+		}
+	}()
+
 	glog.V(2).Infof("Bee handles a message: %+v", mh.msg)
-	mh.handler.Rcv(mh.msg, &bee.ctx)
+
+	bee.ctx.State().BeginTx()
+	if err := mh.handler.Rcv(mh.msg, &bee.ctx); err != nil {
+		bee.recoverFromError(mh, err, false)
+		return
+	}
+	bee.ctx.State().CommitTx()
+
 	bee.ctx.hive.collector.collect(mh.msg.From(), bee.rId, mh.msg)
 }
 

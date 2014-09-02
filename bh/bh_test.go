@@ -34,7 +34,7 @@ func bytesToInt(b []byte) int {
 	return int(binary.LittleEndian.Uint64(b))
 }
 
-func (h *MyHandler) Rcv(m Msg, c RcvContext) {
+func (h *MyHandler) Rcv(m Msg, c RcvContext) error {
 	hash := int(m.Data().(MyMsg)) % handlers
 	d := c.State().Dict("D")
 	k := Key(strconv.Itoa(hash))
@@ -56,6 +56,8 @@ func (h *MyHandler) Rcv(m Msg, c RcvContext) {
 	if i == msgs/handlers {
 		testHiveCh <- true
 	}
+
+	return nil
 }
 
 func TestHive(t *testing.T) {

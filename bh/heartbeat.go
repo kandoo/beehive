@@ -1,6 +1,7 @@
 package bh
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -115,8 +116,9 @@ func (p *pulseTaker) Stop(ctx RcvContext) {
 	<-ch
 }
 
-func (p *pulseTaker) Rcv(m Msg, ctx RcvContext) {
+func (p *pulseTaker) Rcv(m Msg, ctx RcvContext) error {
 	p.dataCh <- m
+	return nil
 }
 
 func pulseTakerId(h HiveId) BeeId {
@@ -141,13 +143,13 @@ func stopHeartbeatBee(b BeeId, h Hive) {
 
 type heartbeatReqHandler struct{}
 
-func (h *heartbeatReqHandler) Rcv(msg Msg, ctx RcvContext) {
+func (h *heartbeatReqHandler) Rcv(msg Msg, ctx RcvContext) error {
 	if hb, ok := msg.Data().(heartbeatReq); ok {
 		ctx.ReplyTo(msg, heartbeatRes(hb))
-		return
+		return nil
 	}
 
-	glog.Fatalf("An invalid message received: %+v", msg)
+	return fmt.Errorf("An invalid message received: %+v", msg)
 }
 
 func (h *heartbeatReqHandler) Map(msg Msg, ctx MapContext) MapSet {

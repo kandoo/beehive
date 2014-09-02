@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/golang/glog"
@@ -50,19 +51,19 @@ func (d *Driver) Start(ctx bh.RcvContext) {
 func (d *Driver) Stop(ctx bh.RcvContext) {
 }
 
-func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) {
+func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	if m.From().AppName == "" {
-		return
+		return nil
 	}
 
 	q, ok := m.Data().(StatQuery)
 	if !ok {
-		return
+		return nil
 	}
 
 	s, ok := d.switches[q.Switch]
 	if !ok {
-		glog.Fatalf("No switch stored in the driver: %+v", s)
+		return fmt.Errorf("No switch stored in the driver: %+v", s)
 	}
 
 	for i, f := range s.Flows {
@@ -73,6 +74,7 @@ func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	}
 
 	d.switches[q.Switch] = s
+	return nil
 }
 
 func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {

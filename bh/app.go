@@ -67,12 +67,12 @@ type Map func(m Msg, c MapContext) MapSet
 
 // An application recv function that handles a message. This method is called in
 // parallel for different map-sets and sequentially within a map-set.
-type Rcv func(m Msg, c RcvContext)
+type Rcv func(m Msg, c RcvContext) error
 
 // The interface msg handlers should implement.
 type Handler interface {
 	Map(m Msg, c MapContext) MapSet
-	Rcv(m Msg, c RcvContext)
+	Rcv(m Msg, c RcvContext) error
 }
 
 // Detached handlers, in contrast to normal Handlers with Map and Rcv, start in
@@ -87,7 +87,7 @@ type DetachedHandler interface {
 	// channel.
 	Stop(ctx RcvContext)
 	// Receives replies to messages emitted in this handler.
-	Rcv(m Msg, ctx RcvContext)
+	Rcv(m Msg, ctx RcvContext) error
 }
 
 // Start function of a detached handler.
@@ -105,8 +105,8 @@ func (h *funcHandler) Map(m Msg, c MapContext) MapSet {
 	return h.mapFunc(m, c)
 }
 
-func (h *funcHandler) Rcv(m Msg, c RcvContext) {
-	h.recvFunc(m, c)
+func (h *funcHandler) Rcv(m Msg, c RcvContext) error {
+	return h.recvFunc(m, c)
 }
 
 type funcDetached struct {
@@ -123,8 +123,8 @@ func (h *funcDetached) Stop(c RcvContext) {
 	h.stopFunc(c)
 }
 
-func (h *funcDetached) Rcv(m Msg, c RcvContext) {
-	h.recvFunc(m, c)
+func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
+	return h.recvFunc(m, c)
 }
 
 type app struct {

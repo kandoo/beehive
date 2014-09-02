@@ -131,7 +131,7 @@ func (c *localStatCollector) Map(msg Msg, ctx MapContext) MapSet {
 	return MapSet{{localStatDict, u.Key()}}
 }
 
-func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
+func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 	switch m := msg.Data().(type) {
 	case localStatUpdate:
 		d := ctx.Dict(localStatDict)
@@ -148,7 +148,7 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 
 		if s.countSinceLastEvent() < 10 || s.timeSinceLastEvent() < 1*time.Second {
 			d.Put(k, Value(s.Bytes()))
-			return
+			return nil
 		}
 
 		ctx.Emit(s.toAggrStat())
@@ -157,8 +157,7 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 	case migrateBeeCmdData:
 		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
 		if !ok {
-			glog.Fatalf("Cannot find app for migrate command: %+v", m)
-			return
+			return fmt.Errorf("Cannot find app for migrate command: %+v", m)
 		}
 
 		resCh := make(chan asyncResult)
@@ -166,6 +165,8 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) {
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}
+
+	return nil
 }
 
 type aggrStatUpdate localStatUpdate
@@ -217,17 +218,17 @@ func (s HiveIdSlice) Len() int           { return len(s) }
 func (s HiveIdSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s HiveIdSlice) Less(i, j int) bool { return s[i] < s[j] }
 
-func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
+func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
 	update := msg.Data().(aggrStatUpdate)
 	if update.To.isDetachedId() {
-		return
+		return nil
 	}
 
 	dict := ctx.Dict(aggrStatDict)
 	stat := o.stat(update.To, dict)
 	if stat.Migrated || o.stat(update.From, dict).Migrated {
-		return
+		return nil
 	}
 
 	stat.Matrix[update.From.HiveId] += update.Count
@@ -237,12 +238,11 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 
 	a, ok := ctx.Hive().(*hive).app(update.To.AppName)
 	if !ok {
-		glog.Errorf("App not found: %s", update.To.AppName)
-		return
+		return fmt.Errorf("App not found: %s", update.To.AppName)
 	}
 
 	if a.sticky {
-		return
+		return nil
 	}
 
 	max := uint64(0)
@@ -260,13 +260,14 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) {
 	}
 
 	if maxHive == "" || update.To.HiveId == maxHive {
-		return
+		return nil
 	}
 
 	glog.Infof("Initiating a migration: %+v", update)
 	ctx.SendToBee(migrateBeeCmdData{update.To, maxHive}, msg.From())
 
 	stat.Migrated = true
+	return nil
 }
 
 func (o *optimizer) Map(msg Msg, ctx MapContext) MapSet {

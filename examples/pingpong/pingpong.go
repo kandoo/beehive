@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/soheilhy/beehive/bh"
 )
 
@@ -52,7 +51,7 @@ func (p *pinger) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
 	return centralizedMapSet
 }
 
-func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
+func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	dict := ctx.Dict(PingPongDict)
 	data := msg.Data()
 	switch data := data.(type) {
@@ -67,7 +66,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 		}
 
 		if data != p {
-			glog.Fatalf("Invalid ping: %d != %d", data, p.Seq)
+			return fmt.Errorf("Invalid ping: %d != %d", data, p.Seq)
 		}
 
 		p.Seq += 1
@@ -88,7 +87,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 		}
 
 		if data != p {
-			glog.Fatalf("Invalid pong: %d != %d", data, p)
+			return fmt.Errorf("Invalid pong: %d != %d", data, p)
 		}
 
 		p.Seq += 1
@@ -97,6 +96,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) {
 		fmt.Printf("Tx Ping %d\n", data.Seq)
 		ctx.Emit(data.ping())
 	}
+	return nil
 }
 
 type ponger struct {

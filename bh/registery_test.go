@@ -37,13 +37,14 @@ type testRegisteryWatchHandler struct {
 	resCh chan HiveId
 }
 
-func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) {
+func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
 	switch d := msg.Data().(type) {
 	case HiveJoined:
 		h.resCh <- d.HiveId
 	case HiveLeft:
 		h.resCh <- d.HiveId
 	}
+	return nil
 }
 
 func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MapSet {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -68,15 +69,14 @@ type Collector struct {
 	poller *Poller
 }
 
-func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
+func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	res := m.Data().(StatResult)
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
 	key := res.Switch.Key()
 	v, err := matrix.Get(key)
 	if err != nil {
-		glog.Errorf("No such switch in matrix: %+v", res)
-		return
+		return fmt.Errorf("No such switch in matrix: %+v", res)
 	}
 
 	c.poller.query <- StatQuery{res.Switch}
@@ -94,6 +94,7 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	}
 
 	matrix.Put(key, sw.encode())
+	return nil
 }
 
 func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
@@ -145,7 +146,9 @@ func (p *Poller) Stop(ctx bh.RcvContext) {
 	<-join
 }
 
-func (p *Poller) Rcv(m bh.Msg, ctx bh.RcvContext) {}
+func (p *Poller) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+	return nil
+}
 
 type SwitchJoined struct {
 	Switch Switch
@@ -155,9 +158,9 @@ type SwitchJoinHandler struct {
 	poller *Poller
 }
 
-func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
+func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	if m.From().AppName == "" {
-		return
+		return nil
 	}
 
 	joined := m.Data().(SwitchJoined)
@@ -165,14 +168,14 @@ func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) {
 	key := joined.Switch.Key()
 	_, err := matrix.Get(key)
 	if err != nil {
-		glog.Errorf("Switch already exists in matrix: %+v", joined)
-		return
+		return fmt.Errorf("Switch already exists in matrix: %+v", joined)
 	}
 	sw := make(SwitchStats)
 	matrix.Put(key, sw.encode())
 
 	s.poller.query <- StatQuery{joined.Switch}
 	glog.Infof("Switch joined: %+v", joined)
+	return nil
 }
 
 func (s *SwitchJoinHandler) Map(m bh.Msg,

@@ -43,11 +43,12 @@ func (c *Calculator) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
 	}
 }
 
-func (c *Calculator) Rcv(msg bh.Msg, ctx bh.RcvContext) {
+func (c *Calculator) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	op := msg.Data().(Op)
 	res := c.calc(op)
 	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, res)
 	ctx.ReplyTo(msg, res)
+	return nil
 }
 
 func (c *Calculator) calc(op Op) int {
@@ -82,8 +83,9 @@ func (g *Generator) Stop(ctx bh.RcvContext) {
 	fmt.Println("Generator stopped.")
 }
 
-func (g *Generator) Rcv(msg bh.Msg, ctx bh.RcvContext) {
+func (g *Generator) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	fmt.Printf("The result is: %d\n", msg.Data().(int))
+	return nil
 }
 
 func main() {
