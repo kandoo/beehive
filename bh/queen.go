@@ -215,6 +215,18 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	glog.V(2).Infof("Broadcast msg: %+v", mh.msg)
 
 	mapSet := mh.handler.Map(mh.msg, &q.ctx)
+	if mapSet == nil {
+		glog.V(2).Infof("Message dropped: %+v", mh)
+		return
+	}
+
+	if mapSet.LocalBroadcast() {
+		glog.V(2).Infof("Sending a message to all local bees: %v", mh.msg)
+		for _, bee := range q.idToBees {
+			bee.enqueMsg(mh)
+		}
+		return
+	}
 
 	bee := q.anyBee(mapSet)
 	if bee == nil {

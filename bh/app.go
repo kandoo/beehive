@@ -53,9 +53,16 @@ func (ms MapSet) Less(i, j int) bool {
 		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
 }
 
+// An empty mapset means a local broadcast of message.
+func (ms MapSet) LocalBroadcast() bool {
+	return len(ms) == 0
+}
+
 // An applications map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
-// called sequentially.
+// called sequentially. If the return value is an empty set the message is
+// broadcasted to all local bees. Also, if the return value is nil, the message
+// is drop.
 type Map func(m Msg, c MapContext) MapSet
 
 // An application recv function that handles a message. This method is called in
