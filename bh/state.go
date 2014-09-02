@@ -52,7 +52,26 @@ func newState(a *app) State {
 	}
 
 	return &inMemoryState{
-		string(a.Name()),
-		make(map[DictionaryName]*inMemoryDictionary),
+		Name:  string(a.Name()),
+		Dicts: make(map[DictionaryName]*inMemDict),
 	}
+}
+
+type OpType int
+
+const (
+	Unknown OpType = iota
+	Put            = iota
+	Del            = iota
+)
+
+type StateOp struct {
+	T OpType
+	D DictionaryName
+	K Key
+	V Value
+}
+
+type StateBatch struct {
+	Ops []StateOp
 }

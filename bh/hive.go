@@ -83,8 +83,10 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 }
 
 func (h *hive) init() {
-	gob.Register(inMemoryDictionary{})
+	gob.Register(inMemDict{})
 	gob.Register(inMemoryState{})
+	gob.Register(StateOp{})
+	gob.Register(StateBatch{})
 	gob.Register(msg{})
 
 	if h.config.Instrument {
