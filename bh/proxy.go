@@ -66,8 +66,6 @@ func dialHive(id HiveId) (net.Conn, error) {
 			step *= 2
 		}
 	}
-
-	return nil, errors.New(fmt.Sprintf("Cannot connect to remote hive: %+v", id))
 }
 
 func (r *proxyBee) dial() {

@@ -160,7 +160,6 @@ func (s *persistentState) maybeBeginTx(readOnly bool) bool {
 				return errors.New("Abort")
 			}
 		}
-		return nil
 	}
 
 	if readOnly {

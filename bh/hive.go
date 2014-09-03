@@ -293,8 +293,6 @@ func (h *hive) Start(joinCh chan bool) error {
 			glog.Fatalf("Hive'h join channel should not be used nor closed.")
 		}
 	}
-
-	return nil
 }
 
 func (h *hive) Stop() error {
@@ -346,7 +344,7 @@ func (h *hive) emitMsg(msg *msg) {
 	case msg.isUnicast():
 		a, ok := h.app(msg.To().AppName)
 		if !ok {
-			glog.Fatalf("Application not found: %h", msg.To().AppName)
+			glog.Fatalf("Application not found: %s", msg.To().AppName)
 		}
 		a.qee.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
 	}
