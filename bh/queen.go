@@ -17,7 +17,7 @@ const (
 type qee struct {
 	asyncRoutine
 	ctx       mapContext
-	lastRId   uint32
+	lastBeeId uint32
 	idToBees  map[BeeId]bee
 	keyToBees map[DictionaryKey]bee
 }
@@ -143,6 +143,17 @@ func (q *qee) handleCmd(cmd routineCmd) {
 	case replaceBeeCmd:
 		d := cmd.cmdData.(replaceBeeCmdData)
 		q.replaceBee(d, cmd.resCh)
+
+	case lockMapSetCmd:
+		d := cmd.cmdData.(lockMapSetData)
+		id := q.lock(d.MapSet, d.BeeId, true)
+		if id != d.BeeId {
+			cmd.resCh <- asyncResult{nil, errors.New("Cannot lock mapset")}
+			return
+		}
+
+		q.lockLocally(q.findOrCreateBee(id), d.MapSet...)
+		cmd.resCh <- asyncResult{id, nil}
 	}
 }
 
@@ -160,8 +171,10 @@ func (q *qee) beeById(id BeeId) (bee, bool) {
 	return r, ok
 }
 
-func (q *qee) setBee(dk DictionaryKey, bee bee) {
-	q.keyToBees[dk] = bee
+func (q *qee) lockLocally(bee bee, dks ...DictionaryKey) {
+	for _, dk := range dks {
+		q.keyToBees[dk] = bee
+	}
 }
 
 func (q *qee) syncBees(ms MapSet, bee bee) {
@@ -251,41 +264,41 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 }
 
 func (q *qee) nextBeeId() BeeId {
-	q.lastRId++
+	q.lastBeeId++
 	return BeeId{
 		AppName: q.ctx.app.Name(),
 		HiveId:  q.ctx.hive.Id(),
-		Id:      q.lastRId,
+		Id:      q.lastBeeId,
 	}
 }
 
-// Locks the map set and returns a new bee ID if possible, otherwise
-// returns the ID of the owner of this map set.
-func (q *qee) lock(mapSet MapSet, force bool) BeeId {
-	id := q.nextBeeId()
+// lock locks the map set for the given bee. If the mapset is already locked,
+// it will return the ID of the owner. If force forced it will force the local
+// bee to lock the map set.
+func (q *qee) lock(mapSet MapSet, bee BeeId, force bool) BeeId {
 	if q.ctx.hive.isolated() {
-		return id
+		return bee
 	}
 
 	var v beeRegVal
 	if force {
-		v = q.ctx.hive.registery.set(id, mapSet)
+		// FIXME(soheil): We should migrate the previous owner first.
+		v = q.ctx.hive.registery.set(bee, mapSet)
 	} else {
-		v = q.ctx.hive.registery.storeOrGet(id, mapSet)
+		v = q.ctx.hive.registery.storeOrGet(bee, mapSet)
 	}
 
-	if v.HiveId == id.HiveId && v.BeeId == id.Id {
-		return id
+	if v.HiveId == bee.HiveId && v.BeeId == bee.Id {
+		return bee
 	}
 
-	q.lastRId--
-	id.HiveId = v.HiveId
-	id.Id = v.BeeId
-	return id
+	bee.HiveId = v.HiveId
+	bee.Id = v.BeeId
+	return bee
 }
 
 func (q *qee) lockKey(dk DictionaryKey, bee bee) bool {
-	q.setBee(dk, bee)
+	q.lockLocally(bee, dk)
 	if q.ctx.hive.isolated() {
 		return true
 	}
@@ -392,13 +405,14 @@ func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
 }
 
 func (q *qee) newBeeForMapSet(mapSet MapSet) bee {
-	beeId := q.lock(mapSet, false)
-	bee := q.findOrCreateBee(beeId)
-
-	for _, dictKey := range mapSet {
-		q.setBee(dictKey, bee)
+	newBeeId := q.nextBeeId()
+	beeId := q.lock(mapSet, newBeeId, false)
+	if newBeeId != beeId {
+		q.lastBeeId--
 	}
 
+	bee := q.findOrCreateBee(beeId)
+	q.lockLocally(bee, mapSet...)
 	return bee
 }
 
@@ -501,9 +515,7 @@ func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
 		return
 	}
 
-	for _, dictKey := range mapSet {
-		q.setBee(dictKey, newBee)
-	}
+	q.lockLocally(newBee, mapSet...)
 
 	go newBee.start()
 	resCh <- asyncResult{newBee, nil}
@@ -517,14 +529,14 @@ func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan asyncResult) {
 		return
 	}
 
-	r, ok := q.beeById(d.NewBee)
+	b, ok := q.beeById(d.NewBee)
 	if !ok {
 		err := errors.New(fmt.Sprintf("Cannot find bee: %+v", d.NewBee))
 		resCh <- asyncResult{nil, err}
 		return
 	}
 
-	newState := r.state()
+	newState := b.state()
 	for name, oldDict := range d.State.Dicts {
 		newDict := newState.Dict(DictionaryName(name))
 		oldDict.ForEach(func(k Key, v Value) {
@@ -536,9 +548,7 @@ func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan asyncResult) {
 	q.ctx.hive.registery.set(d.NewBee, d.MapSet)
 	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MapSet, d.NewBee)
 
-	for _, dictKey := range d.MapSet {
-		q.setBee(dictKey, r)
-	}
+	q.lockLocally(b, d.MapSet...)
 
-	resCh <- asyncResult{r, nil}
+	resCh <- asyncResult{b, nil}
 }

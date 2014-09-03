@@ -262,7 +262,7 @@ func (h *hive) startQees() {
 }
 
 func (h *hive) startListener() {
-	go h.listen()
+	h.listen()
 }
 
 func (h *hive) Start(joinCh chan bool) error {

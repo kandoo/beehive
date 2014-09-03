@@ -15,6 +15,7 @@ const (
 	createBeeCmd                 = iota
 	migrateBeeCmd                = iota
 	replaceBeeCmd                = iota
+	lockMapSetCmd                = iota
 )
 
 type migrateBeeCmdData struct {
@@ -26,5 +27,10 @@ type replaceBeeCmdData struct {
 	OldBee BeeId
 	NewBee BeeId
 	State  *inMemoryState
+	MapSet MapSet
+}
+
+type lockMapSetData struct {
+	BeeId  BeeId
 	MapSet MapSet
 }

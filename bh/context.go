@@ -18,6 +18,7 @@ type RcvContext interface {
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	SendToBee(msgData interface{}, to BeeId)
 	ReplyTo(msg Msg, replyData interface{}) error
+	Lock(ms MapSet) error
 }
 
 type mapContext struct {
@@ -83,4 +84,18 @@ func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 
 	ctx.SendToBee(replyData, m.From())
 	return nil
+}
+
+func (ctx *rcvContext) Lock(ms MapSet) error {
+	resCh := make(chan asyncResult)
+	ctx.app.qee.ctrlCh <- routineCmd{
+		lockMapSetCmd,
+		lockMapSetData{
+			MapSet: ms,
+			BeeId:  ctx.bee.id(),
+		},
+		resCh,
+	}
+	res := <-resCh
+	return res.err
 }

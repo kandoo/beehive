@@ -155,17 +155,20 @@ func (h *hive) listen() {
 	if err != nil {
 		glog.Fatalf("Cannot start listener: %v", err)
 	}
-	defer h.listener.Close()
 
-	glog.Infof("Hive listening at: %s", h.config.HiveAddr)
-	for {
-		c, err := h.listener.Accept()
-		if err != nil {
-			glog.V(2).Info("Listener closed.")
-			return
+	go func() {
+		defer h.listener.Close()
+
+		glog.Infof("Hive listening at: %s", h.config.HiveAddr)
+		for {
+			c, err := h.listener.Accept()
+			if err != nil {
+				glog.V(2).Info("Listener closed.")
+				return
+			}
+			glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
+				c.LocalAddr())
+			go h.handleConn(c)
 		}
-		glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
-			c.LocalAddr())
-		go h.handleConn(c)
-	}
+	}()
 }
