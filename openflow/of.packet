@@ -8,53 +8,53 @@
 #
 #  Unless required by applicable law or agreed to in writing, software
 #  distributed under the License is distributed on an "AS IS" BASIS,
-#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  WITHOUT WARRANTIES OR CONDITIONS  ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
 # Base openflow packet header.
 @bigendian
-packet OpenflowHeader {
-  uint8 version;        # OFP_VERSION.
-  uint8 type;           # One of the OFPT_ constants.
+packet Header {
+  uint8 version;        # P_VERSION.
+  uint8 type;           # One of the PT_ constants.
   @size uint16 length;  # Length including this ofp_header.
   uint32 xid;           # Transaction id associated with this packet
                         # Replies use the same id as was in the request
                         # to facilitate pairing.
 }
 
-enum OpenflowVersions {
+enum Versions {
   OPENFLOW_1_0 = 0x01,  # OpenFlow 1.0.
   OPENFLOW_1_1 = 0x02,  # OpenFlow 1.1.
   OPENFLOW_1_2 = 0x03,  # OpenFlow 1.2.
   OPENFLOW_1_3 = 0x04   # OpenFlow 1.3.
 }
 
-enum OpenflowConstants {
-  OFP_ETH_ALEN = 6,  # Bytes in an Ethernet address.
-  OFP_MAX_PORT_NAME_LEN = 16,
-  OFP_MAX_TABLE_NAME_LEN = 32
+enum Constants {
+  P_ETH_ALEN = 6,  # Bytes in an Ethernet address.
+  P_MAX_PORT_NAME_LEN = 16,
+  P_MAX_TABLE_NAME_LEN = 32
 }
 
 # OpenFlow V1 packet types.
-enum OpenflowType {
+enum Type {
   # Immutable messages.
-  OFPT_HELLO = 0,               # Symmetric message
-  OFPT_ERROR = 1,               # Symmetric message
-  OFPT_ECHO_REQUEST = 2,        # Symmetric message
-  OFPT_ECHO_REPLY = 3,          # Symmetric message
-  OFPT_VENDOR = 4,              # Symmetric message
+  PT_HELLO = 0,               # Symmetric message
+  PT_ERROR = 1,               # Symmetric message
+  PT_ECHO_REQUEST = 2,        # Symmetric message
+  PT_ECHO_REPLY = 3,          # Symmetric message
+  PT_VENDOR = 4,              # Symmetric message
 
   # Switch configuration messages.
-  OFPT_FEATURES_REQUEST = 5,    # Controller/switch message
-  OFPT_FEATURES_REPLY = 6,      # Controller/switch message
-  OFPT_GET_CONFIG_REQUEST = 7,  # Controller/switch message
-  OFPT_GET_CONFIG_REPLY = 8,    # Controller/switch message
-  OFPT_SET_CONFIG = 9           # Controller/switch message
+  PT_FEATURES_REQUEST = 5,    # Controller/switch message
+  PT_FEATURES_REPLY = 6,      # Controller/switch message
+  PT_GET_CONFIG_REQUEST = 7,  # Controller/switch message
+  PT_GET_CONFIG_REPLY = 8,    # Controller/switch message
+  PT_SET_CONFIG = 9           # Controller/switch message
 }
 
-@type_selector(type = OpenflowType.OFPT_HELLO)
-packet OpenflowHello(OpenflowHeader) {
+@type_selector(type = Type.PT_HELLO)
+packet Hello(Header) {
 }
 
 

@@ -1,0 +1,949 @@
+# Copyright (C) 2014, The Beehive project authors.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS  ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+# Implemented based on openflow.h version 1.2.
+# Author: Soheil Hassas Yeganeh <soheil@cs.toronto.edu>
+#
+# TODO(soheil): When we add support for 1.1, 1.3, and 1.4, we need to refactor
+# common, unchanged messages in openflow.packet. Note: After 1.1 most messages
+# are backward compatible. So, maybe we need to create an openflow1.1+ packet
+# definition.
+include <of.packet>;
+
+# OpenFlow port numbers. Physical ports start from 1.
+enum Ports {
+  PP_MAX = 0xffffff00,
+  PP_IN_PORT = 0xfffffff8,
+  PP_TABLE = 0xfffffff9,
+  PP_NORMAL = 0xfffffffa,
+  PP_FLOOD = 0xfffffffb,
+  PP_ALL = 0xfffffffc,
+  PP_CONTROLLER = 0xfffffffd,
+  PP_LOCAL = 0xfffffffe,
+  PP_ANY = 0xffffffff
+}
+
+enum Type {
+  # Asynchronous messages.
+  PT_PACKET_IN = 10,  # Async message.
+  PT_FLOW_REMOVED = 11,  # Async message.
+  PT_PORT_STATUS = 12,  # Async message.
+
+  # Controller command messages.
+  PT_PACKET_OUT = 13,  # Controller/switch message.
+  PT_FLOW_MOD = 14,  # Controller/switch message.
+  PT_GROUP_MOD = 15,  # Controller/switch message.
+  PT_PORT_MOD = 16,  # Controller/switch message.
+  PT_TABLE_MOD = 17,  # Controller/switch message.
+
+  # Statistics messages.
+  PT_STATS_REQUEST = 18,  # Controller/switch message.
+  PT_STATS_REPLY = 19,  # Controller/switch message.
+
+  # Barrier messages.
+  PT_BARRIER_REQUEST = 20,  # Controller/switch message.
+  PT_BARRIER_REPLY = 21,  # Controller/switch message.
+
+  # Queue Configuration messages.
+  PT_QUEUE_GET_CONFIG_REQUEST = 22,  # Controller/switch message.
+  PT_QUEUE_GET_CONFIG_REPLY = 23,  # Controller/switch message.
+
+  # Controller role change request messages.
+  PT_ROLE_REQUEST = 24,  # Controller/switch message.
+  PT_ROLE_REPLY = 25  # Controller/switch message.
+}
+
+@type_selector(version = of.Versions.OPENFLOW_1_2)
+packet Header12(of.Header) {
+}
+
+@type_selector(version = of.Versions.OPENFLOW_1_2)
+packet Hello(of.Hello) {
+}
+
+@type_selector(type = of.Type.PT_ECHO_REQUEST)
+packet EchoRequest(Header12) {
+}
+
+@type_selector(type = of.Type.PT_ECHO_REPLY)
+packet EchoReply(Header12) {
+}
+
+@type_selector(type = of.Type.PT_FEATURES_REQUEST)
+packet FeaturesRequest(Header12) {
+}
+
+# Get switch configuration.
+@type_selector(type = of.Type.PT_GET_CONFIG_REQUEST)
+packet GetConfigRequest(Header12) {
+}
+
+enum ConfigFlags {
+  # Handling of IP fragments.
+  PC_FRAG_NORMAL = 0,  # No special handling for fragments.
+  PC_FRAG_DROP = 1,    # Drop fragments.
+  PC_FRAG_REASM = 2,   # Reassemble (only if PC_IP_REASM set).
+  PC_FRAG_MASK = 3,
+
+  # TTL processing - applicable for IP and MPLS packets.
+  PC_INVALID_TTL_TO_CONTROLLER = 1 << 2
+}
+
+# Config request reply.
+@type_selector(type = of.Type.PT_GET_CONFIG_REPLY)
+packet SwitchGetConfigReply(Header12) {
+  uint16 flags;          # PC_* flags.
+  uint16 miss_send_len;  # Max bytes of new flow that datapath should
+                         # send to the controller.
+}
+
+# Set switch config.
+@type_selector(type = of.Type.PT_SET_CONFIG)
+packet SwitchSetConfig(Header12) {
+  uint16 flags;          # PC_* flags.
+  uint16 miss_send_len;  # Max bytes of new flow that datapath should
+                         # send to the controller.
+}
+
+# Capabilities supported by the datapath.
+enum Capabilities {
+  PC_FLOW_STATS = 1,      # Flow statistics.
+  PC_TABLE_STATS = 2,     # Table statistics.
+  PC_PORT_STATS = 4,      # Port statistics.
+  PC_STP = 8,             # 802.1d spanning tree.
+  PC_RESERVED = 16,       # Reserved, must be zero.
+  PC_IP_REASM = 32,       # Can reassemble IP fragments.
+  PC_QUEUE_STATS = 64,    # Queue statistics.
+  PC_ARP_MATCH_IP = 128   # Match IP addresses in ARP pkts.
+}
+
+# Flags to indicate behavior of the physical port. These flags are
+# used in OpenflowPort to describe the current configuration. They are
+# used in the ofp_port_mod message to configure the port's behavior.
+enum PortConfig {
+  PPC_PORT_DOWN = 1 << 0,
+  PPC_NO_RECV = 1 << 2,
+  PPC_NO_FWD = 1 << 5,
+  PPC_NO_PACKET_IN = 1 << 6
+}
+
+# Current state of the physical port.  These are not configurable from
+# the controller.
+enum PortState {
+  PPS_LINK_DOWN = 1 << 0,  # No physical link present.
+  PPS_BLOCKED = 1 << 1,  # Port is blocked.
+  PPS_LIVE = 1 << 2  # Live for fast failover group.
+}
+
+# Features of physical ports available in a datapath.
+enum PortFeatures {
+  PPF_10MB_HD = 1 << 0,  # 10 Mb half-duplex rate support.
+  PPF_10MB_FD = 1 << 1,  # 10 Mb full-duplex rate support.
+  PPF_100MB_HD = 1 << 2,  # 100 Mb half-duplex rate support.
+  PPF_100MB_FD = 1 << 3,  # 100 Mb full-duplex rate support.
+  PPF_1GB_HD = 1 << 4,  # 1 Gb half-duplex rate support.
+  PPF_1GB_FD = 1 << 5,  # 1 Gb full-duplex rate support.
+  PPF_10GB_FD = 1 << 6,  # 10 Gb full-duplex rate support.
+  PPF_40GB_FD = 1 << 7,  # 40 Gb full-duplex rate support.
+  PPF_100GB_FD = 1 << 8,  # 100 Gb full-duplex rate support.
+  PPF_1TB_FD = 1 << 9,  # 1 Tb full-duplex rate support.
+  PPF_OTHER = 1 << 10,  # Other rate, not in the list.
+
+  PPF_COPPER = 1 << 11,  # Copper medium.
+  PPF_FIBER = 1 << 12,  # Fiber medium.
+  PPF_AUTONEG = 1 << 13,  # Auto-negotiation.
+  PPF_PAUSE = 1 << 14,  # Pause.
+  PPF_PAUSE_ASYM = 1 << 15  # Asymmetric pause.
+}
+
+# Represents a switch port.
+@bigendian
+packet Port {
+  uint32 port_no;
+  @repeated(count = 4) uint8 pad;
+
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 hw_addr;
+  @repeated(count = 2) uint8 pad2;
+
+  @repeated(count = of.Constants.P_MAX_PORT_NAME_LEN)
+  char name;
+
+  uint32 config;
+  uint32 state;
+
+  uint32 curr;
+  uint32 advertised;
+  uint32 supported;
+  uint32 peer;
+
+  uint32 curr_speed;
+  uint32 max_speed;
+}
+
+@type_selector(type = of.Type.PT_FEATURES_REPLY)
+packet FeaturesReply(Header12) {
+  uint64 datapath_id;
+  uint32 n_buffers;
+
+  uint8 n_tables;
+  @repeated(count = 3) uint8 pad;
+
+  # Features.
+  uint32 capabilities;
+  uint32 actions;
+
+  # Port info.
+  @repeated Port ports;
+}
+
+# What changed about the physical port.
+enum PortReason {
+  PPR_ADD = 0,              # The port was added.
+  PPR_DELETE = 1,           # The port was removed.
+  PPR_MODIFY = 2            # Some attribute of the port has changed.
+}
+
+@type_selector(type = Type.PT_PORT_STATUS)
+packet PortStatus(Header12) {
+  uint8 reason;  # Set from OpenflowPortReason.
+  @repeated(count = 7) uint8 pad;
+  Port desc;
+}
+
+# Modify behavior of the physical port.
+@type_selector(type = Type.PT_PORT_MOD)
+packet PortMod(Header12) {
+  uint16 port_no;
+  @repeated(count = 6) uint8 hw_addr;  # The hardware address is not
+                                    # configurable.  This is used to
+                                    # sanity-check the request, so it must
+                                    # be the same as returned in an
+                                    # OpenflowPort packet.
+  uint32 config;  # Bitmap of.PPC_* flags.
+  uint32 mask;  # Bitmap of.PPC_* flags to be changed.
+
+  uint32 advertise;  # Bitmap of "OpenflowPortFeatures"s.  Zero all
+                     # bits to prevent any action taking place.
+  @repeated(count = 4) uint8 pad;  # Pad to 64-bits.
+}
+
+# Why is this packet being sent to the controller?
+enum PacketInReason {
+  PR_NO_MATCH = 0,          # No matching flow.
+  PR_ACTION = 1             # Action explicitly output to controller.
+}
+
+# Packet received on port (datapath -> controller).
+@type_selector(type = Type.PT_PACKET_IN)
+packet PacketIn(Header12) {
+  uint32 buffer_id;     # ID assigned by datapath.
+  uint16 total_len;     # Full length of frame.
+  uint16 in_port;       # Port on which frame was received.
+  uint8 reason;         # Reason packet is being sent (one of.PR_*)
+  uint8 pad;
+
+  @repeated
+  uint8 data;           # Ethernet frame, halfway through 32-bit word,
+                        # so the IP header is 32-bit aligned.  The
+                        # amount of data is inferred from the length
+                        # field in the header.  Because of padding,
+                        # offsetof(packet PacketIn, data) ==
+                        # sizeof(packet PacketIn) - 2.
+}
+
+enum ActionType {
+  PAT_OUTPUT = 0,
+  PAT_COPY_TTL_OUT = 11,
+  PAT_COPY_TTL_IN  = 12,
+  PAT_SET_MPLS_TTL = 15,
+  PAT_DEC_MPLS_TTL = 16,
+  PAT_PUSH_VLAN = 17,
+  PAT_POP_VLAN = 18,
+  PAT_PUSH_MPLS = 19,
+  PAT_POP_MPLS = 20,
+  PAT_SET_QUEUE = 21,
+  PAT_GROUP = 22,
+  PAT_SET_NW_TTL = 23,
+  PAT_DEC_NW_TTL = 24,
+  PAT_SET_FIELD = 25,
+
+  PAT_EXPERIMENTER = 0xffff
+}
+
+# Action header that is common to all actions.  The length includes the
+# header and any padding used to make the action 64-bit aligned.
+# NB: The length of an action *must* always be a multiple of eight.
+@bigendian
+packet Action {
+  uint16 type;  # One of.PAT_*.
+  @size
+  uint16 len;   # Length of action, including this
+                # header.  This is the length of action,
+                # including any padding to make it
+                # 64-bit aligned.
+}
+
+# Action packeture for PAT_OUTPUT, which sends packets out 'port'.
+# When the 'port' is the PP_CONTROLLER, 'max_len' indicates the max
+# number of bytes to send.  A 'max_len' of zero means no bytes of the
+# packet should be sent.
+@type_selector(type = ActionType.PAT_OUTPUT)
+packet ActionOutput(Action) {
+  uint32 port;     # Output port.
+  uint16 max_len;  # Max length to send to controller.
+  @repeated(count = 6) uint8 pad;
+}
+
+enum InstructionType {
+  PIT_GOTO_TABLE = 1,
+  PIT_WRITE_METADATA = 2,
+  PIT_WRITE_ACTIONS = 3,
+  PIT_APPLY_ACTIONS = 4,
+  PIT_CLEAR_ACTIONS = 5,
+  PIT_EXPERIMENTER = 0xFFFF
+}
+
+@bigendian
+packet Instruction {
+  uint16 type;
+  @size uint16 len;
+}
+
+@type_selector(type = InstructionType.PIT_APPLY_ACTIONS)
+packet ApplyActions(Instruction) {
+  @repeated(count = 4) uint8 pad;
+  @repeated Action actions;
+}
+
+enum Buffers {
+  P_NO_BUFFER=0xffffffff
+}
+
+# Send packet (controller -> datapath).
+@type_selector(type = Type.PT_PACKET_OUT)
+packet PacketOut(Header12) {
+  uint32 buffer_id;           # ID assigned by datapath (-1 if none).
+  uint32 in_port;             # Packet's input port (PP_NONE if none).
+  @size(actions)
+  uint16 actions_len;         # Size of action array in bytes.
+  @repeated(count = 6) uint8 pad;
+  @repeated
+  Action actions;
+  @repeated uint8 data;        # Packet data.  The length is inferred
+                               # from the length field in the header.
+                               # (Only meaningful if buffer_id == -1.)
+}
+
+enum FlowModCommand {
+  PFC_ADD = 0,              # New flow.
+  PFC_MODIFY = 1,           # Modify all matching flows.
+  PFC_MODIFY_STRICT = 2,    # Modify entry strictly matching wildcards
+  PFC_DELETE = 3,           # Delete all matching flows.
+  PFC_DELETE_STRICT = 4     # Strictly match wildcards and priority.
+}
+
+# Flow wildcards.
+enum FlowWildcards {
+  PFW_IN_PORT  = 1 << 0,  # Switch input port.
+  PFW_DL_VLAN  = 1 << 1,  # VLAN id.
+  PFW_DL_SRC   = 1 << 2,  # Ethernet source address.
+  PFW_DL_DST   = 1 << 3,  # Ethernet destination address.
+  PFW_DL_TYPE  = 1 << 4,  # Ethernet frame type.
+  PFW_NW_PROTO = 1 << 5,  # IP protocol.
+  PFW_TP_SRC   = 1 << 6,  # TCP/UDP source port.
+  PFW_TP_DST   = 1 << 7,  # TCP/UDP destination port.
+
+  # IP source address wildcard bit count.  0 is exact match, 1 ignores the
+  #  LSB, 2 ignores the 2 least-significant bits, ..., 32 and higher wildcard
+  #  the entire field.  This is the *opposite* of the usual convention where
+  # e.g. /24 indicates that 8 bits (not 24 bits) are wildcarded.
+  PFW_NW_SRC_SHIFT = 8,
+  PFW_NW_SRC_BITS = (6 - 1),
+  PFW_NW_SRC_MASK = ((1  << FlowWildcards.PFW_NW_SRC_BITS) - 1) <<
+      FlowWildcards.PFW_NW_SRC_SHIFT,
+  PFW_NW_SRC_ALL = 32  << FlowWildcards.PFW_NW_SRC_SHIFT,
+
+  # IP destination address wildcard bit count.  Same format as source.
+  PFW_NW_DST_SHIFT = 14,
+  PFW_NW_DST_BITS = 6,
+  PFW_NW_DST_MASK = ((1  << FlowWildcards.PFW_NW_DST_BITS) - 1) <<
+      FlowWildcards.PFW_NW_DST_SHIFT,
+  PFW_NW_DST_ALL = 32  << FlowWildcards.PFW_NW_DST_SHIFT,
+
+  PFW_DL_VLAN_PCP = 1 << 20,  # VLAN priority.
+  PFW_NW_TOS = 1 << 21,  # IP ToS (DSCP field, 6 bits).
+
+  # Wildcard all fields.
+  PFW_ALL = ((1 << 22) - 1)
+}
+
+enum MatchType {
+  PMT_STANDARD = 0,
+  PMT_OXM = 1
+}
+
+enum OxmClass {
+  PXMC_NXM_0 = 0x0000,
+  PXMC_NXM_1 = 0x0001,
+  PXMC_OPENFLOW_BASIC = 0x8000,
+  PXMC_EXPERIMENTER = 0xFFFF
+}
+
+enum OxmMatchFields {
+  PXMT_B_IN_PORT = 0,  # Switch input port.
+  PXMT_B_IN_PHY_PORT = 1 << 1,  # Switch physical input port.
+
+  PXMT_B_METADATA = 2 << 1,  # Metadata passed between tables.
+
+  PXMT_B_ETH_DST = 3 << 1,  # Ethernet destination address.
+  PXMT_B_ETH_DST_MASKED = (3 << 1) + 1,
+
+  PXMT_B_ETH_SRC = 4 << 1,  # Ethernet source address.
+  PXMT_B_ETH_SRC_MASKED = (4 << 1) + 1,
+
+  PXMT_B_ETH_TYPE = 5 << 1,  # Ethernet frame type.
+
+  PXMT_B_VLAN_VID = 6 << 1,  # VLAN id.
+  PXMT_B_VLAN_PCP = 7 << 1,  # VLAN priority.
+  PXMT_B_IP_DSCP = 8 << 1,  # IP DSCP (6 bits in ToS field).
+  PXMT_B_IP_ECN = 9 << 1,  # IP ECN (2 bits in ToS field).
+  PXMT_B_IP_PROTO = 10 << 1,  # IP protocol.
+
+  PXMT_B_IPV4_SRC = 11 << 1,  # IPv4 source address.
+  PXMT_B_IPV4_SRC_MASKED = (11 << 1) + 1,
+
+  PXMT_B_IPV4_DST = 12 << 1,  # IPv4 destination address.
+  PXMT_B_IPV4_DST_MASKED = (12 << 1) + 1,
+
+  PXMT_B_TCP_SRC = 13 << 1,  # TCP source port.
+  PXMT_B_TCP_DST = 14 << 1,  # TCP destination port.
+  PXMT_B_UDP_SRC = 15 << 1,  # UDP source port.
+  PXMT_B_UDP_DST = 16 << 1,  # UDP destination port.
+  PXMT_B_SCTP_SRC = 17 << 1,  # SCTP source port.
+  PXMT_B_SCTP_DST = 18 << 1,  # SCTP destination port.
+  PXMT_B_ICMPV4_TYPE = 19 << 1,  # ICMP type.
+  PXMT_B_ICMPV4_CODE = 20 << 1,  # ICMP code.
+  PXMT_B_ARP_OP = 21 << 1,  # ARP opcode.
+  PXMT_B_ARP_SPA = 22 << 1,  # ARP source IPv4 address.
+  PXMT_B_ARP_TPA = 23 << 1,  # ARP target IPv4 address.
+  PXMT_B_ARP_SHA = 24 << 1,  # ARP source hardware address.
+  PXMT_B_ARP_THA = 25 << 1,  # ARP target hardware address.
+  PXMT_B_IPV6_SRC = 26 << 1,  # IPv6 source address.
+  PXMT_B_IPV6_DST = 27 << 1,  # IPv6 destination address.
+  PXMT_B_IPV6_FLABEL = 28 << 1,  # IPv6 Flow Label
+  PXMT_B_ICMPV6_TYPE = 29 << 1,  # ICMPv6 type.
+  PXMT_B_ICMPV6_CODE = 30 << 1,  # ICMPv6 code.
+  PXMT_B_IPV6_ND_TARGET = 31 << 1,  # Target address for ND.
+  PXMT_B_IPV6_ND_SLL = 32 << 1,  # Source link-layer for ND.
+  PXMT_B_IPV6_ND_TLL = 33 << 1,  # Target link-layer for ND.
+  PXMT_B_MPLS_LABEL = 34 << 1,  # MPLS label.
+  PXMT_B_MPLS_TC = 35 << 1  # MPLS TC.
+}
+
+@bigendian
+packet OxmField {
+  uint16 oxm_class;
+  uint8 oxm_field;
+  uint8 oxm_length;
+}
+
+@type_selector(oxm_class = OxmClass.PXMC_OPENFLOW_BASIC,
+               oxm_field = OxmMatchFields.PXMT_B_IN_PORT,
+               oxm_length = 4)
+packet OxmInPort(OxmField) {
+  uint32 in_port;
+}
+
+@type_selector(oxm_class = OxmClass.PXMC_OPENFLOW_BASIC,
+               oxm_field = OxmMatchFields.PXMT_B_ETH_DST,
+               oxm_length = 6)
+packet OxmEthDst(OxmField) {
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mac_addr;
+}
+
+@type_selector(oxm_class = OxmClass.PXMC_OPENFLOW_BASIC,
+               oxm_field = OxmMatchFields.PXMT_B_ETH_DST_MASKED,
+               oxm_length = 12)
+packet OxmEthDstMasked(OxmField) {
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mac_addr;
+
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mask;
+}
+
+@type_selector(oxm_class = OxmClass.PXMC_OPENFLOW_BASIC,
+               oxm_field = OxmMatchFields.PXMT_B_ETH_SRC,
+               oxm_length = 6)
+packet OxmEthSrc(OxmField) {
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mac_addr;
+}
+
+@type_selector(oxm_class = OxmClass.PXMC_OPENFLOW_BASIC,
+               oxm_field = OxmMatchFields.PXMT_B_ETH_SRC_MASKED,
+               oxm_length = 12)
+packet OxmEthSrcMasked(OxmField) {
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mac_addr;
+
+  @repeated(count = of.Constants.P_ETH_ALEN)
+  uint8 mask;
+}
+
+# Fields to match against flows
+@bigendian
+@padded(multiple = 8, excluded = 1)
+packet Match {
+  uint16 type;
+  @size uint16 length;
+  @repeated OxmField oxm_fields;
+}
+
+enum FlowModFlags {
+  PFF_SEND_FLOW_REM = 1 << 0,  # Send flow removed message when flow
+                                 # expires or is deleted.
+  PFF_CHECK_OVERLAP = 1 << 1,  # Check for overlapping entries first.
+  PFF_EMERG         = 1 << 2   # Remark this is for emergency.
+}
+
+# Flow setup and teardown (controller -> datapath).
+@type_selector(type = Type.PT_FLOW_MOD)
+packet FlowMod(Header12) {
+  uint64 cookie;
+  uint64 cookie_mask;
+
+  uint8 table_id;
+  uint8 command;
+  uint16 idle_timeout;
+  uint16 hard_timeout;
+  uint16 priority;
+  uint32 buffer_id;
+  uint32 out_port;
+  uint32 out_group;
+  uint16 flags;
+
+  @repeated(count = 2) uint8 pad;
+
+  Match match;
+  @repeated
+  Instruction instructions;
+}
+
+# Why was this flow removed?
+enum FlowRemovedReason {
+  PRR_IDLE_TIMEOUT = 0,         # Flow idle time exceeded idle_timeout.
+  PRR_HARD_TIMEOUT = 1,         # Time exceeded hard_timeout.
+  PRR_DELETE = 2                # Evicted by a DELETE flow mod.
+}
+
+# Flow removed (datapath -> controller).
+@type_selector(type = Type.PT_FLOW_REMOVED)
+packet FlowRemoved(Header12) {
+  Match match;    # Description of fields.
+  uint64 cookie;          # Opaque controller-issued identifier.
+
+  uint16 priority;        # Priority level of flow entry.
+  uint8 reason;           # One of.PRR_*.
+  @repeated(count = 1)
+  uint8 pad;              # Align to 32-bits.
+
+  uint32 duration_sec;    # Time flow was alive in seconds.
+  uint32 duration_nsec;   # Time flow was alive in nanoseconds beyond
+                          # duration_sec.
+  uint16 idle_timeout;    # Idle timeout from original flow mod.
+  @repeated(count = 2)
+  uint8 pad2;             # Align to 64-bits.
+  uint64 packet_count;
+  uint64 byte_count;
+}
+
+# Values for 'type' in OpenflowErrorMessage.  These values are immutable: they
+# will not change in future versions of the protocol (although new values may
+# be added).
+enum ErrorType {
+  PET_HELLO_FAILED = 0,         # Hello protocol failed.
+  PET_BAD_REQUEST = 1,          # Request was not understood.
+  PET_BAD_ACTION = 2,           # Error in action description.
+  PET_FLOW_MOD_FAILED = 3,      # Problem modifying flow entry.
+  PET_PORT_MOD_FAILED = 4,      # Port mod request failed.
+  PET_QUEUE_OP_FAILED = 5       # Queue operation failed.
+}
+
+# OpenflowErrorMsg 'code' values for PET_HELLO_FAILED.  'data' contains an
+# ASCII text string that may give failure details.
+enum HelloFailedCode {
+  PHFC_INCOMPATIBLE = 0,        # No compatible version.
+  PHFC_EPERM = 1                # Permissions error.
+}
+
+# OpenflowErrorMsg 'code' values for PET_BAD_REQUEST.  'data' contains at least
+# the first 64 bytes of the failed request.
+enum BadRequestCode {
+  PBRC_BAD_VERSION = 0,         # ofp_header.version not supported.
+  PBRC_BAD_TYPE = 1,            # ofp_header.type not supported.
+  PBRC_BAD_STAT = 2,            # OpenflowStatsRequest.type not supported.
+  PBRC_BAD_VENDOR = 3,          # Vendor not supported (in OpenflowVendorHeader
+                                  # or OpenflowStatsRequest or OpenflowStatsReply).
+  PBRC_BAD_SUBTYPE = 4,         # Vendor subtype not supported.
+  PBRC_EPERM = 5,               # Permissions error.
+  PBRC_BAD_LEN = 6,             # Wrong request length for type.
+  PBRC_BUFFER_EMPTY = 7,        # Specified buffer has already been used.
+  PBRC_BUFFER_UNKNOWN = 8       # Specified buffer does not exist.
+}
+
+# OpenflowErrorMsg 'code' values for PET_BAD_ACTION.  'data' contains at least
+# the first 64 bytes of the failed request.
+enum BadActionCode {
+  PBAC_BAD_TYPE = 0,           # Unknown action type.
+  PBAC_BAD_LEN = 1,            # Length problem in actions.
+  PBAC_BAD_VENDOR = 2,         # Unknown vendor id specified.
+  PBAC_BAD_VENDOR_TYPE = 3,    # Unknown action type for vendor id.
+  PBAC_BAD_OUT_PORT = 4,       # Problem validating output action.
+  PBAC_BAD_ARGUMENT = 5,       # Bad action argument.
+  PBAC_EPERM = 6,              # Permissions error.
+  PBAC_TOO_MANY = 7,           # Can't handle this many actions.
+  PBAC_BAD_QUEUE = 8           # Problem validating output queue.
+}
+
+# OpenflowErrorMsg 'code' values for PET_FLOW_MOD_FAILED.  'data' contains
+# at least the first 64 bytes of the failed request.
+enum Flow_modFailedCode {
+  PFMFC_ALL_TABLES_FULL = 0,    # Flow not added because of full tables.
+  PFMFC_OVERLAP = 1,            # Attempted to add overlapping flow with
+                                  # CHECK_OVERLAP flag set.
+  PFMFC_EPERM = 2,              # Permissions error.
+  PFMFC_BAD_EMERG_TIMEOUT = 3,  # Flow not added because of non-zero idle/hard
+                                  # timeout.
+  PFMFC_BAD_COMMAND = 4,        # Unknown command.
+  PFMFC_UNSUPPORTED = 5         # Unsupported action list - cannot process in
+                                  # the order specified.
+}
+
+# OpenflowErrorMsg 'code' values for PET_PORT_MOD_FAILED.  'data' contains
+# at least the first 64 bytes of the failed request.
+enum Port_modFailedCode {
+  PPMFC_BAD_PORT = 0,            # Specified port does not exist.
+  PPMFC_BAD_HW_ADDR = 1          # Specified hardware address is wrong.
+}
+
+# ofp_error msg 'code' values for PET_QUEUE_OP_FAILED. 'data' contains
+# at least the first 64 bytes of the failed request
+enum QueueOpFailedCode {
+  PQC_BAD_PORT = 0,           # Invalid port (or port does not exist).
+  PQC_BAD_QUEUE = 1,          # Queue does not exist.
+  PQC_EPERM = 2               # Permissions error.
+}
+
+# PT_ERROR: Error message (datapath -> controller).
+@type_selector(type = of.Type.PT_ERROR)
+packet ErrorMsg(Header12) {
+  uint16 err_type;
+  uint16 code;
+  @repeated
+  uint8 data;  # Variable-length data.  Interpreted based
+               # on the type and code.
+}
+
+enum StatsTypes {
+  # Description of this OpenFlow switch.
+  # The request body is empty.
+  # The reply body is packet DescStats.
+  PST_DESC = 0,
+
+  # Individual flow statistics.
+  # The request body is packet FlowStatsRequest.
+  # The reply body is an array of packet FlowStats.
+  PST_FLOW = 1,
+
+  # Aggregate flow statistics.
+  # The request body is packet AggregateStatsRequest.
+  # The reply body is packet AggregateStatsReply.
+  PST_AGGREGATE = 2,
+
+  # Flow table statistics.
+  # The request body is empty.
+  # The reply body is an array of packet TableStats.
+  PST_TABLE = 3,
+
+  # Physical port statistics.
+  # The request body is packet PortStatsRequest.
+  # The reply body is an array of packet PortStats.
+  PST_PORT = 4,
+
+  # Queue statistics for a port
+  # The request body defines the port
+  # The reply body is an array of packet QueueStats
+  PST_QUEUE = 5,
+
+  # Vendor extension.
+  # The request and reply bodies begin with a 32-bit vendor ID, which takes
+  # the same form as in "packet VendorHeader".  The request and reply
+  # bodies are otherwise vendor-defined.
+  PST_VENDOR = 0xffff
+}
+
+@type_selector(type = Type.PT_STATS_REQUEST)
+packet StatsRequest(Header12) {
+  uint16 stats_type;        # One of the PST_* constants.
+  uint16 flags;             # PSF_REQ_* flags (none yet defined).
+}
+
+enum StatsReplyFlags {
+  PSF_REPLY_MORE  = 1 << 0  # More replies to follow.
+}
+
+@type_selector(type = Type.PT_STATS_REPLY)
+packet StatsReply(Header12) {
+  uint16 stats_type;  # One of the PST_* constants.
+  uint16 flags;       # PSF_REPLY_* flags.
+}
+
+enum DescStatsConstants {
+  SERIAL_NUM_LEN = 32,
+  DESC_STR_LEN = 256
+}
+
+#define DESC_STR_LEN   256
+#define SERIAL_NUM_LEN 32
+# Body of reply to PST_DESC request.  Each entry is a NULL-terminated
+# ASCII string.
+@type_selector(stats_type = StatsTypes.PST_DESC)
+packet DescStats(StatsReply) {
+  @repeated(count = DescStatsConstants.DESC_STR_LEN)
+  char mfr_desc;  # Manufacturer description.
+  @repeated(count = DescStatsConstants.DESC_STR_LEN)
+  char hw_desc;  # Hardware description.
+  @repeated(count = DescStatsConstants.DESC_STR_LEN)
+  char sw_desc;  # Software description.
+  @repeated(count = DescStatsConstants.SERIAL_NUM_LEN)
+  char serial_num;   # Serial number.
+  @repeated(count = DescStatsConstants.DESC_STR_LEN)
+  char dp_desc;  # Human readable description of datapath.
+}
+
+# Body for OpenflowStatsRequest of type PST_FLOW.
+@type_selector(stats_type = StatsTypes.PST_FLOW)
+packet FlowStatsRequest(StatsRequest) {
+  Match match;  # Fields to match.
+  uint8 table_id;       # ID of table to read (from OpenflowTableStats),
+                        # 0xff for all tables or 0xfe for emergency.
+  uint8 pad;            # Align to 32 bits.
+  uint16 out_port;      # Require matching entries to include this
+                        # as an output port.  A value of.PP_NONE
+                        # indicates no restriction.
+}
+
+# The Openflow flow stats.
+@bigendian
+packet FlowStats {
+  @size
+  uint16 length;          # Length of this entry.
+  uint8 table_id;         # ID of table flow came from.
+  uint8 pad;
+  Match match;    # Description of fields.
+  uint32 duration_sec;    # Time flow has been alive in seconds.
+  uint32 duration_nsec;   # Time flow has been alive in nanoseconds beyond
+                          # duration_sec.
+  uint16 priority;        # Priority of the entry. Only meaningful
+                          # when this is not an exact-match entry.
+  uint16 idle_timeout;    # Number of seconds idle before expiration.
+  uint16 hard_timeout;    # Number of seconds before expiration.
+  @repeated(count = 6)
+  uint8 pad2;             # Align to 64-bits.
+  uint64 cookie;          # Opaque controller-issued identifier.
+  uint64 packet_count;    # Number of packets in flow.
+  uint64 byte_count;      # Number of bytes in flow.
+
+  @repeated
+  Action actions; # Actions.
+}
+
+# Body of reply to PST_FLOW request.
+@type_selector(stats_type = StatsTypes.PST_FLOW)
+packet FlowStatsReply(StatsReply) {
+  @repeated
+  FlowStats flow_stats;
+}
+
+# Body for OpenflowStatsRequest of type PST_AGGREGATE.
+@type_selector(stats_type = StatsTypes.PST_AGGREGATE)
+packet AggregateStatsRequest(StatsRequest) {
+  Match match;    # Fields to match.
+  uint8 table_id;         # ID of table to read (from OpenflowTableStats)
+                          # 0xff for all tables or 0xfe for emergency.
+  uint8 pad;              # Align to 32 bits.
+  uint16 out_port;        # Require matching entries to include this
+                          # as an output port.  A value of.PP_NONE
+                          # indicates no restriction.
+}
+
+# Body of reply to PST_AGGREGATE request.
+@type_selector(stats_type = StatsTypes.PST_AGGREGATE)
+packet AggregateStatsReply(StatsReply) {
+  uint64 packet_count;    # Number of packets in flows.
+  uint64 byte_count;      # Number of bytes in flows.
+  uint32 flow_count;      # Number of flows.
+  @repeated(count = 4)
+  uint8 pad;              # Align to 64 bits.
+}
+
+# Body of reply to PST_TABLE request.
+@type_selector(stats_type = StatsTypes.PST_TABLE)
+packet TableStats(StatsReply) {
+  uint8 table_id;        # Identifier of table.  Lower numbered tables
+                         # are consulted first.
+  @repeated(count = 3)
+  uint8 pad;             # Align to 32-bits.
+  @repeated(count = of.Constants.P_MAX_TABLE_NAME_LEN)
+  char name;
+  uint32 wildcards;      # Bitmap of.PFW_* wildcards that are
+                         # supported by the table.
+  uint32 max_entries;    # Max number of entries supported.
+  uint32 active_count;   # Number of active entries.
+  uint64 lookup_count;   # Number of packets looked up in table.
+  uint64 matched_count;  # Number of packets that hit table.
+}
+
+# Body for OpenflowStatsRequest of type PST_PORT.
+@type_selector(stats_type = StatsTypes.PST_PORT)
+packet PortStatsRequest(StatsRequest) {
+  uint16 port_no;        # PST_PORT message must request statistics
+                         # either for a single port (specified in
+                         # port_no) or for all ports (if port_no ==
+                         # PP_NONE).
+  @repeated(count = 6)
+  uint8 pad;
+}
+
+# Body of reply to PST_PORT request. If a counter is unsupported, set
+# the field to all ones.
+@type_selector(stats_type = StatsTypes.PST_PORT)
+packet PortStats(StatsReply) {
+  uint16 port_no;
+  @repeated(count = 6)
+  uint8 pad;             # Align to 64-bits.
+  uint64 rx_packets;     # Number of received packets.
+  uint64 tx_packets;     # Number of transmitted packets.
+  uint64 rx_bytes;       # Number of received bytes.
+  uint64 tx_bytes;       # Number of transmitted bytes.
+  uint64 rx_dropped;     # Number of packets dropped by RX.
+  uint64 tx_dropped;     # Number of packets dropped by TX.
+  uint64 rx_errors;      # Number of receive errors.  This is a super-set
+                         # of more specific receive errors and should be
+                         # greater than or equal to the sum of all
+                         # rx_*_err values.
+  uint64 tx_errors;      # Number of transmit errors.  This is a super-set
+                         # of more specific transmit errors and should be
+                         # greater than or equal to the sum of all
+                         # tx_*_err values (none currently defined.)
+  uint64 rx_frame_err;   # Number of frame alignment errors.
+  uint64 rx_over_err;    # Number of packets with RX overrun.
+  uint64 rx_crc_err;     # Number of CRC errors.
+  uint64 collisions;     # Number of collisions.
+}
+
+# Vendor extension.
+@type_selector(type = of.Type.PT_VENDOR)
+packet VendorHeader(Header12) {
+  uint32 vendor;  # Vendor ID:
+                  # - MSB 0: low-order bytes are IEEE OUI.
+                  # - MSB != 0: defined by OpenFlow
+                  #   consortium.
+  # Vendor-defined arbitrary additional data.
+}
+
+# All ones is used to indicate all queues in a port (for stats retrieval).
+#define PQ_ALL      0xffffffff
+
+# Min rate > 1000 means not configured.
+#define PQ_MIN_RATE_UNCFG      0xffff
+
+enum QueueProperties {
+  PQT_NONE = 0,       # No property defined for queue (default).
+  PQT_MIN_RATE = 1    # Minimum datarate guaranteed.
+                        # Other types should be added here
+                        # (i.e. max rate, precedence, etc).
+}
+
+# Common description for a queue.
+@bigendian
+packet QueuePropHeader {
+  uint16 property;    # One of.PQT_.
+  @size
+  uint16 len;         # Length of property, including this header.
+  @repeated(count = 4)
+  uint8 pad;          # 64-bit alignemnt.
+}
+
+# Min-Rate queue property description.
+@type_selector(property = QueueProperties.PQT_MIN_RATE)
+packet QueuePropMinRate(QueuePropHeader) {
+  uint16 rate;        # In 1/10 of a percent; >1000 -> disabled.
+  @repeated(count = 6)
+  uint8 pad;          # 64-bit alignment
+}
+
+# Full description for a queue.
+@bigendian
+packet PacketQueue {
+  uint32 queue_id;     # id for the specific queue.
+  @size
+  uint16 len;          # Length in bytes of this queue desc.
+  @repeated(count = 2)
+  uint8 pad;        # 64-bit alignment.
+  @repeated
+  QueuePropHeader properties; # List of properties.
+}
+
+# Query for port queue configuration.
+@type_selector(type = Type.PT_QUEUE_GET_CONFIG_REPLY)
+packet QueueGetConfigRequest(Header12) {
+  uint16 port;  # Port to be queried. Should refer
+                # to a valid physical port (i.e. < PP_MAX)
+  @repeated
+  uint8 pad;    # 32-bit alignment.
+}
+
+# Queue configuration for a given port.
+@type_selector(type = Type.PT_QUEUE_GET_CONFIG_REPLY)
+packet QueueGetConfigReply(Header12) {
+  uint16 port;
+  @repeated(count = 6)
+  uint8 pad;
+  @repeated
+  PacketQueue queues; # List of configured queues.
+}
+
+@type_selector(stats_type = StatsTypes.PST_QUEUE)
+packet QueueStatsRequest(StatsRequest) {
+  uint16 port_no;        # All ports if PT_ALL.
+  @repeated(count = 2)
+  uint8 pad;             # Align to 32-bits.
+  uint32 queue_id;       # All queues if PQ_ALL.
+}
+
+@type_selector(stats_type = StatsTypes.PST_QUEUE)
+packet QueueStats(StatsReply) {
+  uint16 port_no;
+  @repeated(count = 2)
+  uint8 pad;             # Align to 32-bits.
+  uint32 queue_id;       # Queue i.d
+  uint64 tx_bytes;       # Number of transmitted bytes.
+  uint64 tx_packets;     # Number of transmitted packets.
+  uint64 tx_errors;      # Number of packets dropped due to overrun.
+}
+
