@@ -2,10335 +2,10354 @@
 package openflowv12
 
 import (
-  "encoding/binary"
-  "errors"
-  "fmt"
-  "net"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"net"
 
-  "github.com/packet/packet/src/go/packet"
+	"github.com/packet/packet/src/go/packet"
 
-  "github.com/soheilhy/beehive/openflow/openflow"
+	"github.com/soheilhy/beehive/openflow/openflow"
 )
 
 type OpenflowPorts int
 
 const (
-  OFPP_MAX OpenflowPorts = 4294967040
-  OFPP_IN_PORT OpenflowPorts = 4294967288
-  OFPP_TABLE OpenflowPorts = 4294967289
-  OFPP_NORMAL OpenflowPorts = 4294967290
-  OFPP_FLOOD OpenflowPorts = 4294967291
-  OFPP_ALL OpenflowPorts = 4294967292
-  OFPP_CONTROLLER OpenflowPorts = 4294967293
-  OFPP_LOCAL OpenflowPorts = 4294967294
-  OFPP_ANY OpenflowPorts = 4294967295
+	OFPP_MAX        OpenflowPorts = 4294967040
+	OFPP_IN_PORT    OpenflowPorts = 4294967288
+	OFPP_TABLE      OpenflowPorts = 4294967289
+	OFPP_NORMAL     OpenflowPorts = 4294967290
+	OFPP_FLOOD      OpenflowPorts = 4294967291
+	OFPP_ALL        OpenflowPorts = 4294967292
+	OFPP_CONTROLLER OpenflowPorts = 4294967293
+	OFPP_LOCAL      OpenflowPorts = 4294967294
+	OFPP_ANY        OpenflowPorts = 4294967295
 )
 
 type Openflow12Type int
 
 const (
-  OFPT_PACKET_IN Openflow12Type = 10
-  OFPT_FLOW_REMOVED Openflow12Type = 11
-  OFPT_PORT_STATUS Openflow12Type = 12
-  OFPT_PACKET_OUT Openflow12Type = 13
-  OFPT_FLOW_MOD Openflow12Type = 14
-  OFPT_GROUP_MOD Openflow12Type = 15
-  OFPT_PORT_MOD Openflow12Type = 16
-  OFPT_TABLE_MOD Openflow12Type = 17
-  OFPT_STATS_REQUEST Openflow12Type = 18
-  OFPT_STATS_REPLY Openflow12Type = 19
-  OFPT_BARRIER_REQUEST Openflow12Type = 20
-  OFPT_BARRIER_REPLY Openflow12Type = 21
-  OFPT_QUEUE_GET_CONFIG_REQUEST Openflow12Type = 22
-  OFPT_QUEUE_GET_CONFIG_REPLY Openflow12Type = 23
-  OFPT_ROLE_REQUEST Openflow12Type = 24
-  OFPT_ROLE_REPLY Openflow12Type = 25
+	OFPT_PACKET_IN                Openflow12Type = 10
+	OFPT_FLOW_REMOVED             Openflow12Type = 11
+	OFPT_PORT_STATUS              Openflow12Type = 12
+	OFPT_PACKET_OUT               Openflow12Type = 13
+	OFPT_FLOW_MOD                 Openflow12Type = 14
+	OFPT_GROUP_MOD                Openflow12Type = 15
+	OFPT_PORT_MOD                 Openflow12Type = 16
+	OFPT_TABLE_MOD                Openflow12Type = 17
+	OFPT_STATS_REQUEST            Openflow12Type = 18
+	OFPT_STATS_REPLY              Openflow12Type = 19
+	OFPT_BARRIER_REQUEST          Openflow12Type = 20
+	OFPT_BARRIER_REPLY            Openflow12Type = 21
+	OFPT_QUEUE_GET_CONFIG_REQUEST Openflow12Type = 22
+	OFPT_QUEUE_GET_CONFIG_REPLY   Openflow12Type = 23
+	OFPT_ROLE_REQUEST             Openflow12Type = 24
+	OFPT_ROLE_REPLY               Openflow12Type = 25
 )
 
 type OpenflowConfigFlags int
 
 const (
-  OFPC_FRAG_NORMAL OpenflowConfigFlags = 0
-  OFPC_FRAG_DROP OpenflowConfigFlags = 1
-  OFPC_FRAG_REASM OpenflowConfigFlags = 2
-  OFPC_FRAG_MASK OpenflowConfigFlags = 3
-  OFPC_INVALID_TTL_TO_CONTROLLER OpenflowConfigFlags = 4
+	OFPC_FRAG_NORMAL               OpenflowConfigFlags = 0
+	OFPC_FRAG_DROP                 OpenflowConfigFlags = 1
+	OFPC_FRAG_REASM                OpenflowConfigFlags = 2
+	OFPC_FRAG_MASK                 OpenflowConfigFlags = 3
+	OFPC_INVALID_TTL_TO_CONTROLLER OpenflowConfigFlags = 4
 )
 
 type OpenflowCapabilities int
 
 const (
-  OFPC_FLOW_STATS OpenflowCapabilities = 1
-  OFPC_TABLE_STATS OpenflowCapabilities = 2
-  OFPC_PORT_STATS OpenflowCapabilities = 4
-  OFPC_STP OpenflowCapabilities = 8
-  OFPC_RESERVED OpenflowCapabilities = 16
-  OFPC_IP_REASM OpenflowCapabilities = 32
-  OFPC_QUEUE_STATS OpenflowCapabilities = 64
-  OFPC_ARP_MATCH_IP OpenflowCapabilities = 128
+	OFPC_FLOW_STATS   OpenflowCapabilities = 1
+	OFPC_TABLE_STATS  OpenflowCapabilities = 2
+	OFPC_PORT_STATS   OpenflowCapabilities = 4
+	OFPC_STP          OpenflowCapabilities = 8
+	OFPC_RESERVED     OpenflowCapabilities = 16
+	OFPC_IP_REASM     OpenflowCapabilities = 32
+	OFPC_QUEUE_STATS  OpenflowCapabilities = 64
+	OFPC_ARP_MATCH_IP OpenflowCapabilities = 128
 )
 
 type OpenflowPortConfig int
 
 const (
-  OFPPC_PORT_DOWN OpenflowPortConfig = 1
-  OFPPC_NO_RECV OpenflowPortConfig = 4
-  OFPPC_NO_FWD OpenflowPortConfig = 32
-  OFPPC_NO_PACKET_IN OpenflowPortConfig = 64
+	OFPPC_PORT_DOWN    OpenflowPortConfig = 1
+	OFPPC_NO_RECV      OpenflowPortConfig = 4
+	OFPPC_NO_FWD       OpenflowPortConfig = 32
+	OFPPC_NO_PACKET_IN OpenflowPortConfig = 64
 )
 
 type OpenflowPortState int
 
 const (
-  OFPPS_LINK_DOWN OpenflowPortState = 1
-  OFPPS_BLOCKED OpenflowPortState = 2
-  OFPPS_LIVE OpenflowPortState = 4
+	OFPPS_LINK_DOWN OpenflowPortState = 1
+	OFPPS_BLOCKED   OpenflowPortState = 2
+	OFPPS_LIVE      OpenflowPortState = 4
 )
 
 type OpenflowPortFeatures int
 
 const (
-  OFPPF_10MB_HD OpenflowPortFeatures = 1
-  OFPPF_10MB_FD OpenflowPortFeatures = 2
-  OFPPF_100MB_HD OpenflowPortFeatures = 4
-  OFPPF_100MB_FD OpenflowPortFeatures = 8
-  OFPPF_1GB_HD OpenflowPortFeatures = 16
-  OFPPF_1GB_FD OpenflowPortFeatures = 32
-  OFPPF_10GB_FD OpenflowPortFeatures = 64
-  OFPPF_40GB_FD OpenflowPortFeatures = 128
-  OFPPF_100GB_FD OpenflowPortFeatures = 256
-  OFPPF_1TB_FD OpenflowPortFeatures = 512
-  OFPPF_OTHER OpenflowPortFeatures = 1024
-  OFPPF_COPPER OpenflowPortFeatures = 2048
-  OFPPF_FIBER OpenflowPortFeatures = 4096
-  OFPPF_AUTONEG OpenflowPortFeatures = 8192
-  OFPPF_PAUSE OpenflowPortFeatures = 16384
-  OFPPF_PAUSE_ASYM OpenflowPortFeatures = 32768
+	OFPPF_10MB_HD    OpenflowPortFeatures = 1
+	OFPPF_10MB_FD    OpenflowPortFeatures = 2
+	OFPPF_100MB_HD   OpenflowPortFeatures = 4
+	OFPPF_100MB_FD   OpenflowPortFeatures = 8
+	OFPPF_1GB_HD     OpenflowPortFeatures = 16
+	OFPPF_1GB_FD     OpenflowPortFeatures = 32
+	OFPPF_10GB_FD    OpenflowPortFeatures = 64
+	OFPPF_40GB_FD    OpenflowPortFeatures = 128
+	OFPPF_100GB_FD   OpenflowPortFeatures = 256
+	OFPPF_1TB_FD     OpenflowPortFeatures = 512
+	OFPPF_OTHER      OpenflowPortFeatures = 1024
+	OFPPF_COPPER     OpenflowPortFeatures = 2048
+	OFPPF_FIBER      OpenflowPortFeatures = 4096
+	OFPPF_AUTONEG    OpenflowPortFeatures = 8192
+	OFPPF_PAUSE      OpenflowPortFeatures = 16384
+	OFPPF_PAUSE_ASYM OpenflowPortFeatures = 32768
 )
 
 type OpenflowPortReason int
 
 const (
-  OFPPR_ADD OpenflowPortReason = 0
-  OFPPR_DELETE OpenflowPortReason = 1
-  OFPPR_MODIFY OpenflowPortReason = 2
+	OFPPR_ADD    OpenflowPortReason = 0
+	OFPPR_DELETE OpenflowPortReason = 1
+	OFPPR_MODIFY OpenflowPortReason = 2
 )
 
 type OpenflowPacketInReason int
 
 const (
-  OFPR_NO_MATCH OpenflowPacketInReason = 0
-  OFPR_ACTION OpenflowPacketInReason = 1
+	OFPR_NO_MATCH OpenflowPacketInReason = 0
+	OFPR_ACTION   OpenflowPacketInReason = 1
 )
 
 type OpenflowActionType int
 
 const (
-  OFPAT_OUTPUT OpenflowActionType = 0
-  OFPAT_COPY_TTL_OUT OpenflowActionType = 11
-  OFPAT_COPY_TTL_IN OpenflowActionType = 12
-  OFPAT_SET_MPLS_TTL OpenflowActionType = 15
-  OFPAT_DEC_MPLS_TTL OpenflowActionType = 16
-  OFPAT_PUSH_VLAN OpenflowActionType = 17
-  OFPAT_POP_VLAN OpenflowActionType = 18
-  OFPAT_PUSH_MPLS OpenflowActionType = 19
-  OFPAT_POP_MPLS OpenflowActionType = 20
-  OFPAT_SET_QUEUE OpenflowActionType = 21
-  OFPAT_GROUP OpenflowActionType = 22
-  OFPAT_SET_NW_TTL OpenflowActionType = 23
-  OFPAT_DEC_NW_TTL OpenflowActionType = 24
-  OFPAT_SET_FIELD OpenflowActionType = 25
-  OFPAT_EXPERIMENTER OpenflowActionType = 65535
+	OFPAT_OUTPUT       OpenflowActionType = 0
+	OFPAT_COPY_TTL_OUT OpenflowActionType = 11
+	OFPAT_COPY_TTL_IN  OpenflowActionType = 12
+	OFPAT_SET_MPLS_TTL OpenflowActionType = 15
+	OFPAT_DEC_MPLS_TTL OpenflowActionType = 16
+	OFPAT_PUSH_VLAN    OpenflowActionType = 17
+	OFPAT_POP_VLAN     OpenflowActionType = 18
+	OFPAT_PUSH_MPLS    OpenflowActionType = 19
+	OFPAT_POP_MPLS     OpenflowActionType = 20
+	OFPAT_SET_QUEUE    OpenflowActionType = 21
+	OFPAT_GROUP        OpenflowActionType = 22
+	OFPAT_SET_NW_TTL   OpenflowActionType = 23
+	OFPAT_DEC_NW_TTL   OpenflowActionType = 24
+	OFPAT_SET_FIELD    OpenflowActionType = 25
+	OFPAT_EXPERIMENTER OpenflowActionType = 65535
 )
 
 type OpenflowInstructionType int
 
 const (
-  OFPIT_GOTO_TABLE OpenflowInstructionType = 1
-  OFPIT_WRITE_METADATA OpenflowInstructionType = 2
-  OFPIT_WRITE_ACTIONS OpenflowInstructionType = 3
-  OFPIT_APPLY_ACTIONS OpenflowInstructionType = 4
-  OFPIT_CLEAR_ACTIONS OpenflowInstructionType = 5
-  OFPIT_EXPERIMENTER OpenflowInstructionType = 65535
+	OFPIT_GOTO_TABLE     OpenflowInstructionType = 1
+	OFPIT_WRITE_METADATA OpenflowInstructionType = 2
+	OFPIT_WRITE_ACTIONS  OpenflowInstructionType = 3
+	OFPIT_APPLY_ACTIONS  OpenflowInstructionType = 4
+	OFPIT_CLEAR_ACTIONS  OpenflowInstructionType = 5
+	OFPIT_EXPERIMENTER   OpenflowInstructionType = 65535
 )
 
 type OpenflowBuffers int
 
 const (
-  OFP_NO_BUFFER OpenflowBuffers = 4294967295
+	OFP_NO_BUFFER OpenflowBuffers = 4294967295
 )
 
 type OpenflowFlowModCommand int
 
 const (
-  OFPFC_ADD OpenflowFlowModCommand = 0
-  OFPFC_MODIFY OpenflowFlowModCommand = 1
-  OFPFC_MODIFY_STRICT OpenflowFlowModCommand = 2
-  OFPFC_DELETE OpenflowFlowModCommand = 3
-  OFPFC_DELETE_STRICT OpenflowFlowModCommand = 4
+	OFPFC_ADD           OpenflowFlowModCommand = 0
+	OFPFC_MODIFY        OpenflowFlowModCommand = 1
+	OFPFC_MODIFY_STRICT OpenflowFlowModCommand = 2
+	OFPFC_DELETE        OpenflowFlowModCommand = 3
+	OFPFC_DELETE_STRICT OpenflowFlowModCommand = 4
 )
 
 type OpenflowFlowWildcards int
 
 const (
-  OFPFW_IN_PORT OpenflowFlowWildcards = 1
-  OFPFW_DL_VLAN OpenflowFlowWildcards = 2
-  OFPFW_DL_SRC OpenflowFlowWildcards = 4
-  OFPFW_DL_DST OpenflowFlowWildcards = 8
-  OFPFW_DL_TYPE OpenflowFlowWildcards = 16
-  OFPFW_NW_PROTO OpenflowFlowWildcards = 32
-  OFPFW_TP_SRC OpenflowFlowWildcards = 64
-  OFPFW_TP_DST OpenflowFlowWildcards = 128
-  OFPFW_NW_SRC_SHIFT OpenflowFlowWildcards = 8
-  OFPFW_NW_SRC_BITS OpenflowFlowWildcards = 5
-  OFPFW_NW_SRC_MASK OpenflowFlowWildcards = 8
-  OFPFW_NW_SRC_ALL OpenflowFlowWildcards = 8
-  OFPFW_NW_DST_SHIFT OpenflowFlowWildcards = 14
-  OFPFW_NW_DST_BITS OpenflowFlowWildcards = 6
-  OFPFW_NW_DST_MASK OpenflowFlowWildcards = 14
-  OFPFW_NW_DST_ALL OpenflowFlowWildcards = 14
-  OFPFW_DL_VLAN_PCP OpenflowFlowWildcards = 1048576
-  OFPFW_NW_TOS OpenflowFlowWildcards = 2097152
-  OFPFW_ALL OpenflowFlowWildcards = 4194303
+	OFPFW_IN_PORT      OpenflowFlowWildcards = 1
+	OFPFW_DL_VLAN      OpenflowFlowWildcards = 2
+	OFPFW_DL_SRC       OpenflowFlowWildcards = 4
+	OFPFW_DL_DST       OpenflowFlowWildcards = 8
+	OFPFW_DL_TYPE      OpenflowFlowWildcards = 16
+	OFPFW_NW_PROTO     OpenflowFlowWildcards = 32
+	OFPFW_TP_SRC       OpenflowFlowWildcards = 64
+	OFPFW_TP_DST       OpenflowFlowWildcards = 128
+	OFPFW_NW_SRC_SHIFT OpenflowFlowWildcards = 8
+	OFPFW_NW_SRC_BITS  OpenflowFlowWildcards = 5
+	OFPFW_NW_SRC_MASK  OpenflowFlowWildcards = 8
+	OFPFW_NW_SRC_ALL   OpenflowFlowWildcards = 8
+	OFPFW_NW_DST_SHIFT OpenflowFlowWildcards = 14
+	OFPFW_NW_DST_BITS  OpenflowFlowWildcards = 6
+	OFPFW_NW_DST_MASK  OpenflowFlowWildcards = 14
+	OFPFW_NW_DST_ALL   OpenflowFlowWildcards = 14
+	OFPFW_DL_VLAN_PCP  OpenflowFlowWildcards = 1048576
+	OFPFW_NW_TOS       OpenflowFlowWildcards = 2097152
+	OFPFW_ALL          OpenflowFlowWildcards = 4194303
 )
 
 type OpenflowMatchType int
 
 const (
-  OFPMT_STANDARD OpenflowMatchType = 0
-  OFPMT_OXM OpenflowMatchType = 1
+	OFPMT_STANDARD OpenflowMatchType = 0
+	OFPMT_OXM      OpenflowMatchType = 1
 )
 
 type OpenflowOxmClass int
 
 const (
-  OFPXMC_NXM_0 OpenflowOxmClass = 0
-  OFPXMC_NXM_1 OpenflowOxmClass = 1
-  OFPXMC_OPENFLOW_BASIC OpenflowOxmClass = 32768
-  OFPXMC_EXPERIMENTER OpenflowOxmClass = 65535
+	OFPXMC_NXM_0          OpenflowOxmClass = 0
+	OFPXMC_NXM_1          OpenflowOxmClass = 1
+	OFPXMC_OPENFLOW_BASIC OpenflowOxmClass = 32768
+	OFPXMC_EXPERIMENTER   OpenflowOxmClass = 65535
 )
 
 type OpenflowOxmMatchFields int
 
 const (
-  OFPXMT_OFB_IN_PORT OpenflowOxmMatchFields = 0
-  OFPXMT_OFB_IN_PHY_PORT OpenflowOxmMatchFields = 2
-  OFPXMT_OFB_METADATA OpenflowOxmMatchFields = 4
-  OFPXMT_OFB_ETH_DST OpenflowOxmMatchFields = 6
-  OFPXMT_OFB_ETH_DST_MASKED OpenflowOxmMatchFields = 7
-  OFPXMT_OFB_ETH_SRC OpenflowOxmMatchFields = 8
-  OFPXMT_OFB_ETH_SRC_MASKED OpenflowOxmMatchFields = 9
-  OFPXMT_OFB_ETH_TYPE OpenflowOxmMatchFields = 10
-  OFPXMT_OFB_VLAN_VID OpenflowOxmMatchFields = 12
-  OFPXMT_OFB_VLAN_PCP OpenflowOxmMatchFields = 14
-  OFPXMT_OFB_IP_DSCP OpenflowOxmMatchFields = 16
-  OFPXMT_OFB_IP_ECN OpenflowOxmMatchFields = 18
-  OFPXMT_OFB_IP_PROTO OpenflowOxmMatchFields = 20
-  OFPXMT_OFB_IPV4_SRC OpenflowOxmMatchFields = 22
-  OFPXMT_OFB_IPV4_SRC_MASKED OpenflowOxmMatchFields = 23
-  OFPXMT_OFB_IPV4_DST OpenflowOxmMatchFields = 24
-  OFPXMT_OFB_IPV4_DST_MASKED OpenflowOxmMatchFields = 25
-  OFPXMT_OFB_TCP_SRC OpenflowOxmMatchFields = 26
-  OFPXMT_OFB_TCP_DST OpenflowOxmMatchFields = 28
-  OFPXMT_OFB_UDP_SRC OpenflowOxmMatchFields = 30
-  OFPXMT_OFB_UDP_DST OpenflowOxmMatchFields = 32
-  OFPXMT_OFB_SCTP_SRC OpenflowOxmMatchFields = 34
-  OFPXMT_OFB_SCTP_DST OpenflowOxmMatchFields = 36
-  OFPXMT_OFB_ICMPV4_TYPE OpenflowOxmMatchFields = 38
-  OFPXMT_OFB_ICMPV4_CODE OpenflowOxmMatchFields = 40
-  OFPXMT_OFB_ARP_OP OpenflowOxmMatchFields = 42
-  OFPXMT_OFB_ARP_SPA OpenflowOxmMatchFields = 44
-  OFPXMT_OFB_ARP_TPA OpenflowOxmMatchFields = 46
-  OFPXMT_OFB_ARP_SHA OpenflowOxmMatchFields = 48
-  OFPXMT_OFB_ARP_THA OpenflowOxmMatchFields = 50
-  OFPXMT_OFB_IPV6_SRC OpenflowOxmMatchFields = 52
-  OFPXMT_OFB_IPV6_DST OpenflowOxmMatchFields = 54
-  OFPXMT_OFB_IPV6_FLABEL OpenflowOxmMatchFields = 56
-  OFPXMT_OFB_ICMPV6_TYPE OpenflowOxmMatchFields = 58
-  OFPXMT_OFB_ICMPV6_CODE OpenflowOxmMatchFields = 60
-  OFPXMT_OFB_IPV6_ND_TARGET OpenflowOxmMatchFields = 62
-  OFPXMT_OFB_IPV6_ND_SLL OpenflowOxmMatchFields = 64
-  OFPXMT_OFB_IPV6_ND_TLL OpenflowOxmMatchFields = 66
-  OFPXMT_OFB_MPLS_LABEL OpenflowOxmMatchFields = 68
-  OFPXMT_OFB_MPLS_TC OpenflowOxmMatchFields = 70
+	OFPXMT_OFB_IN_PORT         OpenflowOxmMatchFields = 0
+	OFPXMT_OFB_IN_PHY_PORT     OpenflowOxmMatchFields = 2
+	OFPXMT_OFB_METADATA        OpenflowOxmMatchFields = 4
+	OFPXMT_OFB_ETH_DST         OpenflowOxmMatchFields = 6
+	OFPXMT_OFB_ETH_DST_MASKED  OpenflowOxmMatchFields = 7
+	OFPXMT_OFB_ETH_SRC         OpenflowOxmMatchFields = 8
+	OFPXMT_OFB_ETH_SRC_MASKED  OpenflowOxmMatchFields = 9
+	OFPXMT_OFB_ETH_TYPE        OpenflowOxmMatchFields = 10
+	OFPXMT_OFB_VLAN_VID        OpenflowOxmMatchFields = 12
+	OFPXMT_OFB_VLAN_PCP        OpenflowOxmMatchFields = 14
+	OFPXMT_OFB_IP_DSCP         OpenflowOxmMatchFields = 16
+	OFPXMT_OFB_IP_ECN          OpenflowOxmMatchFields = 18
+	OFPXMT_OFB_IP_PROTO        OpenflowOxmMatchFields = 20
+	OFPXMT_OFB_IPV4_SRC        OpenflowOxmMatchFields = 22
+	OFPXMT_OFB_IPV4_SRC_MASKED OpenflowOxmMatchFields = 23
+	OFPXMT_OFB_IPV4_DST        OpenflowOxmMatchFields = 24
+	OFPXMT_OFB_IPV4_DST_MASKED OpenflowOxmMatchFields = 25
+	OFPXMT_OFB_TCP_SRC         OpenflowOxmMatchFields = 26
+	OFPXMT_OFB_TCP_DST         OpenflowOxmMatchFields = 28
+	OFPXMT_OFB_UDP_SRC         OpenflowOxmMatchFields = 30
+	OFPXMT_OFB_UDP_DST         OpenflowOxmMatchFields = 32
+	OFPXMT_OFB_SCTP_SRC        OpenflowOxmMatchFields = 34
+	OFPXMT_OFB_SCTP_DST        OpenflowOxmMatchFields = 36
+	OFPXMT_OFB_ICMPV4_TYPE     OpenflowOxmMatchFields = 38
+	OFPXMT_OFB_ICMPV4_CODE     OpenflowOxmMatchFields = 40
+	OFPXMT_OFB_ARP_OP          OpenflowOxmMatchFields = 42
+	OFPXMT_OFB_ARP_SPA         OpenflowOxmMatchFields = 44
+	OFPXMT_OFB_ARP_TPA         OpenflowOxmMatchFields = 46
+	OFPXMT_OFB_ARP_SHA         OpenflowOxmMatchFields = 48
+	OFPXMT_OFB_ARP_THA         OpenflowOxmMatchFields = 50
+	OFPXMT_OFB_IPV6_SRC        OpenflowOxmMatchFields = 52
+	OFPXMT_OFB_IPV6_DST        OpenflowOxmMatchFields = 54
+	OFPXMT_OFB_IPV6_FLABEL     OpenflowOxmMatchFields = 56
+	OFPXMT_OFB_ICMPV6_TYPE     OpenflowOxmMatchFields = 58
+	OFPXMT_OFB_ICMPV6_CODE     OpenflowOxmMatchFields = 60
+	OFPXMT_OFB_IPV6_ND_TARGET  OpenflowOxmMatchFields = 62
+	OFPXMT_OFB_IPV6_ND_SLL     OpenflowOxmMatchFields = 64
+	OFPXMT_OFB_IPV6_ND_TLL     OpenflowOxmMatchFields = 66
+	OFPXMT_OFB_MPLS_LABEL      OpenflowOxmMatchFields = 68
+	OFPXMT_OFB_MPLS_TC         OpenflowOxmMatchFields = 70
 )
 
 type OpenflowFlowModFlags int
 
 const (
-  OFPFF_SEND_FLOW_REM OpenflowFlowModFlags = 1
-  OFPFF_CHECK_OVERLAP OpenflowFlowModFlags = 2
-  OFPFF_EMERG OpenflowFlowModFlags = 4
+	OFPFF_SEND_FLOW_REM OpenflowFlowModFlags = 1
+	OFPFF_CHECK_OVERLAP OpenflowFlowModFlags = 2
+	OFPFF_EMERG         OpenflowFlowModFlags = 4
 )
 
 type OpenflowFlowRemovedReason int
 
 const (
-  OFPRR_IDLE_TIMEOUT OpenflowFlowRemovedReason = 0
-  OFPRR_HARD_TIMEOUT OpenflowFlowRemovedReason = 1
-  OFPRR_DELETE OpenflowFlowRemovedReason = 2
+	OFPRR_IDLE_TIMEOUT OpenflowFlowRemovedReason = 0
+	OFPRR_HARD_TIMEOUT OpenflowFlowRemovedReason = 1
+	OFPRR_DELETE       OpenflowFlowRemovedReason = 2
 )
 
 type OpenflowErrorType int
 
 const (
-  OFPET_HELLO_FAILED OpenflowErrorType = 0
-  OFPET_BAD_REQUEST OpenflowErrorType = 1
-  OFPET_BAD_ACTION OpenflowErrorType = 2
-  OFPET_FLOW_MOD_FAILED OpenflowErrorType = 3
-  OFPET_PORT_MOD_FAILED OpenflowErrorType = 4
-  OFPET_QUEUE_OP_FAILED OpenflowErrorType = 5
+	OFPET_HELLO_FAILED    OpenflowErrorType = 0
+	OFPET_BAD_REQUEST     OpenflowErrorType = 1
+	OFPET_BAD_ACTION      OpenflowErrorType = 2
+	OFPET_FLOW_MOD_FAILED OpenflowErrorType = 3
+	OFPET_PORT_MOD_FAILED OpenflowErrorType = 4
+	OFPET_QUEUE_OP_FAILED OpenflowErrorType = 5
 )
 
 type OpenflowHelloFailedCode int
 
 const (
-  OFPHFC_INCOMPATIBLE OpenflowHelloFailedCode = 0
-  OFPHFC_EPERM OpenflowHelloFailedCode = 1
+	OFPHFC_INCOMPATIBLE OpenflowHelloFailedCode = 0
+	OFPHFC_EPERM        OpenflowHelloFailedCode = 1
 )
 
 type OpenflowBadRequestCode int
 
 const (
-  OFPBRC_BAD_VERSION OpenflowBadRequestCode = 0
-  OFPBRC_BAD_TYPE OpenflowBadRequestCode = 1
-  OFPBRC_BAD_STAT OpenflowBadRequestCode = 2
-  OFPBRC_BAD_VENDOR OpenflowBadRequestCode = 3
-  OFPBRC_BAD_SUBTYPE OpenflowBadRequestCode = 4
-  OFPBRC_EPERM OpenflowBadRequestCode = 5
-  OFPBRC_BAD_LEN OpenflowBadRequestCode = 6
-  OFPBRC_BUFFER_EMPTY OpenflowBadRequestCode = 7
-  OFPBRC_BUFFER_UNKNOWN OpenflowBadRequestCode = 8
+	OFPBRC_BAD_VERSION    OpenflowBadRequestCode = 0
+	OFPBRC_BAD_TYPE       OpenflowBadRequestCode = 1
+	OFPBRC_BAD_STAT       OpenflowBadRequestCode = 2
+	OFPBRC_BAD_VENDOR     OpenflowBadRequestCode = 3
+	OFPBRC_BAD_SUBTYPE    OpenflowBadRequestCode = 4
+	OFPBRC_EPERM          OpenflowBadRequestCode = 5
+	OFPBRC_BAD_LEN        OpenflowBadRequestCode = 6
+	OFPBRC_BUFFER_EMPTY   OpenflowBadRequestCode = 7
+	OFPBRC_BUFFER_UNKNOWN OpenflowBadRequestCode = 8
 )
 
 type OpenflowBadActionCode int
 
 const (
-  OFPBAC_BAD_TYPE OpenflowBadActionCode = 0
-  OFPBAC_BAD_LEN OpenflowBadActionCode = 1
-  OFPBAC_BAD_VENDOR OpenflowBadActionCode = 2
-  OFPBAC_BAD_VENDOR_TYPE OpenflowBadActionCode = 3
-  OFPBAC_BAD_OUT_PORT OpenflowBadActionCode = 4
-  OFPBAC_BAD_ARGUMENT OpenflowBadActionCode = 5
-  OFPBAC_EPERM OpenflowBadActionCode = 6
-  OFPBAC_TOO_MANY OpenflowBadActionCode = 7
-  OFPBAC_BAD_QUEUE OpenflowBadActionCode = 8
+	OFPBAC_BAD_TYPE        OpenflowBadActionCode = 0
+	OFPBAC_BAD_LEN         OpenflowBadActionCode = 1
+	OFPBAC_BAD_VENDOR      OpenflowBadActionCode = 2
+	OFPBAC_BAD_VENDOR_TYPE OpenflowBadActionCode = 3
+	OFPBAC_BAD_OUT_PORT    OpenflowBadActionCode = 4
+	OFPBAC_BAD_ARGUMENT    OpenflowBadActionCode = 5
+	OFPBAC_EPERM           OpenflowBadActionCode = 6
+	OFPBAC_TOO_MANY        OpenflowBadActionCode = 7
+	OFPBAC_BAD_QUEUE       OpenflowBadActionCode = 8
 )
 
 type OpenflowFlow_modFailedCode int
 
 const (
-  OFPFMFC_ALL_TABLES_FULL OpenflowFlow_modFailedCode = 0
-  OFPFMFC_OVERLAP OpenflowFlow_modFailedCode = 1
-  OFPFMFC_EPERM OpenflowFlow_modFailedCode = 2
-  OFPFMFC_BAD_EMERG_TIMEOUT OpenflowFlow_modFailedCode = 3
-  OFPFMFC_BAD_COMMAND OpenflowFlow_modFailedCode = 4
-  OFPFMFC_UNSUPPORTED OpenflowFlow_modFailedCode = 5
+	OFPFMFC_ALL_TABLES_FULL   OpenflowFlow_modFailedCode = 0
+	OFPFMFC_OVERLAP           OpenflowFlow_modFailedCode = 1
+	OFPFMFC_EPERM             OpenflowFlow_modFailedCode = 2
+	OFPFMFC_BAD_EMERG_TIMEOUT OpenflowFlow_modFailedCode = 3
+	OFPFMFC_BAD_COMMAND       OpenflowFlow_modFailedCode = 4
+	OFPFMFC_UNSUPPORTED       OpenflowFlow_modFailedCode = 5
 )
 
 type OpenflowPort_modFailedCode int
 
 const (
-  OFPPMFC_BAD_PORT OpenflowPort_modFailedCode = 0
-  OFPPMFC_BAD_HW_ADDR OpenflowPort_modFailedCode = 1
+	OFPPMFC_BAD_PORT    OpenflowPort_modFailedCode = 0
+	OFPPMFC_BAD_HW_ADDR OpenflowPort_modFailedCode = 1
 )
 
 type OpenflowQueueOpFailedCode int
 
 const (
-  OFPQOFC_BAD_PORT OpenflowQueueOpFailedCode = 0
-  OFPQOFC_BAD_QUEUE OpenflowQueueOpFailedCode = 1
-  OFPQOFC_EPERM OpenflowQueueOpFailedCode = 2
+	OFPQOFC_BAD_PORT  OpenflowQueueOpFailedCode = 0
+	OFPQOFC_BAD_QUEUE OpenflowQueueOpFailedCode = 1
+	OFPQOFC_EPERM     OpenflowQueueOpFailedCode = 2
 )
 
 type OpenflowStatsTypes int
 
 const (
-  OFPST_DESC OpenflowStatsTypes = 0
-  OFPST_FLOW OpenflowStatsTypes = 1
-  OFPST_AGGREGATE OpenflowStatsTypes = 2
-  OFPST_TABLE OpenflowStatsTypes = 3
-  OFPST_PORT OpenflowStatsTypes = 4
-  OFPST_QUEUE OpenflowStatsTypes = 5
-  OFPST_VENDOR OpenflowStatsTypes = 65535
+	OFPST_DESC      OpenflowStatsTypes = 0
+	OFPST_FLOW      OpenflowStatsTypes = 1
+	OFPST_AGGREGATE OpenflowStatsTypes = 2
+	OFPST_TABLE     OpenflowStatsTypes = 3
+	OFPST_PORT      OpenflowStatsTypes = 4
+	OFPST_QUEUE     OpenflowStatsTypes = 5
+	OFPST_VENDOR    OpenflowStatsTypes = 65535
 )
 
 type OpenflowStatsReplyFlags int
 
 const (
-  OFPSF_REPLY_MORE OpenflowStatsReplyFlags = 1
+	OFPSF_REPLY_MORE OpenflowStatsReplyFlags = 1
 )
 
 type OpenflowDescStatsConstants int
 
 const (
-  SERIAL_NUM_LEN OpenflowDescStatsConstants = 32
-  DESC_STR_LEN OpenflowDescStatsConstants = 256
+	SERIAL_NUM_LEN OpenflowDescStatsConstants = 32
+	DESC_STR_LEN   OpenflowDescStatsConstants = 256
 )
 
 type OpenflowQueueProperties int
 
 const (
-  OFPQT_NONE OpenflowQueueProperties = 0
-  OFPQT_MIN_RATE OpenflowQueueProperties = 1
+	OFPQT_NONE     OpenflowQueueProperties = 0
+	OFPQT_MIN_RATE OpenflowQueueProperties = 1
 )
 
 func NewOpenflowHeaderV12WithBuf(b []byte) OpenflowHeaderV12 {
-  return OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}
+	return OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowHeaderV12() OpenflowHeaderV12 {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowHeaderV12 struct {
-  openflow.OpenflowHeader
+	openflow.OpenflowHeader
 }
 
 func (this OpenflowHeaderV12) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowHeaderV12Conn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowHeaderV12Conn(c net.Conn) OpenflowHeaderV12Conn {
-  return OpenflowHeaderV12Conn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowHeaderV12Conn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowHeaderV12Conn) Write(pkts []OpenflowHeaderV12) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowHeaderV12Conn) Read(pkts []OpenflowHeaderV12) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowHeaderV12WithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowHeaderV12WithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowHeaderV12) Init() {
-  this.OpenflowHeader.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeader.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowHeaderV12) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowHeaderV12(p openflow.OpenflowHeader) (OpenflowHeaderV12, error) {
-  if !IsOpenflowHeaderV12(p) {
-    return NewOpenflowHeaderV12WithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowHeaderV12")
-  }
+	if !IsOpenflowHeaderV12(p) {
+		return NewOpenflowHeaderV12WithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowHeaderV12")
+	}
 
-  return NewOpenflowHeaderV12WithBuf(p.Buf), nil
+	return NewOpenflowHeaderV12WithBuf(p.Buf), nil
 }
 
 func IsOpenflowHeaderV12(p openflow.OpenflowHeader) bool {
-  return p.Version() == 3 && true
+	return p.Version() == 3 && true
 }
 
 func NewOpenflowHelloWithBuf(b []byte) OpenflowHello {
-  return OpenflowHello{openflow.OpenflowHello{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowHello{openflow.OpenflowHello{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowHello() OpenflowHello {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowHello{openflow.OpenflowHello{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowHello{openflow.OpenflowHello{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowHello struct {
-  openflow.OpenflowHello
+	openflow.OpenflowHello
 }
 
 func (this OpenflowHello) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowHelloConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowHelloConn(c net.Conn) OpenflowHelloConn {
-  return OpenflowHelloConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowHelloConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowHelloConn) Write(pkts []OpenflowHello) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowHelloConn) Read(pkts []OpenflowHello) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowHelloWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowHelloWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowHello) Init() {
-  this.OpenflowHello.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetVersion(uint8(3)) // version
-  this.SetType(uint8(0)) // type
+	this.OpenflowHello.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetVersion(uint8(3)) // version
+	this.SetType(uint8(0))    // type
 }
 
 func (this OpenflowHello) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowHello(p openflow.OpenflowHello) (OpenflowHello, error) {
-  if !IsOpenflowHello(p) {
-    return NewOpenflowHelloWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowHello")
-  }
+	if !IsOpenflowHello(p) {
+		return NewOpenflowHelloWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowHello")
+	}
 
-  return NewOpenflowHelloWithBuf(p.Buf), nil
+	return NewOpenflowHelloWithBuf(p.Buf), nil
 }
 
 func IsOpenflowHello(p openflow.OpenflowHello) bool {
-  return p.Version() == 3 && true
+	return p.Version() == 3 && true
 }
 
 func NewOpenflowEchoRequestWithBuf(b []byte) OpenflowEchoRequest {
-  return OpenflowEchoRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowEchoRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowEchoRequest() OpenflowEchoRequest {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowEchoRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowEchoRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowEchoRequest struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowEchoRequest) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowEchoRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowEchoRequestConn(c net.Conn) OpenflowEchoRequestConn {
-  return OpenflowEchoRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowEchoRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowEchoRequestConn) Write(pkts []OpenflowEchoRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowEchoRequestConn) Read(pkts []OpenflowEchoRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowEchoRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowEchoRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowEchoRequest) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(2)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(2))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowEchoRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowEchoRequest(p OpenflowHeaderV12) (OpenflowEchoRequest, error) {
-  if !IsOpenflowEchoRequest(p) {
-    return NewOpenflowEchoRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowEchoRequest")
-  }
+	if !IsOpenflowEchoRequest(p) {
+		return NewOpenflowEchoRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowEchoRequest")
+	}
 
-  return NewOpenflowEchoRequestWithBuf(p.Buf), nil
+	return NewOpenflowEchoRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowEchoRequest(p OpenflowHeaderV12) bool {
-  return p.Type() == 2 && true
+	return p.Type() == 2 && true
 }
 
 func NewOpenflowEchoReplyWithBuf(b []byte) OpenflowEchoReply {
-  return OpenflowEchoReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowEchoReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowEchoReply() OpenflowEchoReply {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowEchoReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowEchoReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowEchoReply struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowEchoReply) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowEchoReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowEchoReplyConn(c net.Conn) OpenflowEchoReplyConn {
-  return OpenflowEchoReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowEchoReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowEchoReplyConn) Write(pkts []OpenflowEchoReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowEchoReplyConn) Read(pkts []OpenflowEchoReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowEchoReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowEchoReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowEchoReply) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(3)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(3))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowEchoReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowEchoReply(p OpenflowHeaderV12) (OpenflowEchoReply, error) {
-  if !IsOpenflowEchoReply(p) {
-    return NewOpenflowEchoReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowEchoReply")
-  }
+	if !IsOpenflowEchoReply(p) {
+		return NewOpenflowEchoReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowEchoReply")
+	}
 
-  return NewOpenflowEchoReplyWithBuf(p.Buf), nil
+	return NewOpenflowEchoReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowEchoReply(p OpenflowHeaderV12) bool {
-  return p.Type() == 3 && true
+	return p.Type() == 3 && true
 }
 
 func NewOpenflowFeaturesRequestWithBuf(b []byte) OpenflowFeaturesRequest {
-  return OpenflowFeaturesRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowFeaturesRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowFeaturesRequest() OpenflowFeaturesRequest {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowFeaturesRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowFeaturesRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFeaturesRequest struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowFeaturesRequest) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowFeaturesRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFeaturesRequestConn(c net.Conn) OpenflowFeaturesRequestConn {
-  return OpenflowFeaturesRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFeaturesRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFeaturesRequestConn) Write(pkts []OpenflowFeaturesRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFeaturesRequestConn) Read(pkts []OpenflowFeaturesRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFeaturesRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFeaturesRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFeaturesRequest) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(5)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(5))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowFeaturesRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFeaturesRequest(p OpenflowHeaderV12) (OpenflowFeaturesRequest, error) {
-  if !IsOpenflowFeaturesRequest(p) {
-    return NewOpenflowFeaturesRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFeaturesRequest")
-  }
+	if !IsOpenflowFeaturesRequest(p) {
+		return NewOpenflowFeaturesRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFeaturesRequest")
+	}
 
-  return NewOpenflowFeaturesRequestWithBuf(p.Buf), nil
+	return NewOpenflowFeaturesRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFeaturesRequest(p OpenflowHeaderV12) bool {
-  return p.Type() == 5 && true
+	return p.Type() == 5 && true
 }
 
 func NewOpenflowGetConfigRequestWithBuf(b []byte) OpenflowGetConfigRequest {
-  return OpenflowGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowGetConfigRequest() OpenflowGetConfigRequest {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowGetConfigRequest struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowGetConfigRequest) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowGetConfigRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowGetConfigRequestConn(c net.Conn) OpenflowGetConfigRequestConn {
-  return OpenflowGetConfigRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowGetConfigRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowGetConfigRequestConn) Write(pkts []OpenflowGetConfigRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowGetConfigRequestConn) Read(pkts []OpenflowGetConfigRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowGetConfigRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowGetConfigRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowGetConfigRequest) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(7)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(7))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowGetConfigRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowGetConfigRequest(p OpenflowHeaderV12) (OpenflowGetConfigRequest, error) {
-  if !IsOpenflowGetConfigRequest(p) {
-    return NewOpenflowGetConfigRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowGetConfigRequest")
-  }
+	if !IsOpenflowGetConfigRequest(p) {
+		return NewOpenflowGetConfigRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowGetConfigRequest")
+	}
 
-  return NewOpenflowGetConfigRequestWithBuf(p.Buf), nil
+	return NewOpenflowGetConfigRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowGetConfigRequest(p OpenflowHeaderV12) bool {
-  return p.Type() == 7 && true
+	return p.Type() == 7 && true
 }
 
 func NewOpenflowSwitchGetConfigReplyWithBuf(b []byte) OpenflowSwitchGetConfigReply {
-  return OpenflowSwitchGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowSwitchGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowSwitchGetConfigReply() OpenflowSwitchGetConfigReply {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowSwitchGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowSwitchGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowSwitchGetConfigReply struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowSwitchGetConfigReply) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowSwitchGetConfigReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowSwitchGetConfigReplyConn(c net.Conn) OpenflowSwitchGetConfigReplyConn {
-  return OpenflowSwitchGetConfigReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowSwitchGetConfigReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowSwitchGetConfigReplyConn) Write(pkts []OpenflowSwitchGetConfigReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowSwitchGetConfigReplyConn) Read(pkts []OpenflowSwitchGetConfigReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowSwitchGetConfigReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowSwitchGetConfigReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowSwitchGetConfigReply) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(8)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(8))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowSwitchGetConfigReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowSwitchGetConfigReply(p OpenflowHeaderV12) (OpenflowSwitchGetConfigReply, error) {
-  if !IsOpenflowSwitchGetConfigReply(p) {
-    return NewOpenflowSwitchGetConfigReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowSwitchGetConfigReply")
-  }
+	if !IsOpenflowSwitchGetConfigReply(p) {
+		return NewOpenflowSwitchGetConfigReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowSwitchGetConfigReply")
+	}
 
-  return NewOpenflowSwitchGetConfigReplyWithBuf(p.Buf), nil
+	return NewOpenflowSwitchGetConfigReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowSwitchGetConfigReply(p OpenflowHeaderV12) bool {
-  return p.Type() == 8 && true
+	return p.Type() == 8 && true
 }
 
 func (this *OpenflowSwitchGetConfigReply) Flags() uint16 {
-  offset := this.FlagsOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.FlagsOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowSwitchGetConfigReply) SetFlags(f uint16) {
-  offset := this.FlagsOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], f); offset += 2
+	offset := this.FlagsOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], f)
+	offset += 2
 }
 
 func (this *OpenflowSwitchGetConfigReply) FlagsOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowSwitchGetConfigReply) MissSendLen() uint16 {
-  offset := this.MissSendLenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.MissSendLenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowSwitchGetConfigReply) SetMissSendLen(m uint16) {
-  offset := this.MissSendLenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], m); offset += 2
+	offset := this.MissSendLenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], m)
+	offset += 2
 }
 
 func (this *OpenflowSwitchGetConfigReply) MissSendLenOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowSwitchSetConfigWithBuf(b []byte) OpenflowSwitchSetConfig {
-  return OpenflowSwitchSetConfig{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowSwitchSetConfig{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowSwitchSetConfig() OpenflowSwitchSetConfig {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowSwitchSetConfig{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowSwitchSetConfig{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowSwitchSetConfig struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowSwitchSetConfig) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowSwitchSetConfigConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowSwitchSetConfigConn(c net.Conn) OpenflowSwitchSetConfigConn {
-  return OpenflowSwitchSetConfigConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowSwitchSetConfigConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowSwitchSetConfigConn) Write(pkts []OpenflowSwitchSetConfig) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowSwitchSetConfigConn) Read(pkts []OpenflowSwitchSetConfig) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowSwitchSetConfigWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowSwitchSetConfigWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowSwitchSetConfig) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(9)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(9))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowSwitchSetConfig) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowSwitchSetConfig(p OpenflowHeaderV12) (OpenflowSwitchSetConfig, error) {
-  if !IsOpenflowSwitchSetConfig(p) {
-    return NewOpenflowSwitchSetConfigWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowSwitchSetConfig")
-  }
+	if !IsOpenflowSwitchSetConfig(p) {
+		return NewOpenflowSwitchSetConfigWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowSwitchSetConfig")
+	}
 
-  return NewOpenflowSwitchSetConfigWithBuf(p.Buf), nil
+	return NewOpenflowSwitchSetConfigWithBuf(p.Buf), nil
 }
 
 func IsOpenflowSwitchSetConfig(p OpenflowHeaderV12) bool {
-  return p.Type() == 9 && true
+	return p.Type() == 9 && true
 }
 
 func (this *OpenflowSwitchSetConfig) Flags() uint16 {
-  offset := this.FlagsOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.FlagsOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowSwitchSetConfig) SetFlags(f uint16) {
-  offset := this.FlagsOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], f); offset += 2
+	offset := this.FlagsOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], f)
+	offset += 2
 }
 
 func (this *OpenflowSwitchSetConfig) FlagsOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowSwitchSetConfig) MissSendLen() uint16 {
-  offset := this.MissSendLenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.MissSendLenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowSwitchSetConfig) SetMissSendLen(m uint16) {
-  offset := this.MissSendLenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], m); offset += 2
+	offset := this.MissSendLenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], m)
+	offset += 2
 }
 
 func (this *OpenflowSwitchSetConfig) MissSendLenOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowPortWithBuf(b []byte) OpenflowPort {
-  return OpenflowPort{packet.Packet{Buf: b}}
+	return OpenflowPort{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowPort() OpenflowPort {
-  s := 64
-  b := make([]byte, s)
-  p := OpenflowPort{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 64
+	b := make([]byte, s)
+	p := OpenflowPort{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowPort struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowPort) minSize() int {
-  return 64
+	return 64
 }
 
 type OpenflowPortConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPortConn(c net.Conn) OpenflowPortConn {
-  return OpenflowPortConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPortConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPortConn) Write(pkts []OpenflowPort) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPortConn) Read(pkts []OpenflowPort) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPortWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPortWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPort) Init() {
-  // Invariants.
+	// Invariants.
 }
 
 func (this OpenflowPort) Size() int {
-  return 64
+	return 64
 }
 
 func ConvertToOpenflowPort(p packet.Packet) (OpenflowPort, error) {
-  if !IsOpenflowPort(p) {
-    return NewOpenflowPortWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPort")
-  }
+	if !IsOpenflowPort(p) {
+		return NewOpenflowPortWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPort")
+	}
 
-  return NewOpenflowPortWithBuf(p.Buf), nil
+	return NewOpenflowPortWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPort(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowPort) PortNo() uint32 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetPortNo(p uint32) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], p); offset += 4
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], p)
+	offset += 4
 }
 
 func (this *OpenflowPort) PortNoOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowPort) Pad() [4]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [4]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [4]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPort) SetPad(p [4]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPort) PadOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowPort) HwAddr() [6]uint8 {
-  offset := this.HwAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.HwAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPort) SetHwAddr(h [6]uint8) {
-  offset := this.HwAddrOffset()
-  for _, e := range h {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.HwAddrOffset()
+	for _, e := range h {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPort) HwAddrOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowPort) Pad2() [2]uint8 {
-  offset := this.Pad2Offset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.Pad2Offset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPort) SetPad2(p [2]uint8) {
-  offset := this.Pad2Offset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.Pad2Offset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPort) Pad2Offset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func (this *OpenflowPort) Name() [16]int8 {
-  offset := this.NameOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [16]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.NameOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [16]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPort) SetName(n [16]int8) {
-  offset := this.NameOffset()
-  for _, e := range n {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.NameOffset()
+	for _, e := range n {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPort) NameOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowPort) Config() uint32 {
-  offset := this.ConfigOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.ConfigOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetConfig(c uint32) {
-  offset := this.ConfigOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], c); offset += 4
+	offset := this.ConfigOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], c)
+	offset += 4
 }
 
 func (this *OpenflowPort) ConfigOffset() int {
-  offset := 32
-  return offset
+	offset := 32
+	return offset
 }
 
-
 func (this *OpenflowPort) State() uint32 {
-  offset := this.StateOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.StateOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetState(s uint32) {
-  offset := this.StateOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], s); offset += 4
+	offset := this.StateOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], s)
+	offset += 4
 }
 
 func (this *OpenflowPort) StateOffset() int {
-  offset := 36
-  return offset
+	offset := 36
+	return offset
 }
 
-
 func (this *OpenflowPort) Curr() uint32 {
-  offset := this.CurrOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.CurrOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetCurr(c uint32) {
-  offset := this.CurrOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], c); offset += 4
+	offset := this.CurrOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], c)
+	offset += 4
 }
 
 func (this *OpenflowPort) CurrOffset() int {
-  offset := 40
-  return offset
+	offset := 40
+	return offset
 }
 
-
 func (this *OpenflowPort) Advertised() uint32 {
-  offset := this.AdvertisedOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.AdvertisedOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetAdvertised(a uint32) {
-  offset := this.AdvertisedOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], a); offset += 4
+	offset := this.AdvertisedOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], a)
+	offset += 4
 }
 
 func (this *OpenflowPort) AdvertisedOffset() int {
-  offset := 44
-  return offset
+	offset := 44
+	return offset
 }
 
-
 func (this *OpenflowPort) Supported() uint32 {
-  offset := this.SupportedOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.SupportedOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetSupported(s uint32) {
-  offset := this.SupportedOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], s); offset += 4
+	offset := this.SupportedOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], s)
+	offset += 4
 }
 
 func (this *OpenflowPort) SupportedOffset() int {
-  offset := 48
-  return offset
+	offset := 48
+	return offset
 }
 
-
 func (this *OpenflowPort) Peer() uint32 {
-  offset := this.PeerOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.PeerOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetPeer(p uint32) {
-  offset := this.PeerOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], p); offset += 4
+	offset := this.PeerOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], p)
+	offset += 4
 }
 
 func (this *OpenflowPort) PeerOffset() int {
-  offset := 52
-  return offset
+	offset := 52
+	return offset
 }
 
-
 func (this *OpenflowPort) CurrSpeed() uint32 {
-  offset := this.CurrSpeedOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.CurrSpeedOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetCurrSpeed(c uint32) {
-  offset := this.CurrSpeedOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], c); offset += 4
+	offset := this.CurrSpeedOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], c)
+	offset += 4
 }
 
 func (this *OpenflowPort) CurrSpeedOffset() int {
-  offset := 56
-  return offset
+	offset := 56
+	return offset
 }
 
-
 func (this *OpenflowPort) MaxSpeed() uint32 {
-  offset := this.MaxSpeedOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.MaxSpeedOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPort) SetMaxSpeed(m uint32) {
-  offset := this.MaxSpeedOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], m); offset += 4
+	offset := this.MaxSpeedOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], m)
+	offset += 4
 }
 
 func (this *OpenflowPort) MaxSpeedOffset() int {
-  offset := 60
-  return offset
+	offset := 60
+	return offset
 }
 
-
 func NewOpenflowFeaturesReplyWithBuf(b []byte) OpenflowFeaturesReply {
-  return OpenflowFeaturesReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowFeaturesReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowFeaturesReply() OpenflowFeaturesReply {
-  s := 32
-  b := make([]byte, s)
-  p := OpenflowFeaturesReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 32
+	b := make([]byte, s)
+	p := OpenflowFeaturesReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFeaturesReply struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowFeaturesReply) minSize() int {
-  return 32
+	return 32
 }
 
 type OpenflowFeaturesReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFeaturesReplyConn(c net.Conn) OpenflowFeaturesReplyConn {
-  return OpenflowFeaturesReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFeaturesReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFeaturesReplyConn) Write(pkts []OpenflowFeaturesReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFeaturesReplyConn) Read(pkts []OpenflowFeaturesReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFeaturesReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFeaturesReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFeaturesReply) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(6)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(6))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowFeaturesReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFeaturesReply(p OpenflowHeaderV12) (OpenflowFeaturesReply, error) {
-  if !IsOpenflowFeaturesReply(p) {
-    return NewOpenflowFeaturesReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFeaturesReply")
-  }
+	if !IsOpenflowFeaturesReply(p) {
+		return NewOpenflowFeaturesReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFeaturesReply")
+	}
 
-  return NewOpenflowFeaturesReplyWithBuf(p.Buf), nil
+	return NewOpenflowFeaturesReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFeaturesReply(p OpenflowHeaderV12) bool {
-  return p.Type() == 6 && true
+	return p.Type() == 6 && true
 }
 
 func (this *OpenflowFeaturesReply) DatapathId() uint64 {
-  offset := this.DatapathIdOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.DatapathIdOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetDatapathId(d uint64) {
-  offset := this.DatapathIdOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], d); offset += 8
+	offset := this.DatapathIdOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], d)
+	offset += 8
 }
 
 func (this *OpenflowFeaturesReply) DatapathIdOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) NBuffers() uint32 {
-  offset := this.NBuffersOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.NBuffersOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetNBuffers(n uint32) {
-  offset := this.NBuffersOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], n); offset += 4
+	offset := this.NBuffersOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], n)
+	offset += 4
 }
 
 func (this *OpenflowFeaturesReply) NBuffersOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) NTables() uint8 {
-  offset := this.NTablesOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.NTablesOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetNTables(n uint8) {
-  offset := this.NTablesOffset()
-  this.Buf[offset] = byte(n); offset++
+	offset := this.NTablesOffset()
+	this.Buf[offset] = byte(n)
+	offset++
 }
 
 func (this *OpenflowFeaturesReply) NTablesOffset() int {
-  offset := 20
-  return offset
+	offset := 20
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) Pad() [3]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [3]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [3]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetPad(p [3]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowFeaturesReply) PadOffset() int {
-  offset := 21
-  return offset
+	offset := 21
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) Capabilities() uint32 {
-  offset := this.CapabilitiesOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.CapabilitiesOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetCapabilities(c uint32) {
-  offset := this.CapabilitiesOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], c); offset += 4
+	offset := this.CapabilitiesOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], c)
+	offset += 4
 }
 
 func (this *OpenflowFeaturesReply) CapabilitiesOffset() int {
-  offset := 24
-  return offset
+	offset := 24
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) Actions() uint32 {
-  offset := this.ActionsOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.ActionsOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFeaturesReply) SetActions(a uint32) {
-  offset := this.ActionsOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], a); offset += 4
+	offset := this.ActionsOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], a)
+	offset += 4
 }
 
 func (this *OpenflowFeaturesReply) ActionsOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func (this *OpenflowFeaturesReply) Ports() []OpenflowPort {
-  offset := this.PortsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []OpenflowPort
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowPortWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PortsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []OpenflowPort
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowPortWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFeaturesReply) AddPorts(p OpenflowPort) {
-  offset := this.PortsOffset()
-  offset += this.PortsSize()
-  size := p.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], p.Buf[:p.Size()]); offset += p.Size()
+	offset := this.PortsOffset()
+	offset += this.PortsSize()
+	size := p.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], p.Buf[:p.Size()])
+	offset += p.Size()
 }
 
 func (this *OpenflowFeaturesReply) PortsOffset() int {
-  offset := 32
-  return offset
+	offset := 32
+	return offset
 }
 
 func (this *OpenflowFeaturesReply) PortsSize() int {
-  offset := this.PortsOffset()
-  return this.Size() - offset
+	offset := this.PortsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowPortStatusWithBuf(b []byte) OpenflowPortStatus {
-  return OpenflowPortStatus{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowPortStatus{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowPortStatus() OpenflowPortStatus {
-  s := 80
-  b := make([]byte, s)
-  p := OpenflowPortStatus{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 80
+	b := make([]byte, s)
+	p := OpenflowPortStatus{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPortStatus struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowPortStatus) minSize() int {
-  return 80
+	return 80
 }
 
 type OpenflowPortStatusConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPortStatusConn(c net.Conn) OpenflowPortStatusConn {
-  return OpenflowPortStatusConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPortStatusConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPortStatusConn) Write(pkts []OpenflowPortStatus) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPortStatusConn) Read(pkts []OpenflowPortStatus) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPortStatusWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPortStatusWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPortStatus) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(12)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(12))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowPortStatus) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPortStatus(p OpenflowHeaderV12) (OpenflowPortStatus, error) {
-  if !IsOpenflowPortStatus(p) {
-    return NewOpenflowPortStatusWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStatus")
-  }
+	if !IsOpenflowPortStatus(p) {
+		return NewOpenflowPortStatusWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStatus")
+	}
 
-  return NewOpenflowPortStatusWithBuf(p.Buf), nil
+	return NewOpenflowPortStatusWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPortStatus(p OpenflowHeaderV12) bool {
-  return p.Type() == 12 && true
+	return p.Type() == 12 && true
 }
 
 func (this *OpenflowPortStatus) Reason() uint8 {
-  offset := this.ReasonOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.ReasonOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowPortStatus) SetReason(r uint8) {
-  offset := this.ReasonOffset()
-  this.Buf[offset] = byte(r); offset++
+	offset := this.ReasonOffset()
+	this.Buf[offset] = byte(r)
+	offset++
 }
 
 func (this *OpenflowPortStatus) ReasonOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowPortStatus) Pad() [7]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [7]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [7]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPortStatus) SetPad(p [7]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPortStatus) PadOffset() int {
-  offset := 9
-  return offset
+	offset := 9
+	return offset
 }
 
-
 func (this *OpenflowPortStatus) Desc() OpenflowPort {
-  offset := this.DescOffset()
-  res := NewOpenflowPortWithBuf(this.Buf[offset:])
-  return res
+	offset := this.DescOffset()
+	res := NewOpenflowPortWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStatus) SetDesc(d OpenflowPort) {
-  offset := this.DescOffset()
-  copy(this.Buf[offset:], d.Buf[:d.Size()]); offset += d.Size()
+	offset := this.DescOffset()
+	copy(this.Buf[offset:], d.Buf[:d.Size()])
+	offset += d.Size()
 }
 
 func (this *OpenflowPortStatus) DescOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func NewOpenflowPortModWithBuf(b []byte) OpenflowPortMod {
-  return OpenflowPortMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowPortMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowPortMod() OpenflowPortMod {
-  s := 32
-  b := make([]byte, s)
-  p := OpenflowPortMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 32
+	b := make([]byte, s)
+	p := OpenflowPortMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPortMod struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowPortMod) minSize() int {
-  return 32
+	return 32
 }
 
 type OpenflowPortModConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPortModConn(c net.Conn) OpenflowPortModConn {
-  return OpenflowPortModConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPortModConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPortModConn) Write(pkts []OpenflowPortMod) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPortModConn) Read(pkts []OpenflowPortMod) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPortModWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPortModWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPortMod) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(16)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(16))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowPortMod) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPortMod(p OpenflowHeaderV12) (OpenflowPortMod, error) {
-  if !IsOpenflowPortMod(p) {
-    return NewOpenflowPortModWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortMod")
-  }
+	if !IsOpenflowPortMod(p) {
+		return NewOpenflowPortModWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortMod")
+	}
 
-  return NewOpenflowPortModWithBuf(p.Buf), nil
+	return NewOpenflowPortModWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPortMod(p OpenflowHeaderV12) bool {
-  return p.Type() == 16 && true
+	return p.Type() == 16 && true
 }
 
 func (this *OpenflowPortMod) PortNo() uint16 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortMod) SetPortNo(p uint16) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowPortMod) PortNoOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowPortMod) HwAddr() [6]uint8 {
-  offset := this.HwAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.HwAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPortMod) SetHwAddr(h [6]uint8) {
-  offset := this.HwAddrOffset()
-  for _, e := range h {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.HwAddrOffset()
+	for _, e := range h {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPortMod) HwAddrOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func (this *OpenflowPortMod) Config() uint32 {
-  offset := this.ConfigOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.ConfigOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortMod) SetConfig(c uint32) {
-  offset := this.ConfigOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], c); offset += 4
+	offset := this.ConfigOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], c)
+	offset += 4
 }
 
 func (this *OpenflowPortMod) ConfigOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowPortMod) Mask() uint32 {
-  offset := this.MaskOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.MaskOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortMod) SetMask(m uint32) {
-  offset := this.MaskOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], m); offset += 4
+	offset := this.MaskOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], m)
+	offset += 4
 }
 
 func (this *OpenflowPortMod) MaskOffset() int {
-  offset := 20
-  return offset
+	offset := 20
+	return offset
 }
 
-
 func (this *OpenflowPortMod) Advertise() uint32 {
-  offset := this.AdvertiseOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.AdvertiseOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortMod) SetAdvertise(a uint32) {
-  offset := this.AdvertiseOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], a); offset += 4
+	offset := this.AdvertiseOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], a)
+	offset += 4
 }
 
 func (this *OpenflowPortMod) AdvertiseOffset() int {
-  offset := 24
-  return offset
+	offset := 24
+	return offset
 }
 
-
 func (this *OpenflowPortMod) Pad() [4]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [4]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [4]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPortMod) SetPad(p [4]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPortMod) PadOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func NewOpenflowPacketInWithBuf(b []byte) OpenflowPacketIn {
-  return OpenflowPacketIn{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowPacketIn{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowPacketIn() OpenflowPacketIn {
-  s := 18
-  b := make([]byte, s)
-  p := OpenflowPacketIn{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 18
+	b := make([]byte, s)
+	p := OpenflowPacketIn{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPacketIn struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowPacketIn) minSize() int {
-  return 18
+	return 18
 }
 
 type OpenflowPacketInConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPacketInConn(c net.Conn) OpenflowPacketInConn {
-  return OpenflowPacketInConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPacketInConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPacketInConn) Write(pkts []OpenflowPacketIn) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPacketInConn) Read(pkts []OpenflowPacketIn) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPacketInWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPacketInWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPacketIn) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(10)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(10))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowPacketIn) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPacketIn(p OpenflowHeaderV12) (OpenflowPacketIn, error) {
-  if !IsOpenflowPacketIn(p) {
-    return NewOpenflowPacketInWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketIn")
-  }
+	if !IsOpenflowPacketIn(p) {
+		return NewOpenflowPacketInWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketIn")
+	}
 
-  return NewOpenflowPacketInWithBuf(p.Buf), nil
+	return NewOpenflowPacketInWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPacketIn(p OpenflowHeaderV12) bool {
-  return p.Type() == 10 && true
+	return p.Type() == 10 && true
 }
 
 func (this *OpenflowPacketIn) BufferId() uint32 {
-  offset := this.BufferIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.BufferIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketIn) SetBufferId(b uint32) {
-  offset := this.BufferIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], b); offset += 4
+	offset := this.BufferIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], b)
+	offset += 4
 }
 
 func (this *OpenflowPacketIn) BufferIdOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowPacketIn) TotalLen() uint16 {
-  offset := this.TotalLenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.TotalLenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketIn) SetTotalLen(t uint16) {
-  offset := this.TotalLenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], t); offset += 2
+	offset := this.TotalLenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], t)
+	offset += 2
 }
 
 func (this *OpenflowPacketIn) TotalLenOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowPacketIn) InPort() uint16 {
-  offset := this.InPortOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.InPortOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketIn) SetInPort(i uint16) {
-  offset := this.InPortOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], i); offset += 2
+	offset := this.InPortOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], i)
+	offset += 2
 }
 
 func (this *OpenflowPacketIn) InPortOffset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func (this *OpenflowPacketIn) Reason() uint8 {
-  offset := this.ReasonOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.ReasonOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowPacketIn) SetReason(r uint8) {
-  offset := this.ReasonOffset()
-  this.Buf[offset] = byte(r); offset++
+	offset := this.ReasonOffset()
+	this.Buf[offset] = byte(r)
+	offset++
 }
 
 func (this *OpenflowPacketIn) ReasonOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowPacketIn) Pad() uint8 {
-  offset := this.PadOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.PadOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowPacketIn) SetPad(p uint8) {
-  offset := this.PadOffset()
-  this.Buf[offset] = byte(p); offset++
+	offset := this.PadOffset()
+	this.Buf[offset] = byte(p)
+	offset++
 }
 
 func (this *OpenflowPacketIn) PadOffset() int {
-  offset := 17
-  return offset
+	offset := 17
+	return offset
 }
 
-
 func (this *OpenflowPacketIn) Data() []uint8 {
-  offset := this.DataOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.DataOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPacketIn) AddData(d uint8) {
-  offset := this.DataOffset()
-  offset += 1
-  size := 1
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  this.Buf[offset] = byte(d); offset++
+	offset := this.DataOffset()
+	offset += 1
+	size := 1
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	this.Buf[offset] = byte(d)
+	offset++
 }
 
 func (this *OpenflowPacketIn) DataOffset() int {
-  offset := 18
-  return offset
+	offset := 18
+	return offset
 }
 
 func (this *OpenflowPacketIn) DataSize() int {
-  offset := this.DataOffset()
-  return this.Size() - offset
+	offset := this.DataOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowActionWithBuf(b []byte) OpenflowAction {
-  return OpenflowAction{packet.Packet{Buf: b}}
+	return OpenflowAction{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowAction() OpenflowAction {
-  s := 4
-  b := make([]byte, s)
-  p := OpenflowAction{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 4
+	b := make([]byte, s)
+	p := OpenflowAction{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowAction struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowAction) minSize() int {
-  return 4
+	return 4
 }
 
 type OpenflowActionConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowActionConn(c net.Conn) OpenflowActionConn {
-  return OpenflowActionConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowActionConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowActionConn) Write(pkts []OpenflowAction) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowActionConn) Read(pkts []OpenflowAction) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowActionWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowActionWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowAction) Init() {
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowAction) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowAction(p packet.Packet) (OpenflowAction, error) {
-  if !IsOpenflowAction(p) {
-    return NewOpenflowActionWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAction")
-  }
+	if !IsOpenflowAction(p) {
+		return NewOpenflowActionWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAction")
+	}
 
-  return NewOpenflowActionWithBuf(p.Buf), nil
+	return NewOpenflowActionWithBuf(p.Buf), nil
 }
 
 func IsOpenflowAction(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowAction) Type() uint16 {
-  offset := this.TypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.TypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAction) SetType(t uint16) {
-  offset := this.TypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], t); offset += 2
+	offset := this.TypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], t)
+	offset += 2
 }
 
 func (this *OpenflowAction) TypeOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowAction) Len() uint16 {
-  offset := this.LenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAction) SetLen(l uint16) {
-  offset := this.LenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowAction) LenOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func NewOpenflowActionOutputWithBuf(b []byte) OpenflowActionOutput {
-  return OpenflowActionOutput{OpenflowAction{packet.Packet{Buf: b}}}
+	return OpenflowActionOutput{OpenflowAction{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowActionOutput() OpenflowActionOutput {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowActionOutput{OpenflowAction{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowActionOutput{OpenflowAction{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowActionOutput struct {
-  OpenflowAction
+	OpenflowAction
 }
 
 func (this OpenflowActionOutput) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowActionOutputConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowActionOutputConn(c net.Conn) OpenflowActionOutputConn {
-  return OpenflowActionOutputConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowActionOutputConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowActionOutputConn) Write(pkts []OpenflowActionOutput) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowActionOutputConn) Read(pkts []OpenflowActionOutput) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowActionOutputWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowActionOutputWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowActionOutput) Init() {
-  this.OpenflowAction.Init()
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint16(0)) // type
+	this.OpenflowAction.Init()
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint16(0)) // type
 }
 
 func (this OpenflowActionOutput) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowActionOutput(p OpenflowAction) (OpenflowActionOutput, error) {
-  if !IsOpenflowActionOutput(p) {
-    return NewOpenflowActionOutputWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowActionOutput")
-  }
+	if !IsOpenflowActionOutput(p) {
+		return NewOpenflowActionOutputWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowActionOutput")
+	}
 
-  return NewOpenflowActionOutputWithBuf(p.Buf), nil
+	return NewOpenflowActionOutputWithBuf(p.Buf), nil
 }
 
 func IsOpenflowActionOutput(p OpenflowAction) bool {
-  return p.Type() == 0 && true
+	return p.Type() == 0 && true
 }
 
 func (this *OpenflowActionOutput) Port() uint32 {
-  offset := this.PortOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.PortOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowActionOutput) SetPort(p uint32) {
-  offset := this.PortOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], p); offset += 4
+	offset := this.PortOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], p)
+	offset += 4
 }
 
 func (this *OpenflowActionOutput) PortOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowActionOutput) MaxLen() uint16 {
-  offset := this.MaxLenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.MaxLenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowActionOutput) SetMaxLen(m uint16) {
-  offset := this.MaxLenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], m); offset += 2
+	offset := this.MaxLenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], m)
+	offset += 2
 }
 
 func (this *OpenflowActionOutput) MaxLenOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowActionOutput) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowActionOutput) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowActionOutput) PadOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowInstructionWithBuf(b []byte) OpenflowInstruction {
-  return OpenflowInstruction{packet.Packet{Buf: b}}
+	return OpenflowInstruction{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowInstruction() OpenflowInstruction {
-  s := 4
-  b := make([]byte, s)
-  p := OpenflowInstruction{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 4
+	b := make([]byte, s)
+	p := OpenflowInstruction{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowInstruction struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowInstruction) minSize() int {
-  return 4
+	return 4
 }
 
 type OpenflowInstructionConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowInstructionConn(c net.Conn) OpenflowInstructionConn {
-  return OpenflowInstructionConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowInstructionConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowInstructionConn) Write(pkts []OpenflowInstruction) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowInstructionConn) Read(pkts []OpenflowInstruction) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowInstructionWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowInstructionWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowInstruction) Init() {
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowInstruction) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowInstruction(p packet.Packet) (OpenflowInstruction, error) {
-  if !IsOpenflowInstruction(p) {
-    return NewOpenflowInstructionWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowInstruction")
-  }
+	if !IsOpenflowInstruction(p) {
+		return NewOpenflowInstructionWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowInstruction")
+	}
 
-  return NewOpenflowInstructionWithBuf(p.Buf), nil
+	return NewOpenflowInstructionWithBuf(p.Buf), nil
 }
 
 func IsOpenflowInstruction(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowInstruction) Type() uint16 {
-  offset := this.TypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.TypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowInstruction) SetType(t uint16) {
-  offset := this.TypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], t); offset += 2
+	offset := this.TypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], t)
+	offset += 2
 }
 
 func (this *OpenflowInstruction) TypeOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowInstruction) Len() uint16 {
-  offset := this.LenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowInstruction) SetLen(l uint16) {
-  offset := this.LenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowInstruction) LenOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func NewOpenflowApplyActionsWithBuf(b []byte) OpenflowApplyActions {
-  return OpenflowApplyActions{OpenflowInstruction{packet.Packet{Buf: b}}}
+	return OpenflowApplyActions{OpenflowInstruction{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowApplyActions() OpenflowApplyActions {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowApplyActions{OpenflowInstruction{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowApplyActions{OpenflowInstruction{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowApplyActions struct {
-  OpenflowInstruction
+	OpenflowInstruction
 }
 
 func (this OpenflowApplyActions) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowApplyActionsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowApplyActionsConn(c net.Conn) OpenflowApplyActionsConn {
-  return OpenflowApplyActionsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowApplyActionsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowApplyActionsConn) Write(pkts []OpenflowApplyActions) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowApplyActionsConn) Read(pkts []OpenflowApplyActions) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowApplyActionsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowApplyActionsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowApplyActions) Init() {
-  this.OpenflowInstruction.Init()
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint16(4)) // type
+	this.OpenflowInstruction.Init()
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint16(4)) // type
 }
 
 func (this OpenflowApplyActions) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowApplyActions(p OpenflowInstruction) (OpenflowApplyActions, error) {
-  if !IsOpenflowApplyActions(p) {
-    return NewOpenflowApplyActionsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowApplyActions")
-  }
+	if !IsOpenflowApplyActions(p) {
+		return NewOpenflowApplyActionsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowApplyActions")
+	}
 
-  return NewOpenflowApplyActionsWithBuf(p.Buf), nil
+	return NewOpenflowApplyActionsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowApplyActions(p OpenflowInstruction) bool {
-  return p.Type() == 4 && true
+	return p.Type() == 4 && true
 }
 
 func (this *OpenflowApplyActions) Pad() [4]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [4]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [4]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowApplyActions) SetPad(p [4]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowApplyActions) PadOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowApplyActions) Actions() []OpenflowAction {
-  offset := this.ActionsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowAction
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowActionWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.ActionsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowAction
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowActionWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowApplyActions) AddActions(a OpenflowAction) {
-  offset := this.ActionsOffset()
-  offset += this.ActionsSize()
-  size := a.Size()
-  this.OpenGap(offset, size)
-  this.SetLen(uint16(this.Size() + size))
-  copy(this.Buf[offset:], a.Buf[:a.Size()]); offset += a.Size()
+	offset := this.ActionsOffset()
+	offset += this.ActionsSize()
+	size := a.Size()
+	this.OpenGap(offset, size)
+	this.SetLen(uint16(this.Size() + size))
+	copy(this.Buf[offset:], a.Buf[:a.Size()])
+	offset += a.Size()
 }
 
 func (this *OpenflowApplyActions) ActionsOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
 func (this *OpenflowApplyActions) ActionsSize() int {
-  offset := this.ActionsOffset()
-  return this.Size() - offset
+	offset := this.ActionsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowPacketOutWithBuf(b []byte) OpenflowPacketOut {
-  return OpenflowPacketOut{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowPacketOut{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowPacketOut() OpenflowPacketOut {
-  s := 24
-  b := make([]byte, s)
-  p := OpenflowPacketOut{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 24
+	b := make([]byte, s)
+	p := OpenflowPacketOut{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPacketOut struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowPacketOut) minSize() int {
-  return 24
+	return 24
 }
 
 type OpenflowPacketOutConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPacketOutConn(c net.Conn) OpenflowPacketOutConn {
-  return OpenflowPacketOutConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPacketOutConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPacketOutConn) Write(pkts []OpenflowPacketOut) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPacketOutConn) Read(pkts []OpenflowPacketOut) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPacketOutWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPacketOutWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPacketOut) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(13)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(13))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowPacketOut) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPacketOut(p OpenflowHeaderV12) (OpenflowPacketOut, error) {
-  if !IsOpenflowPacketOut(p) {
-    return NewOpenflowPacketOutWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketOut")
-  }
+	if !IsOpenflowPacketOut(p) {
+		return NewOpenflowPacketOutWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketOut")
+	}
 
-  return NewOpenflowPacketOutWithBuf(p.Buf), nil
+	return NewOpenflowPacketOutWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPacketOut(p OpenflowHeaderV12) bool {
-  return p.Type() == 13 && true
+	return p.Type() == 13 && true
 }
 
 func (this *OpenflowPacketOut) BufferId() uint32 {
-  offset := this.BufferIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.BufferIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketOut) SetBufferId(b uint32) {
-  offset := this.BufferIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], b); offset += 4
+	offset := this.BufferIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], b)
+	offset += 4
 }
 
 func (this *OpenflowPacketOut) BufferIdOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowPacketOut) InPort() uint32 {
-  offset := this.InPortOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.InPortOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketOut) SetInPort(i uint32) {
-  offset := this.InPortOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], i); offset += 4
+	offset := this.InPortOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], i)
+	offset += 4
 }
 
 func (this *OpenflowPacketOut) InPortOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowPacketOut) ActionsLen() uint16 {
-  offset := this.ActionsLenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.ActionsLenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketOut) SetActionsLen(a uint16) {
-  offset := this.ActionsLenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], a); offset += 2
+	offset := this.ActionsLenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], a)
+	offset += 2
 }
 
 func (this *OpenflowPacketOut) ActionsLenOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowPacketOut) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPacketOut) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPacketOut) PadOffset() int {
-  offset := 18
-  return offset
+	offset := 18
+	return offset
 }
 
-
 func (this *OpenflowPacketOut) Actions() []OpenflowAction {
-  offset := this.ActionsOffset()
-  packet_size := this.Size()
-  size := int(this.ActionsLen())
-  count := this.Size() - offset
-  var res []OpenflowAction
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowActionWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.ActionsOffset()
+	packet_size := this.Size()
+	size := int(this.ActionsLen())
+	count := this.Size() - offset
+	var res []OpenflowAction
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowActionWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowPacketOut) AddActions(a OpenflowAction) {
-  offset := this.ActionsOffset()
-  offset += this.ActionsSize()
-  size := a.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], a.Buf[:a.Size()]); offset += a.Size()
-  this.SetActionsLen(this.ActionsLen() + uint16(size))
+	offset := this.ActionsOffset()
+	offset += this.ActionsSize()
+	size := a.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], a.Buf[:a.Size()])
+	offset += a.Size()
+	this.SetActionsLen(this.ActionsLen() + uint16(size))
 }
 
 func (this *OpenflowPacketOut) ActionsOffset() int {
-  offset := 24
-  return offset
+	offset := 24
+	return offset
 }
 
 func (this *OpenflowPacketOut) ActionsSize() int {
-  return int(this.ActionsLen())
+	return int(this.ActionsLen())
 }
 
 func (this *OpenflowPacketOut) Data() []uint8 {
-  offset := this.DataOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.DataOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPacketOut) AddData(d uint8) {
-  offset := this.DataOffset()
-  offset += 1
-  size := 1
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  this.Buf[offset] = byte(d); offset++
+	offset := this.DataOffset()
+	offset += 1
+	size := 1
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	this.Buf[offset] = byte(d)
+	offset++
 }
 
 func (this *OpenflowPacketOut) DataOffset() int {
-  offset := 24
-  offset += this.ActionsSize()
-  return offset
+	offset := 24
+	offset += this.ActionsSize()
+	return offset
 }
 
 func (this *OpenflowPacketOut) DataSize() int {
-  offset := this.DataOffset()
-  return this.Size() - offset
+	offset := this.DataOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowOxmFieldWithBuf(b []byte) OpenflowOxmField {
-  return OpenflowOxmField{packet.Packet{Buf: b}}
+	return OpenflowOxmField{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowOxmField() OpenflowOxmField {
-  s := 4
-  b := make([]byte, s)
-  p := OpenflowOxmField{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 4
+	b := make([]byte, s)
+	p := OpenflowOxmField{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmField struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowOxmField) minSize() int {
-  return 4
+	return 4
 }
 
 type OpenflowOxmFieldConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmFieldConn(c net.Conn) OpenflowOxmFieldConn {
-  return OpenflowOxmFieldConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmFieldConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmFieldConn) Write(pkts []OpenflowOxmField) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmFieldConn) Read(pkts []OpenflowOxmField) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmFieldWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmFieldWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmField) Init() {
-  // Invariants.
+	// Invariants.
 }
 
 func (this OpenflowOxmField) Size() int {
-  return 4
+	return 4
 }
 
 func ConvertToOpenflowOxmField(p packet.Packet) (OpenflowOxmField, error) {
-  if !IsOpenflowOxmField(p) {
-    return NewOpenflowOxmFieldWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmField")
-  }
+	if !IsOpenflowOxmField(p) {
+		return NewOpenflowOxmFieldWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmField")
+	}
 
-  return NewOpenflowOxmFieldWithBuf(p.Buf), nil
+	return NewOpenflowOxmFieldWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmField(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowOxmField) OxmClass() uint16 {
-  offset := this.OxmClassOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.OxmClassOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowOxmField) SetOxmClass(o uint16) {
-  offset := this.OxmClassOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], o); offset += 2
+	offset := this.OxmClassOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], o)
+	offset += 2
 }
 
 func (this *OpenflowOxmField) OxmClassOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowOxmField) OxmField() uint8 {
-  offset := this.OxmFieldOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.OxmFieldOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowOxmField) SetOxmField(o uint8) {
-  offset := this.OxmFieldOffset()
-  this.Buf[offset] = byte(o); offset++
+	offset := this.OxmFieldOffset()
+	this.Buf[offset] = byte(o)
+	offset++
 }
 
 func (this *OpenflowOxmField) OxmFieldOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func (this *OpenflowOxmField) OxmLength() uint8 {
-  offset := this.OxmLengthOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.OxmLengthOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowOxmField) SetOxmLength(o uint8) {
-  offset := this.OxmLengthOffset()
-  this.Buf[offset] = byte(o); offset++
+	offset := this.OxmLengthOffset()
+	this.Buf[offset] = byte(o)
+	offset++
 }
 
 func (this *OpenflowOxmField) OxmLengthOffset() int {
-  offset := 3
-  return offset
+	offset := 3
+	return offset
 }
 
-
 func NewOpenflowOxmInPortWithBuf(b []byte) OpenflowOxmInPort {
-  return OpenflowOxmInPort{OpenflowOxmField{packet.Packet{Buf: b}}}
+	return OpenflowOxmInPort{OpenflowOxmField{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowOxmInPort() OpenflowOxmInPort {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowOxmInPort{OpenflowOxmField{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowOxmInPort{OpenflowOxmField{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmInPort struct {
-  OpenflowOxmField
+	OpenflowOxmField
 }
 
 func (this OpenflowOxmInPort) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowOxmInPortConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmInPortConn(c net.Conn) OpenflowOxmInPortConn {
-  return OpenflowOxmInPortConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmInPortConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmInPortConn) Write(pkts []OpenflowOxmInPort) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmInPortConn) Read(pkts []OpenflowOxmInPort) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmInPortWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmInPortWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmInPort) Init() {
-  this.OpenflowOxmField.Init()
-  // Invariants.
-  this.SetOxmClass(uint16(32768)) // oxm_class
-  this.SetOxmField(uint8(0)) // oxm_field
-  this.SetOxmLength(uint8(4)) // oxm_length
+	this.OpenflowOxmField.Init()
+	// Invariants.
+	this.SetOxmClass(uint16(32768)) // oxm_class
+	this.SetOxmField(uint8(0))      // oxm_field
+	this.SetOxmLength(uint8(4))     // oxm_length
 }
 
 func (this OpenflowOxmInPort) Size() int {
-  return 8
+	return 8
 }
 
 func ConvertToOpenflowOxmInPort(p OpenflowOxmField) (OpenflowOxmInPort, error) {
-  if !IsOpenflowOxmInPort(p) {
-    return NewOpenflowOxmInPortWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmInPort")
-  }
+	if !IsOpenflowOxmInPort(p) {
+		return NewOpenflowOxmInPortWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmInPort")
+	}
 
-  return NewOpenflowOxmInPortWithBuf(p.Buf), nil
+	return NewOpenflowOxmInPortWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmInPort(p OpenflowOxmField) bool {
-  return p.OxmClass() == 32768 && p.OxmField() == 0 && p.OxmLength() == 4 && true
+	return p.OxmClass() == 32768 && p.OxmField() == 0 && p.OxmLength() == 4 && true
 }
 
 func (this *OpenflowOxmInPort) InPort() uint32 {
-  offset := this.InPortOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.InPortOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowOxmInPort) SetInPort(i uint32) {
-  offset := this.InPortOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], i); offset += 4
+	offset := this.InPortOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], i)
+	offset += 4
 }
 
 func (this *OpenflowOxmInPort) InPortOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func NewOpenflowOxmEthDstWithBuf(b []byte) OpenflowOxmEthDst {
-  return OpenflowOxmEthDst{OpenflowOxmField{packet.Packet{Buf: b}}}
+	return OpenflowOxmEthDst{OpenflowOxmField{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowOxmEthDst() OpenflowOxmEthDst {
-  s := 10
-  b := make([]byte, s)
-  p := OpenflowOxmEthDst{OpenflowOxmField{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 10
+	b := make([]byte, s)
+	p := OpenflowOxmEthDst{OpenflowOxmField{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmEthDst struct {
-  OpenflowOxmField
+	OpenflowOxmField
 }
 
 func (this OpenflowOxmEthDst) minSize() int {
-  return 10
+	return 10
 }
 
 type OpenflowOxmEthDstConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmEthDstConn(c net.Conn) OpenflowOxmEthDstConn {
-  return OpenflowOxmEthDstConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmEthDstConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmEthDstConn) Write(pkts []OpenflowOxmEthDst) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmEthDstConn) Read(pkts []OpenflowOxmEthDst) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmEthDstWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmEthDstWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmEthDst) Init() {
-  this.OpenflowOxmField.Init()
-  // Invariants.
-  this.SetOxmClass(uint16(32768)) // oxm_class
-  this.SetOxmField(uint8(6)) // oxm_field
-  this.SetOxmLength(uint8(6)) // oxm_length
+	this.OpenflowOxmField.Init()
+	// Invariants.
+	this.SetOxmClass(uint16(32768)) // oxm_class
+	this.SetOxmField(uint8(6))      // oxm_field
+	this.SetOxmLength(uint8(6))     // oxm_length
 }
 
 func (this OpenflowOxmEthDst) Size() int {
-  return 10
+	return 10
 }
 
 func ConvertToOpenflowOxmEthDst(p OpenflowOxmField) (OpenflowOxmEthDst, error) {
-  if !IsOpenflowOxmEthDst(p) {
-    return NewOpenflowOxmEthDstWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthDst")
-  }
+	if !IsOpenflowOxmEthDst(p) {
+		return NewOpenflowOxmEthDstWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthDst")
+	}
 
-  return NewOpenflowOxmEthDstWithBuf(p.Buf), nil
+	return NewOpenflowOxmEthDstWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmEthDst(p OpenflowOxmField) bool {
-  return p.OxmClass() == 32768 && p.OxmField() == 6 && p.OxmLength() == 6 && true
+	return p.OxmClass() == 32768 && p.OxmField() == 6 && p.OxmLength() == 6 && true
 }
 
 func (this *OpenflowOxmEthDst) MacAddr() [6]uint8 {
-  offset := this.MacAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MacAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthDst) SetMacAddr(m [6]uint8) {
-  offset := this.MacAddrOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MacAddrOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthDst) MacAddrOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func NewOpenflowOxmEthDstMaskedWithBuf(b []byte) OpenflowOxmEthDstMasked {
-  return OpenflowOxmEthDstMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
+	return OpenflowOxmEthDstMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowOxmEthDstMasked() OpenflowOxmEthDstMasked {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowOxmEthDstMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowOxmEthDstMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmEthDstMasked struct {
-  OpenflowOxmField
+	OpenflowOxmField
 }
 
 func (this OpenflowOxmEthDstMasked) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowOxmEthDstMaskedConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmEthDstMaskedConn(c net.Conn) OpenflowOxmEthDstMaskedConn {
-  return OpenflowOxmEthDstMaskedConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmEthDstMaskedConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmEthDstMaskedConn) Write(pkts []OpenflowOxmEthDstMasked) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmEthDstMaskedConn) Read(pkts []OpenflowOxmEthDstMasked) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmEthDstMaskedWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmEthDstMaskedWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmEthDstMasked) Init() {
-  this.OpenflowOxmField.Init()
-  // Invariants.
-  this.SetOxmClass(uint16(32768)) // oxm_class
-  this.SetOxmField(uint8(7)) // oxm_field
-  this.SetOxmLength(uint8(12)) // oxm_length
+	this.OpenflowOxmField.Init()
+	// Invariants.
+	this.SetOxmClass(uint16(32768)) // oxm_class
+	this.SetOxmField(uint8(7))      // oxm_field
+	this.SetOxmLength(uint8(12))    // oxm_length
 }
 
 func (this OpenflowOxmEthDstMasked) Size() int {
-  return 16
+	return 16
 }
 
 func ConvertToOpenflowOxmEthDstMasked(p OpenflowOxmField) (OpenflowOxmEthDstMasked, error) {
-  if !IsOpenflowOxmEthDstMasked(p) {
-    return NewOpenflowOxmEthDstMaskedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthDstMasked")
-  }
+	if !IsOpenflowOxmEthDstMasked(p) {
+		return NewOpenflowOxmEthDstMaskedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthDstMasked")
+	}
 
-  return NewOpenflowOxmEthDstMaskedWithBuf(p.Buf), nil
+	return NewOpenflowOxmEthDstMaskedWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmEthDstMasked(p OpenflowOxmField) bool {
-  return p.OxmClass() == 32768 && p.OxmField() == 7 && p.OxmLength() == 12 && true
+	return p.OxmClass() == 32768 && p.OxmField() == 7 && p.OxmLength() == 12 && true
 }
 
 func (this *OpenflowOxmEthDstMasked) MacAddr() [6]uint8 {
-  offset := this.MacAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MacAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthDstMasked) SetMacAddr(m [6]uint8) {
-  offset := this.MacAddrOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MacAddrOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthDstMasked) MacAddrOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowOxmEthDstMasked) Mask() [6]uint8 {
-  offset := this.MaskOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MaskOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthDstMasked) SetMask(m [6]uint8) {
-  offset := this.MaskOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MaskOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthDstMasked) MaskOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowOxmEthSrcWithBuf(b []byte) OpenflowOxmEthSrc {
-  return OpenflowOxmEthSrc{OpenflowOxmField{packet.Packet{Buf: b}}}
+	return OpenflowOxmEthSrc{OpenflowOxmField{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowOxmEthSrc() OpenflowOxmEthSrc {
-  s := 10
-  b := make([]byte, s)
-  p := OpenflowOxmEthSrc{OpenflowOxmField{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 10
+	b := make([]byte, s)
+	p := OpenflowOxmEthSrc{OpenflowOxmField{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmEthSrc struct {
-  OpenflowOxmField
+	OpenflowOxmField
 }
 
 func (this OpenflowOxmEthSrc) minSize() int {
-  return 10
+	return 10
 }
 
 type OpenflowOxmEthSrcConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmEthSrcConn(c net.Conn) OpenflowOxmEthSrcConn {
-  return OpenflowOxmEthSrcConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmEthSrcConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmEthSrcConn) Write(pkts []OpenflowOxmEthSrc) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmEthSrcConn) Read(pkts []OpenflowOxmEthSrc) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmEthSrcWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmEthSrcWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmEthSrc) Init() {
-  this.OpenflowOxmField.Init()
-  // Invariants.
-  this.SetOxmClass(uint16(32768)) // oxm_class
-  this.SetOxmField(uint8(8)) // oxm_field
-  this.SetOxmLength(uint8(6)) // oxm_length
+	this.OpenflowOxmField.Init()
+	// Invariants.
+	this.SetOxmClass(uint16(32768)) // oxm_class
+	this.SetOxmField(uint8(8))      // oxm_field
+	this.SetOxmLength(uint8(6))     // oxm_length
 }
 
 func (this OpenflowOxmEthSrc) Size() int {
-  return 10
+	return 10
 }
 
 func ConvertToOpenflowOxmEthSrc(p OpenflowOxmField) (OpenflowOxmEthSrc, error) {
-  if !IsOpenflowOxmEthSrc(p) {
-    return NewOpenflowOxmEthSrcWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthSrc")
-  }
+	if !IsOpenflowOxmEthSrc(p) {
+		return NewOpenflowOxmEthSrcWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthSrc")
+	}
 
-  return NewOpenflowOxmEthSrcWithBuf(p.Buf), nil
+	return NewOpenflowOxmEthSrcWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmEthSrc(p OpenflowOxmField) bool {
-  return p.OxmClass() == 32768 && p.OxmField() == 8 && p.OxmLength() == 6 && true
+	return p.OxmClass() == 32768 && p.OxmField() == 8 && p.OxmLength() == 6 && true
 }
 
 func (this *OpenflowOxmEthSrc) MacAddr() [6]uint8 {
-  offset := this.MacAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MacAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthSrc) SetMacAddr(m [6]uint8) {
-  offset := this.MacAddrOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MacAddrOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthSrc) MacAddrOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func NewOpenflowOxmEthSrcMaskedWithBuf(b []byte) OpenflowOxmEthSrcMasked {
-  return OpenflowOxmEthSrcMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
+	return OpenflowOxmEthSrcMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowOxmEthSrcMasked() OpenflowOxmEthSrcMasked {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowOxmEthSrcMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowOxmEthSrcMasked{OpenflowOxmField{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowOxmEthSrcMasked struct {
-  OpenflowOxmField
+	OpenflowOxmField
 }
 
 func (this OpenflowOxmEthSrcMasked) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowOxmEthSrcMaskedConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowOxmEthSrcMaskedConn(c net.Conn) OpenflowOxmEthSrcMaskedConn {
-  return OpenflowOxmEthSrcMaskedConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowOxmEthSrcMaskedConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowOxmEthSrcMaskedConn) Write(pkts []OpenflowOxmEthSrcMasked) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowOxmEthSrcMaskedConn) Read(pkts []OpenflowOxmEthSrcMasked) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowOxmEthSrcMaskedWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowOxmEthSrcMaskedWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowOxmEthSrcMasked) Init() {
-  this.OpenflowOxmField.Init()
-  // Invariants.
-  this.SetOxmClass(uint16(32768)) // oxm_class
-  this.SetOxmField(uint8(9)) // oxm_field
-  this.SetOxmLength(uint8(12)) // oxm_length
+	this.OpenflowOxmField.Init()
+	// Invariants.
+	this.SetOxmClass(uint16(32768)) // oxm_class
+	this.SetOxmField(uint8(9))      // oxm_field
+	this.SetOxmLength(uint8(12))    // oxm_length
 }
 
 func (this OpenflowOxmEthSrcMasked) Size() int {
-  return 16
+	return 16
 }
 
 func ConvertToOpenflowOxmEthSrcMasked(p OpenflowOxmField) (OpenflowOxmEthSrcMasked, error) {
-  if !IsOpenflowOxmEthSrcMasked(p) {
-    return NewOpenflowOxmEthSrcMaskedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthSrcMasked")
-  }
+	if !IsOpenflowOxmEthSrcMasked(p) {
+		return NewOpenflowOxmEthSrcMaskedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowOxmEthSrcMasked")
+	}
 
-  return NewOpenflowOxmEthSrcMaskedWithBuf(p.Buf), nil
+	return NewOpenflowOxmEthSrcMaskedWithBuf(p.Buf), nil
 }
 
 func IsOpenflowOxmEthSrcMasked(p OpenflowOxmField) bool {
-  return p.OxmClass() == 32768 && p.OxmField() == 9 && p.OxmLength() == 12 && true
+	return p.OxmClass() == 32768 && p.OxmField() == 9 && p.OxmLength() == 12 && true
 }
 
 func (this *OpenflowOxmEthSrcMasked) MacAddr() [6]uint8 {
-  offset := this.MacAddrOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MacAddrOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthSrcMasked) SetMacAddr(m [6]uint8) {
-  offset := this.MacAddrOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MacAddrOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthSrcMasked) MacAddrOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowOxmEthSrcMasked) Mask() [6]uint8 {
-  offset := this.MaskOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MaskOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowOxmEthSrcMasked) SetMask(m [6]uint8) {
-  offset := this.MaskOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MaskOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowOxmEthSrcMasked) MaskOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowMatchWithBuf(b []byte) OpenflowMatch {
-  return OpenflowMatch{packet.Packet{Buf: b}}
+	return OpenflowMatch{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowMatch() OpenflowMatch {
-  s := packet.PaddedSize(4, 8)
-  b := make([]byte, s)
-  p := OpenflowMatch{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := packet.PaddedSize(4, 8)
+	b := make([]byte, s)
+	p := OpenflowMatch{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowMatch struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowMatch) minSize() int {
-  return 4
+	return 4
 }
 
 type OpenflowMatchConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowMatchConn(c net.Conn) OpenflowMatchConn {
-  return OpenflowMatchConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowMatchConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowMatchConn) Write(pkts []OpenflowMatch) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowMatchConn) Read(pkts []OpenflowMatch) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowMatchWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowMatchWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowMatch) Init() {
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowMatch) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return packet.PaddedSize(size, 8)
+	size := int(this.Length())
+	return packet.PaddedSize(size, 8)
 }
 
 func ConvertToOpenflowMatch(p packet.Packet) (OpenflowMatch, error) {
-  if !IsOpenflowMatch(p) {
-    return NewOpenflowMatchWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowMatch")
-  }
+	if !IsOpenflowMatch(p) {
+		return NewOpenflowMatchWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowMatch")
+	}
 
-  return NewOpenflowMatchWithBuf(p.Buf), nil
+	return NewOpenflowMatchWithBuf(p.Buf), nil
 }
 
 func IsOpenflowMatch(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowMatch) Type() uint16 {
-  offset := this.TypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.TypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowMatch) SetType(t uint16) {
-  offset := this.TypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], t); offset += 2
+	offset := this.TypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], t)
+	offset += 2
 }
 
 func (this *OpenflowMatch) TypeOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowMatch) Length() uint16 {
-  offset := this.LengthOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LengthOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowMatch) SetLength(l uint16) {
-  offset := this.LengthOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LengthOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowMatch) LengthOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func (this *OpenflowMatch) OxmFields() []OpenflowOxmField {
-  offset := this.OxmFieldsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []OpenflowOxmField
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowOxmFieldWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.OxmFieldsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []OpenflowOxmField
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowOxmFieldWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowMatch) AddOxmFields(o OpenflowOxmField) {
-  offset := this.OxmFieldsOffset()
-  offset += this.OxmFieldsSize()
-  size := o.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], o.Buf[:o.Size()]); offset += o.Size()
+	offset := this.OxmFieldsOffset()
+	offset += this.OxmFieldsSize()
+	size := o.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], o.Buf[:o.Size()])
+	offset += o.Size()
 }
 
 func (this *OpenflowMatch) OxmFieldsOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
 func (this *OpenflowMatch) OxmFieldsSize() int {
-  offset := this.OxmFieldsOffset()
-  return this.Size() - offset
+	offset := this.OxmFieldsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowFlowModWithBuf(b []byte) OpenflowFlowMod {
-  return OpenflowFlowMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowFlowMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowFlowMod() OpenflowFlowMod {
-  s := 48
-  b := make([]byte, s)
-  p := OpenflowFlowMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 48
+	b := make([]byte, s)
+	p := OpenflowFlowMod{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFlowMod struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowFlowMod) minSize() int {
-  return 48
+	return 48
 }
 
 type OpenflowFlowModConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFlowModConn(c net.Conn) OpenflowFlowModConn {
-  return OpenflowFlowModConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFlowModConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFlowModConn) Write(pkts []OpenflowFlowMod) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFlowModConn) Read(pkts []OpenflowFlowMod) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFlowModWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFlowModWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFlowMod) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(14)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(14))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowFlowMod) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFlowMod(p OpenflowHeaderV12) (OpenflowFlowMod, error) {
-  if !IsOpenflowFlowMod(p) {
-    return NewOpenflowFlowModWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowMod")
-  }
+	if !IsOpenflowFlowMod(p) {
+		return NewOpenflowFlowModWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowMod")
+	}
 
-  return NewOpenflowFlowModWithBuf(p.Buf), nil
+	return NewOpenflowFlowModWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFlowMod(p OpenflowHeaderV12) bool {
-  return p.Type() == 14 && true
+	return p.Type() == 14 && true
 }
 
 func (this *OpenflowFlowMod) Cookie() uint64 {
-  offset := this.CookieOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.CookieOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetCookie(c uint64) {
-  offset := this.CookieOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], c); offset += 8
+	offset := this.CookieOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], c)
+	offset += 8
 }
 
 func (this *OpenflowFlowMod) CookieOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) CookieMask() uint64 {
-  offset := this.CookieMaskOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.CookieMaskOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetCookieMask(c uint64) {
-  offset := this.CookieMaskOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], c); offset += 8
+	offset := this.CookieMaskOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], c)
+	offset += 8
 }
 
 func (this *OpenflowFlowMod) CookieMaskOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) TableId() uint8 {
-  offset := this.TableIdOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.TableIdOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetTableId(t uint8) {
-  offset := this.TableIdOffset()
-  this.Buf[offset] = byte(t); offset++
+	offset := this.TableIdOffset()
+	this.Buf[offset] = byte(t)
+	offset++
 }
 
 func (this *OpenflowFlowMod) TableIdOffset() int {
-  offset := 24
-  return offset
+	offset := 24
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) Command() uint8 {
-  offset := this.CommandOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.CommandOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetCommand(c uint8) {
-  offset := this.CommandOffset()
-  this.Buf[offset] = byte(c); offset++
+	offset := this.CommandOffset()
+	this.Buf[offset] = byte(c)
+	offset++
 }
 
 func (this *OpenflowFlowMod) CommandOffset() int {
-  offset := 25
-  return offset
+	offset := 25
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) IdleTimeout() uint16 {
-  offset := this.IdleTimeoutOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.IdleTimeoutOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetIdleTimeout(i uint16) {
-  offset := this.IdleTimeoutOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], i); offset += 2
+	offset := this.IdleTimeoutOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], i)
+	offset += 2
 }
 
 func (this *OpenflowFlowMod) IdleTimeoutOffset() int {
-  offset := 26
-  return offset
+	offset := 26
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) HardTimeout() uint16 {
-  offset := this.HardTimeoutOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.HardTimeoutOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetHardTimeout(h uint16) {
-  offset := this.HardTimeoutOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], h); offset += 2
+	offset := this.HardTimeoutOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], h)
+	offset += 2
 }
 
 func (this *OpenflowFlowMod) HardTimeoutOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) Priority() uint16 {
-  offset := this.PriorityOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PriorityOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetPriority(p uint16) {
-  offset := this.PriorityOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PriorityOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowFlowMod) PriorityOffset() int {
-  offset := 30
-  return offset
+	offset := 30
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) BufferId() uint32 {
-  offset := this.BufferIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.BufferIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetBufferId(b uint32) {
-  offset := this.BufferIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], b); offset += 4
+	offset := this.BufferIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], b)
+	offset += 4
 }
 
 func (this *OpenflowFlowMod) BufferIdOffset() int {
-  offset := 32
-  return offset
+	offset := 32
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) OutPort() uint32 {
-  offset := this.OutPortOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.OutPortOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetOutPort(o uint32) {
-  offset := this.OutPortOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], o); offset += 4
+	offset := this.OutPortOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], o)
+	offset += 4
 }
 
 func (this *OpenflowFlowMod) OutPortOffset() int {
-  offset := 36
-  return offset
+	offset := 36
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) OutGroup() uint32 {
-  offset := this.OutGroupOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.OutGroupOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetOutGroup(o uint32) {
-  offset := this.OutGroupOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], o); offset += 4
+	offset := this.OutGroupOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], o)
+	offset += 4
 }
 
 func (this *OpenflowFlowMod) OutGroupOffset() int {
-  offset := 40
-  return offset
+	offset := 40
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) Flags() uint16 {
-  offset := this.FlagsOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.FlagsOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetFlags(f uint16) {
-  offset := this.FlagsOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], f); offset += 2
+	offset := this.FlagsOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], f)
+	offset += 2
 }
 
 func (this *OpenflowFlowMod) FlagsOffset() int {
-  offset := 44
-  return offset
+	offset := 44
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) Pad() [2]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFlowMod) SetPad(p [2]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowFlowMod) PadOffset() int {
-  offset := 46
-  return offset
+	offset := 46
+	return offset
 }
 
-
 func (this *OpenflowFlowMod) Match() OpenflowMatch {
-  offset := this.MatchOffset()
-  res := NewOpenflowMatchWithBuf(this.Buf[offset:])
-  return res
+	offset := this.MatchOffset()
+	res := NewOpenflowMatchWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowMod) SetMatch(m OpenflowMatch) {
-  offset := this.MatchOffset()
-  if this.MatchSize() != 0 {
-    panic("Repeated field match is already set.")
-  }
-  size := m.Size()
-  this.SetLength(uint16(this.Size() + size))
-  this.OpenGap(offset, size)
-  copy(this.Buf[offset:], m.Buf[:m.Size()]); offset += m.Size()
+	offset := this.MatchOffset()
+	if this.MatchSize() != 0 {
+		panic("Repeated field match is already set.")
+	}
+	size := m.Size()
+	this.SetLength(uint16(this.Size() + size))
+	this.OpenGap(offset, size)
+	copy(this.Buf[offset:], m.Buf[:m.Size()])
+	offset += m.Size()
 }
 
 func (this *OpenflowFlowMod) MatchOffset() int {
-  offset := 48
-  return offset
+	offset := 48
+	return offset
 }
 
 func (this *OpenflowFlowMod) MatchSize() int {
-  offset := this.MatchOffset()
-  if offset >= this.Size() {
-    return 0
-  }
-  return this.Match().Size()
+	offset := this.MatchOffset()
+	if offset >= this.Size() {
+		return 0
+	}
+	return this.Match().Size()
 }
 
 func (this *OpenflowFlowMod) Instructions() []OpenflowInstruction {
-  offset := this.InstructionsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowInstruction
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowInstructionWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.InstructionsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowInstruction
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowInstructionWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowFlowMod) AddInstructions(i OpenflowInstruction) {
-  offset := this.InstructionsOffset()
-  offset += this.InstructionsSize()
-  size := i.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], i.Buf[:i.Size()]); offset += i.Size()
+	offset := this.InstructionsOffset()
+	offset += this.InstructionsSize()
+	size := i.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], i.Buf[:i.Size()])
+	offset += i.Size()
 }
 
 func (this *OpenflowFlowMod) InstructionsOffset() int {
-  offset := 48
-  offset += this.MatchSize()
-  return offset
+	offset := 48
+	offset += this.MatchSize()
+	return offset
 }
 
 func (this *OpenflowFlowMod) InstructionsSize() int {
-  offset := this.InstructionsOffset()
-  return this.Size() - offset
+	offset := this.InstructionsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowFlowRemovedWithBuf(b []byte) OpenflowFlowRemoved {
-  return OpenflowFlowRemoved{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowFlowRemoved{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowFlowRemoved() OpenflowFlowRemoved {
-  s := 48
-  b := make([]byte, s)
-  p := OpenflowFlowRemoved{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 48
+	b := make([]byte, s)
+	p := OpenflowFlowRemoved{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFlowRemoved struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowFlowRemoved) minSize() int {
-  return 48
+	return 48
 }
 
 type OpenflowFlowRemovedConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFlowRemovedConn(c net.Conn) OpenflowFlowRemovedConn {
-  return OpenflowFlowRemovedConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFlowRemovedConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFlowRemovedConn) Write(pkts []OpenflowFlowRemoved) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFlowRemovedConn) Read(pkts []OpenflowFlowRemoved) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFlowRemovedWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFlowRemovedWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFlowRemoved) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(11)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(11))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowFlowRemoved) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFlowRemoved(p OpenflowHeaderV12) (OpenflowFlowRemoved, error) {
-  if !IsOpenflowFlowRemoved(p) {
-    return NewOpenflowFlowRemovedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowRemoved")
-  }
+	if !IsOpenflowFlowRemoved(p) {
+		return NewOpenflowFlowRemovedWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowRemoved")
+	}
 
-  return NewOpenflowFlowRemovedWithBuf(p.Buf), nil
+	return NewOpenflowFlowRemovedWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFlowRemoved(p OpenflowHeaderV12) bool {
-  return p.Type() == 11 && true
+	return p.Type() == 11 && true
 }
 
 func (this *OpenflowFlowRemoved) Match() OpenflowMatch {
-  offset := this.MatchOffset()
-  res := NewOpenflowMatchWithBuf(this.Buf[offset:])
-  return res
+	offset := this.MatchOffset()
+	res := NewOpenflowMatchWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetMatch(m OpenflowMatch) {
-  offset := this.MatchOffset()
-  if this.MatchSize() != 0 {
-    panic("Repeated field match is already set.")
-  }
-  size := m.Size()
-  this.SetLength(uint16(this.Size() + size))
-  this.OpenGap(offset, size)
-  copy(this.Buf[offset:], m.Buf[:m.Size()]); offset += m.Size()
+	offset := this.MatchOffset()
+	if this.MatchSize() != 0 {
+		panic("Repeated field match is already set.")
+	}
+	size := m.Size()
+	this.SetLength(uint16(this.Size() + size))
+	this.OpenGap(offset, size)
+	copy(this.Buf[offset:], m.Buf[:m.Size()])
+	offset += m.Size()
 }
 
 func (this *OpenflowFlowRemoved) MatchOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
 func (this *OpenflowFlowRemoved) MatchSize() int {
-  offset := this.MatchOffset()
-  if offset >= this.Size() {
-    return 0
-  }
-  return this.Match().Size()
+	offset := this.MatchOffset()
+	if offset >= this.Size() {
+		return 0
+	}
+	return this.Match().Size()
 }
 
 func (this *OpenflowFlowRemoved) Cookie() uint64 {
-  offset := this.CookieOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.CookieOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetCookie(c uint64) {
-  offset := this.CookieOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], c); offset += 8
+	offset := this.CookieOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], c)
+	offset += 8
 }
 
 func (this *OpenflowFlowRemoved) CookieOffset() int {
-  offset := 8
-  offset += this.MatchSize()
-  return offset
+	offset := 8
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) Priority() uint16 {
-  offset := this.PriorityOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PriorityOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetPriority(p uint16) {
-  offset := this.PriorityOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PriorityOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowFlowRemoved) PriorityOffset() int {
-  offset := 16
-  offset += this.MatchSize()
-  return offset
+	offset := 16
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) Reason() uint8 {
-  offset := this.ReasonOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.ReasonOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetReason(r uint8) {
-  offset := this.ReasonOffset()
-  this.Buf[offset] = byte(r); offset++
+	offset := this.ReasonOffset()
+	this.Buf[offset] = byte(r)
+	offset++
 }
 
 func (this *OpenflowFlowRemoved) ReasonOffset() int {
-  offset := 18
-  offset += this.MatchSize()
-  return offset
+	offset := 18
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) Pad() [1]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [1]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [1]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetPad(p [1]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowFlowRemoved) PadOffset() int {
-  offset := 19
-  offset += this.MatchSize()
-  return offset
+	offset := 19
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) DurationSec() uint32 {
-  offset := this.DurationSecOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.DurationSecOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetDurationSec(d uint32) {
-  offset := this.DurationSecOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], d); offset += 4
+	offset := this.DurationSecOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], d)
+	offset += 4
 }
 
 func (this *OpenflowFlowRemoved) DurationSecOffset() int {
-  offset := 20
-  offset += this.MatchSize()
-  return offset
+	offset := 20
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) DurationNsec() uint32 {
-  offset := this.DurationNsecOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.DurationNsecOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetDurationNsec(d uint32) {
-  offset := this.DurationNsecOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], d); offset += 4
+	offset := this.DurationNsecOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], d)
+	offset += 4
 }
 
 func (this *OpenflowFlowRemoved) DurationNsecOffset() int {
-  offset := 24
-  offset += this.MatchSize()
-  return offset
+	offset := 24
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) IdleTimeout() uint16 {
-  offset := this.IdleTimeoutOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.IdleTimeoutOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetIdleTimeout(i uint16) {
-  offset := this.IdleTimeoutOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], i); offset += 2
+	offset := this.IdleTimeoutOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], i)
+	offset += 2
 }
 
 func (this *OpenflowFlowRemoved) IdleTimeoutOffset() int {
-  offset := 28
-  offset += this.MatchSize()
-  return offset
+	offset := 28
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) Pad2() [2]uint8 {
-  offset := this.Pad2Offset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.Pad2Offset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetPad2(p [2]uint8) {
-  offset := this.Pad2Offset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.Pad2Offset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowFlowRemoved) Pad2Offset() int {
-  offset := 30
-  offset += this.MatchSize()
-  return offset
+	offset := 30
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) PacketCount() uint64 {
-  offset := this.PacketCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.PacketCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetPacketCount(p uint64) {
-  offset := this.PacketCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], p); offset += 8
+	offset := this.PacketCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], p)
+	offset += 8
 }
 
 func (this *OpenflowFlowRemoved) PacketCountOffset() int {
-  offset := 32
-  offset += this.MatchSize()
-  return offset
+	offset := 32
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowRemoved) ByteCount() uint64 {
-  offset := this.ByteCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.ByteCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowRemoved) SetByteCount(b uint64) {
-  offset := this.ByteCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], b); offset += 8
+	offset := this.ByteCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], b)
+	offset += 8
 }
 
 func (this *OpenflowFlowRemoved) ByteCountOffset() int {
-  offset := 40
-  offset += this.MatchSize()
-  return offset
+	offset := 40
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func NewOpenflowErrorMsgWithBuf(b []byte) OpenflowErrorMsg {
-  return OpenflowErrorMsg{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowErrorMsg{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowErrorMsg() OpenflowErrorMsg {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowErrorMsg{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowErrorMsg{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowErrorMsg struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowErrorMsg) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowErrorMsgConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowErrorMsgConn(c net.Conn) OpenflowErrorMsgConn {
-  return OpenflowErrorMsgConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowErrorMsgConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowErrorMsgConn) Write(pkts []OpenflowErrorMsg) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowErrorMsgConn) Read(pkts []OpenflowErrorMsg) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowErrorMsgWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowErrorMsgWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowErrorMsg) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(1)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(1))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowErrorMsg) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowErrorMsg(p OpenflowHeaderV12) (OpenflowErrorMsg, error) {
-  if !IsOpenflowErrorMsg(p) {
-    return NewOpenflowErrorMsgWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowErrorMsg")
-  }
+	if !IsOpenflowErrorMsg(p) {
+		return NewOpenflowErrorMsgWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowErrorMsg")
+	}
 
-  return NewOpenflowErrorMsgWithBuf(p.Buf), nil
+	return NewOpenflowErrorMsgWithBuf(p.Buf), nil
 }
 
 func IsOpenflowErrorMsg(p OpenflowHeaderV12) bool {
-  return p.Type() == 1 && true
+	return p.Type() == 1 && true
 }
 
 func (this *OpenflowErrorMsg) ErrType() uint16 {
-  offset := this.ErrTypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.ErrTypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowErrorMsg) SetErrType(e uint16) {
-  offset := this.ErrTypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], e); offset += 2
+	offset := this.ErrTypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], e)
+	offset += 2
 }
 
 func (this *OpenflowErrorMsg) ErrTypeOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowErrorMsg) Code() uint16 {
-  offset := this.CodeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.CodeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowErrorMsg) SetCode(c uint16) {
-  offset := this.CodeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], c); offset += 2
+	offset := this.CodeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], c)
+	offset += 2
 }
 
 func (this *OpenflowErrorMsg) CodeOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func (this *OpenflowErrorMsg) Data() []uint8 {
-  offset := this.DataOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.DataOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowErrorMsg) AddData(d uint8) {
-  offset := this.DataOffset()
-  offset += 1
-  size := 1
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  this.Buf[offset] = byte(d); offset++
+	offset := this.DataOffset()
+	offset += 1
+	size := 1
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	this.Buf[offset] = byte(d)
+	offset++
 }
 
 func (this *OpenflowErrorMsg) DataOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
 func (this *OpenflowErrorMsg) DataSize() int {
-  offset := this.DataOffset()
-  return this.Size() - offset
+	offset := this.DataOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowStatsRequestWithBuf(b []byte) OpenflowStatsRequest {
-  return OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowStatsRequest() OpenflowStatsRequest {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowStatsRequest struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowStatsRequest) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowStatsRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowStatsRequestConn(c net.Conn) OpenflowStatsRequestConn {
-  return OpenflowStatsRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowStatsRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowStatsRequestConn) Write(pkts []OpenflowStatsRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowStatsRequestConn) Read(pkts []OpenflowStatsRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowStatsRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowStatsRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowStatsRequest) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(18)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(18))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowStatsRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowStatsRequest(p OpenflowHeaderV12) (OpenflowStatsRequest, error) {
-  if !IsOpenflowStatsRequest(p) {
-    return NewOpenflowStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowStatsRequest")
-  }
+	if !IsOpenflowStatsRequest(p) {
+		return NewOpenflowStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowStatsRequest")
+	}
 
-  return NewOpenflowStatsRequestWithBuf(p.Buf), nil
+	return NewOpenflowStatsRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowStatsRequest(p OpenflowHeaderV12) bool {
-  return p.Type() == 18 && true
+	return p.Type() == 18 && true
 }
 
 func (this *OpenflowStatsRequest) StatsType() uint16 {
-  offset := this.StatsTypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.StatsTypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowStatsRequest) SetStatsType(s uint16) {
-  offset := this.StatsTypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], s); offset += 2
+	offset := this.StatsTypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], s)
+	offset += 2
 }
 
 func (this *OpenflowStatsRequest) StatsTypeOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowStatsRequest) Flags() uint16 {
-  offset := this.FlagsOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.FlagsOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowStatsRequest) SetFlags(f uint16) {
-  offset := this.FlagsOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], f); offset += 2
+	offset := this.FlagsOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], f)
+	offset += 2
 }
 
 func (this *OpenflowStatsRequest) FlagsOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowStatsReplyWithBuf(b []byte) OpenflowStatsReply {
-  return OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowStatsReply() OpenflowStatsReply {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowStatsReply struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowStatsReply) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowStatsReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowStatsReplyConn(c net.Conn) OpenflowStatsReplyConn {
-  return OpenflowStatsReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowStatsReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowStatsReplyConn) Write(pkts []OpenflowStatsReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowStatsReplyConn) Read(pkts []OpenflowStatsReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowStatsReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowStatsReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowStatsReply) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(19))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowStatsReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowStatsReply(p OpenflowHeaderV12) (OpenflowStatsReply, error) {
-  if !IsOpenflowStatsReply(p) {
-    return NewOpenflowStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowStatsReply")
-  }
+	if !IsOpenflowStatsReply(p) {
+		return NewOpenflowStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowStatsReply")
+	}
 
-  return NewOpenflowStatsReplyWithBuf(p.Buf), nil
+	return NewOpenflowStatsReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowStatsReply(p OpenflowHeaderV12) bool {
-  return p.Type() == 19 && true
+	return p.Type() == 19 && true
 }
 
 func (this *OpenflowStatsReply) StatsType() uint16 {
-  offset := this.StatsTypeOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.StatsTypeOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowStatsReply) SetStatsType(s uint16) {
-  offset := this.StatsTypeOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], s); offset += 2
+	offset := this.StatsTypeOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], s)
+	offset += 2
 }
 
 func (this *OpenflowStatsReply) StatsTypeOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowStatsReply) Flags() uint16 {
-  offset := this.FlagsOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.FlagsOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowStatsReply) SetFlags(f uint16) {
-  offset := this.FlagsOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], f); offset += 2
+	offset := this.FlagsOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], f)
+	offset += 2
 }
 
 func (this *OpenflowStatsReply) FlagsOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowDescStatsWithBuf(b []byte) OpenflowDescStats {
-  return OpenflowDescStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowDescStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowDescStats() OpenflowDescStats {
-  s := 1068
-  b := make([]byte, s)
-  p := OpenflowDescStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 1068
+	b := make([]byte, s)
+	p := OpenflowDescStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowDescStats struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowDescStats) minSize() int {
-  return 1068
+	return 1068
 }
 
 type OpenflowDescStatsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowDescStatsConn(c net.Conn) OpenflowDescStatsConn {
-  return OpenflowDescStatsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowDescStatsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowDescStatsConn) Write(pkts []OpenflowDescStats) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowDescStatsConn) Read(pkts []OpenflowDescStats) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowDescStatsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowDescStatsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowDescStats) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(0)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(0)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowDescStats) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowDescStats(p OpenflowStatsReply) (OpenflowDescStats, error) {
-  if !IsOpenflowDescStats(p) {
-    return NewOpenflowDescStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowDescStats")
-  }
+	if !IsOpenflowDescStats(p) {
+		return NewOpenflowDescStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowDescStats")
+	}
 
-  return NewOpenflowDescStatsWithBuf(p.Buf), nil
+	return NewOpenflowDescStatsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowDescStats(p OpenflowStatsReply) bool {
-  return p.StatsType() == 0 && true
+	return p.StatsType() == 0 && true
 }
 
 func (this *OpenflowDescStats) MfrDesc() [256]int8 {
-  offset := this.MfrDescOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [256]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.MfrDescOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [256]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowDescStats) SetMfrDesc(m [256]int8) {
-  offset := this.MfrDescOffset()
-  for _, e := range m {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.MfrDescOffset()
+	for _, e := range m {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowDescStats) MfrDescOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowDescStats) HwDesc() [256]int8 {
-  offset := this.HwDescOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [256]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.HwDescOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [256]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowDescStats) SetHwDesc(h [256]int8) {
-  offset := this.HwDescOffset()
-  for _, e := range h {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.HwDescOffset()
+	for _, e := range h {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowDescStats) HwDescOffset() int {
-  offset := 268
-  return offset
+	offset := 268
+	return offset
 }
 
-
 func (this *OpenflowDescStats) SwDesc() [256]int8 {
-  offset := this.SwDescOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [256]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.SwDescOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [256]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowDescStats) SetSwDesc(s [256]int8) {
-  offset := this.SwDescOffset()
-  for _, e := range s {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.SwDescOffset()
+	for _, e := range s {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowDescStats) SwDescOffset() int {
-  offset := 524
-  return offset
+	offset := 524
+	return offset
 }
 
-
 func (this *OpenflowDescStats) SerialNum() [32]int8 {
-  offset := this.SerialNumOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [32]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.SerialNumOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [32]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowDescStats) SetSerialNum(s [32]int8) {
-  offset := this.SerialNumOffset()
-  for _, e := range s {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.SerialNumOffset()
+	for _, e := range s {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowDescStats) SerialNumOffset() int {
-  offset := 780
-  return offset
+	offset := 780
+	return offset
 }
 
-
 func (this *OpenflowDescStats) DpDesc() [256]int8 {
-  offset := this.DpDescOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [256]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.DpDescOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [256]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowDescStats) SetDpDesc(d [256]int8) {
-  offset := this.DpDescOffset()
-  for _, e := range d {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.DpDescOffset()
+	for _, e := range d {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowDescStats) DpDescOffset() int {
-  offset := 812
-  return offset
+	offset := 812
+	return offset
 }
 
-
 func NewOpenflowFlowStatsRequestWithBuf(b []byte) OpenflowFlowStatsRequest {
-  return OpenflowFlowStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowFlowStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowFlowStatsRequest() OpenflowFlowStatsRequest {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowFlowStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowFlowStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFlowStatsRequest struct {
-  OpenflowStatsRequest
+	OpenflowStatsRequest
 }
 
 func (this OpenflowFlowStatsRequest) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowFlowStatsRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFlowStatsRequestConn(c net.Conn) OpenflowFlowStatsRequestConn {
-  return OpenflowFlowStatsRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFlowStatsRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFlowStatsRequestConn) Write(pkts []OpenflowFlowStatsRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFlowStatsRequestConn) Read(pkts []OpenflowFlowStatsRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFlowStatsRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFlowStatsRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFlowStatsRequest) Init() {
-  this.OpenflowStatsRequest.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(1)) // stats_type
-  this.SetType(uint8(18)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsRequest.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(1)) // stats_type
+	this.SetType(uint8(18))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowFlowStatsRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFlowStatsRequest(p OpenflowStatsRequest) (OpenflowFlowStatsRequest, error) {
-  if !IsOpenflowFlowStatsRequest(p) {
-    return NewOpenflowFlowStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStatsRequest")
-  }
+	if !IsOpenflowFlowStatsRequest(p) {
+		return NewOpenflowFlowStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStatsRequest")
+	}
 
-  return NewOpenflowFlowStatsRequestWithBuf(p.Buf), nil
+	return NewOpenflowFlowStatsRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFlowStatsRequest(p OpenflowStatsRequest) bool {
-  return p.StatsType() == 1 && true
+	return p.StatsType() == 1 && true
 }
 
 func (this *OpenflowFlowStatsRequest) Match() OpenflowMatch {
-  offset := this.MatchOffset()
-  res := NewOpenflowMatchWithBuf(this.Buf[offset:])
-  return res
+	offset := this.MatchOffset()
+	res := NewOpenflowMatchWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStatsRequest) SetMatch(m OpenflowMatch) {
-  offset := this.MatchOffset()
-  if this.MatchSize() != 0 {
-    panic("Repeated field match is already set.")
-  }
-  size := m.Size()
-  this.SetLength(uint16(this.Size() + size))
-  this.OpenGap(offset, size)
-  copy(this.Buf[offset:], m.Buf[:m.Size()]); offset += m.Size()
+	offset := this.MatchOffset()
+	if this.MatchSize() != 0 {
+		panic("Repeated field match is already set.")
+	}
+	size := m.Size()
+	this.SetLength(uint16(this.Size() + size))
+	this.OpenGap(offset, size)
+	copy(this.Buf[offset:], m.Buf[:m.Size()])
+	offset += m.Size()
 }
 
 func (this *OpenflowFlowStatsRequest) MatchOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
 func (this *OpenflowFlowStatsRequest) MatchSize() int {
-  offset := this.MatchOffset()
-  if offset >= this.Size() {
-    return 0
-  }
-  return this.Match().Size()
+	offset := this.MatchOffset()
+	if offset >= this.Size() {
+		return 0
+	}
+	return this.Match().Size()
 }
 
 func (this *OpenflowFlowStatsRequest) TableId() uint8 {
-  offset := this.TableIdOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.TableIdOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowStatsRequest) SetTableId(t uint8) {
-  offset := this.TableIdOffset()
-  this.Buf[offset] = byte(t); offset++
+	offset := this.TableIdOffset()
+	this.Buf[offset] = byte(t)
+	offset++
 }
 
 func (this *OpenflowFlowStatsRequest) TableIdOffset() int {
-  offset := 12
-  offset += this.MatchSize()
-  return offset
+	offset := 12
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStatsRequest) Pad() uint8 {
-  offset := this.PadOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.PadOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowStatsRequest) SetPad(p uint8) {
-  offset := this.PadOffset()
-  this.Buf[offset] = byte(p); offset++
+	offset := this.PadOffset()
+	this.Buf[offset] = byte(p)
+	offset++
 }
 
 func (this *OpenflowFlowStatsRequest) PadOffset() int {
-  offset := 13
-  offset += this.MatchSize()
-  return offset
+	offset := 13
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStatsRequest) OutPort() uint16 {
-  offset := this.OutPortOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.OutPortOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStatsRequest) SetOutPort(o uint16) {
-  offset := this.OutPortOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], o); offset += 2
+	offset := this.OutPortOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], o)
+	offset += 2
 }
 
 func (this *OpenflowFlowStatsRequest) OutPortOffset() int {
-  offset := 14
-  offset += this.MatchSize()
-  return offset
+	offset := 14
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func NewOpenflowFlowStatsWithBuf(b []byte) OpenflowFlowStats {
-  return OpenflowFlowStats{packet.Packet{Buf: b}}
+	return OpenflowFlowStats{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowFlowStats() OpenflowFlowStats {
-  s := 48
-  b := make([]byte, s)
-  p := OpenflowFlowStats{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 48
+	b := make([]byte, s)
+	p := OpenflowFlowStats{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowFlowStats struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowFlowStats) minSize() int {
-  return 48
+	return 48
 }
 
 type OpenflowFlowStatsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFlowStatsConn(c net.Conn) OpenflowFlowStatsConn {
-  return OpenflowFlowStatsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFlowStatsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFlowStatsConn) Write(pkts []OpenflowFlowStats) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFlowStatsConn) Read(pkts []OpenflowFlowStats) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFlowStatsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFlowStatsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFlowStats) Init() {
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowFlowStats) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFlowStats(p packet.Packet) (OpenflowFlowStats, error) {
-  if !IsOpenflowFlowStats(p) {
-    return NewOpenflowFlowStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStats")
-  }
+	if !IsOpenflowFlowStats(p) {
+		return NewOpenflowFlowStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStats")
+	}
 
-  return NewOpenflowFlowStatsWithBuf(p.Buf), nil
+	return NewOpenflowFlowStatsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFlowStats(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowFlowStats) Length() uint16 {
-  offset := this.LengthOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LengthOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetLength(l uint16) {
-  offset := this.LengthOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LengthOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowFlowStats) LengthOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) TableId() uint8 {
-  offset := this.TableIdOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.TableIdOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetTableId(t uint8) {
-  offset := this.TableIdOffset()
-  this.Buf[offset] = byte(t); offset++
+	offset := this.TableIdOffset()
+	this.Buf[offset] = byte(t)
+	offset++
 }
 
 func (this *OpenflowFlowStats) TableIdOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Pad() uint8 {
-  offset := this.PadOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.PadOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetPad(p uint8) {
-  offset := this.PadOffset()
-  this.Buf[offset] = byte(p); offset++
+	offset := this.PadOffset()
+	this.Buf[offset] = byte(p)
+	offset++
 }
 
 func (this *OpenflowFlowStats) PadOffset() int {
-  offset := 3
-  return offset
+	offset := 3
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Match() OpenflowMatch {
-  offset := this.MatchOffset()
-  res := NewOpenflowMatchWithBuf(this.Buf[offset:])
-  return res
+	offset := this.MatchOffset()
+	res := NewOpenflowMatchWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetMatch(m OpenflowMatch) {
-  offset := this.MatchOffset()
-  if this.MatchSize() != 0 {
-    panic("Repeated field match is already set.")
-  }
-  size := m.Size()
-  this.SetLength(uint16(this.Size() + size))
-  this.OpenGap(offset, size)
-  copy(this.Buf[offset:], m.Buf[:m.Size()]); offset += m.Size()
+	offset := this.MatchOffset()
+	if this.MatchSize() != 0 {
+		panic("Repeated field match is already set.")
+	}
+	size := m.Size()
+	this.SetLength(uint16(this.Size() + size))
+	this.OpenGap(offset, size)
+	copy(this.Buf[offset:], m.Buf[:m.Size()])
+	offset += m.Size()
 }
 
 func (this *OpenflowFlowStats) MatchOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
 func (this *OpenflowFlowStats) MatchSize() int {
-  offset := this.MatchOffset()
-  if offset >= this.Size() {
-    return 0
-  }
-  return this.Match().Size()
+	offset := this.MatchOffset()
+	if offset >= this.Size() {
+		return 0
+	}
+	return this.Match().Size()
 }
 
 func (this *OpenflowFlowStats) DurationSec() uint32 {
-  offset := this.DurationSecOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.DurationSecOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetDurationSec(d uint32) {
-  offset := this.DurationSecOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], d); offset += 4
+	offset := this.DurationSecOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], d)
+	offset += 4
 }
 
 func (this *OpenflowFlowStats) DurationSecOffset() int {
-  offset := 4
-  offset += this.MatchSize()
-  return offset
+	offset := 4
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) DurationNsec() uint32 {
-  offset := this.DurationNsecOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.DurationNsecOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetDurationNsec(d uint32) {
-  offset := this.DurationNsecOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], d); offset += 4
+	offset := this.DurationNsecOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], d)
+	offset += 4
 }
 
 func (this *OpenflowFlowStats) DurationNsecOffset() int {
-  offset := 8
-  offset += this.MatchSize()
-  return offset
+	offset := 8
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Priority() uint16 {
-  offset := this.PriorityOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PriorityOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetPriority(p uint16) {
-  offset := this.PriorityOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PriorityOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowFlowStats) PriorityOffset() int {
-  offset := 12
-  offset += this.MatchSize()
-  return offset
+	offset := 12
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) IdleTimeout() uint16 {
-  offset := this.IdleTimeoutOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.IdleTimeoutOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetIdleTimeout(i uint16) {
-  offset := this.IdleTimeoutOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], i); offset += 2
+	offset := this.IdleTimeoutOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], i)
+	offset += 2
 }
 
 func (this *OpenflowFlowStats) IdleTimeoutOffset() int {
-  offset := 14
-  offset += this.MatchSize()
-  return offset
+	offset := 14
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) HardTimeout() uint16 {
-  offset := this.HardTimeoutOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.HardTimeoutOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetHardTimeout(h uint16) {
-  offset := this.HardTimeoutOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], h); offset += 2
+	offset := this.HardTimeoutOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], h)
+	offset += 2
 }
 
 func (this *OpenflowFlowStats) HardTimeoutOffset() int {
-  offset := 16
-  offset += this.MatchSize()
-  return offset
+	offset := 16
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Pad2() [6]uint8 {
-  offset := this.Pad2Offset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.Pad2Offset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowFlowStats) SetPad2(p [6]uint8) {
-  offset := this.Pad2Offset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.Pad2Offset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowFlowStats) Pad2Offset() int {
-  offset := 18
-  offset += this.MatchSize()
-  return offset
+	offset := 18
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Cookie() uint64 {
-  offset := this.CookieOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.CookieOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetCookie(c uint64) {
-  offset := this.CookieOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], c); offset += 8
+	offset := this.CookieOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], c)
+	offset += 8
 }
 
 func (this *OpenflowFlowStats) CookieOffset() int {
-  offset := 24
-  offset += this.MatchSize()
-  return offset
+	offset := 24
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) PacketCount() uint64 {
-  offset := this.PacketCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.PacketCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetPacketCount(p uint64) {
-  offset := this.PacketCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], p); offset += 8
+	offset := this.PacketCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], p)
+	offset += 8
 }
 
 func (this *OpenflowFlowStats) PacketCountOffset() int {
-  offset := 32
-  offset += this.MatchSize()
-  return offset
+	offset := 32
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) ByteCount() uint64 {
-  offset := this.ByteCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.ByteCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowFlowStats) SetByteCount(b uint64) {
-  offset := this.ByteCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], b); offset += 8
+	offset := this.ByteCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], b)
+	offset += 8
 }
 
 func (this *OpenflowFlowStats) ByteCountOffset() int {
-  offset := 40
-  offset += this.MatchSize()
-  return offset
+	offset := 40
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowFlowStats) Actions() []OpenflowAction {
-  offset := this.ActionsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowAction
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowActionWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.ActionsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowAction
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowActionWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowFlowStats) AddActions(a OpenflowAction) {
-  offset := this.ActionsOffset()
-  offset += this.ActionsSize()
-  size := a.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], a.Buf[:a.Size()]); offset += a.Size()
+	offset := this.ActionsOffset()
+	offset += this.ActionsSize()
+	size := a.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], a.Buf[:a.Size()])
+	offset += a.Size()
 }
 
 func (this *OpenflowFlowStats) ActionsOffset() int {
-  offset := 48
-  offset += this.MatchSize()
-  return offset
+	offset := 48
+	offset += this.MatchSize()
+	return offset
 }
 
 func (this *OpenflowFlowStats) ActionsSize() int {
-  offset := this.ActionsOffset()
-  return this.Size() - offset
+	offset := this.ActionsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowFlowStatsReplyWithBuf(b []byte) OpenflowFlowStatsReply {
-  return OpenflowFlowStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowFlowStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowFlowStatsReply() OpenflowFlowStatsReply {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowFlowStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowFlowStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowFlowStatsReply struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowFlowStatsReply) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowFlowStatsReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowFlowStatsReplyConn(c net.Conn) OpenflowFlowStatsReplyConn {
-  return OpenflowFlowStatsReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowFlowStatsReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowFlowStatsReplyConn) Write(pkts []OpenflowFlowStatsReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowFlowStatsReplyConn) Read(pkts []OpenflowFlowStatsReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowFlowStatsReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowFlowStatsReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowFlowStatsReply) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(1)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(1)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowFlowStatsReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowFlowStatsReply(p OpenflowStatsReply) (OpenflowFlowStatsReply, error) {
-  if !IsOpenflowFlowStatsReply(p) {
-    return NewOpenflowFlowStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStatsReply")
-  }
+	if !IsOpenflowFlowStatsReply(p) {
+		return NewOpenflowFlowStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowFlowStatsReply")
+	}
 
-  return NewOpenflowFlowStatsReplyWithBuf(p.Buf), nil
+	return NewOpenflowFlowStatsReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowFlowStatsReply(p OpenflowStatsReply) bool {
-  return p.StatsType() == 1 && true
+	return p.StatsType() == 1 && true
 }
 
 func (this *OpenflowFlowStatsReply) FlowStats() []OpenflowFlowStats {
-  offset := this.FlowStatsOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowFlowStats
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowFlowStatsWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.FlowStatsOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowFlowStats
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowFlowStatsWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowFlowStatsReply) AddFlowStats(f OpenflowFlowStats) {
-  offset := this.FlowStatsOffset()
-  offset += this.FlowStatsSize()
-  size := f.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], f.Buf[:f.Size()]); offset += f.Size()
+	offset := this.FlowStatsOffset()
+	offset += this.FlowStatsSize()
+	size := f.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], f.Buf[:f.Size()])
+	offset += f.Size()
 }
 
 func (this *OpenflowFlowStatsReply) FlowStatsOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
 func (this *OpenflowFlowStatsReply) FlowStatsSize() int {
-  offset := this.FlowStatsOffset()
-  return this.Size() - offset
+	offset := this.FlowStatsOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowAggregateStatsRequestWithBuf(b []byte) OpenflowAggregateStatsRequest {
-  return OpenflowAggregateStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowAggregateStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowAggregateStatsRequest() OpenflowAggregateStatsRequest {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowAggregateStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowAggregateStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowAggregateStatsRequest struct {
-  OpenflowStatsRequest
+	OpenflowStatsRequest
 }
 
 func (this OpenflowAggregateStatsRequest) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowAggregateStatsRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowAggregateStatsRequestConn(c net.Conn) OpenflowAggregateStatsRequestConn {
-  return OpenflowAggregateStatsRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowAggregateStatsRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowAggregateStatsRequestConn) Write(pkts []OpenflowAggregateStatsRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowAggregateStatsRequestConn) Read(pkts []OpenflowAggregateStatsRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowAggregateStatsRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowAggregateStatsRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowAggregateStatsRequest) Init() {
-  this.OpenflowStatsRequest.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(2)) // stats_type
-  this.SetType(uint8(18)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsRequest.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(2)) // stats_type
+	this.SetType(uint8(18))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowAggregateStatsRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowAggregateStatsRequest(p OpenflowStatsRequest) (OpenflowAggregateStatsRequest, error) {
-  if !IsOpenflowAggregateStatsRequest(p) {
-    return NewOpenflowAggregateStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAggregateStatsRequest")
-  }
+	if !IsOpenflowAggregateStatsRequest(p) {
+		return NewOpenflowAggregateStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAggregateStatsRequest")
+	}
 
-  return NewOpenflowAggregateStatsRequestWithBuf(p.Buf), nil
+	return NewOpenflowAggregateStatsRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowAggregateStatsRequest(p OpenflowStatsRequest) bool {
-  return p.StatsType() == 2 && true
+	return p.StatsType() == 2 && true
 }
 
 func (this *OpenflowAggregateStatsRequest) Match() OpenflowMatch {
-  offset := this.MatchOffset()
-  res := NewOpenflowMatchWithBuf(this.Buf[offset:])
-  return res
+	offset := this.MatchOffset()
+	res := NewOpenflowMatchWithBuf(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAggregateStatsRequest) SetMatch(m OpenflowMatch) {
-  offset := this.MatchOffset()
-  if this.MatchSize() != 0 {
-    panic("Repeated field match is already set.")
-  }
-  size := m.Size()
-  this.SetLength(uint16(this.Size() + size))
-  this.OpenGap(offset, size)
-  copy(this.Buf[offset:], m.Buf[:m.Size()]); offset += m.Size()
+	offset := this.MatchOffset()
+	if this.MatchSize() != 0 {
+		panic("Repeated field match is already set.")
+	}
+	size := m.Size()
+	this.SetLength(uint16(this.Size() + size))
+	this.OpenGap(offset, size)
+	copy(this.Buf[offset:], m.Buf[:m.Size()])
+	offset += m.Size()
 }
 
 func (this *OpenflowAggregateStatsRequest) MatchOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
 func (this *OpenflowAggregateStatsRequest) MatchSize() int {
-  offset := this.MatchOffset()
-  if offset >= this.Size() {
-    return 0
-  }
-  return this.Match().Size()
+	offset := this.MatchOffset()
+	if offset >= this.Size() {
+		return 0
+	}
+	return this.Match().Size()
 }
 
 func (this *OpenflowAggregateStatsRequest) TableId() uint8 {
-  offset := this.TableIdOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.TableIdOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowAggregateStatsRequest) SetTableId(t uint8) {
-  offset := this.TableIdOffset()
-  this.Buf[offset] = byte(t); offset++
+	offset := this.TableIdOffset()
+	this.Buf[offset] = byte(t)
+	offset++
 }
 
 func (this *OpenflowAggregateStatsRequest) TableIdOffset() int {
-  offset := 12
-  offset += this.MatchSize()
-  return offset
+	offset := 12
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowAggregateStatsRequest) Pad() uint8 {
-  offset := this.PadOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.PadOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowAggregateStatsRequest) SetPad(p uint8) {
-  offset := this.PadOffset()
-  this.Buf[offset] = byte(p); offset++
+	offset := this.PadOffset()
+	this.Buf[offset] = byte(p)
+	offset++
 }
 
 func (this *OpenflowAggregateStatsRequest) PadOffset() int {
-  offset := 13
-  offset += this.MatchSize()
-  return offset
+	offset := 13
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func (this *OpenflowAggregateStatsRequest) OutPort() uint16 {
-  offset := this.OutPortOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.OutPortOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAggregateStatsRequest) SetOutPort(o uint16) {
-  offset := this.OutPortOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], o); offset += 2
+	offset := this.OutPortOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], o)
+	offset += 2
 }
 
 func (this *OpenflowAggregateStatsRequest) OutPortOffset() int {
-  offset := 14
-  offset += this.MatchSize()
-  return offset
+	offset := 14
+	offset += this.MatchSize()
+	return offset
 }
 
-
 func NewOpenflowAggregateStatsReplyWithBuf(b []byte) OpenflowAggregateStatsReply {
-  return OpenflowAggregateStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowAggregateStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowAggregateStatsReply() OpenflowAggregateStatsReply {
-  s := 36
-  b := make([]byte, s)
-  p := OpenflowAggregateStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 36
+	b := make([]byte, s)
+	p := OpenflowAggregateStatsReply{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowAggregateStatsReply struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowAggregateStatsReply) minSize() int {
-  return 36
+	return 36
 }
 
 type OpenflowAggregateStatsReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowAggregateStatsReplyConn(c net.Conn) OpenflowAggregateStatsReplyConn {
-  return OpenflowAggregateStatsReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowAggregateStatsReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowAggregateStatsReplyConn) Write(pkts []OpenflowAggregateStatsReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowAggregateStatsReplyConn) Read(pkts []OpenflowAggregateStatsReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowAggregateStatsReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowAggregateStatsReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowAggregateStatsReply) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(2)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(2)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowAggregateStatsReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowAggregateStatsReply(p OpenflowStatsReply) (OpenflowAggregateStatsReply, error) {
-  if !IsOpenflowAggregateStatsReply(p) {
-    return NewOpenflowAggregateStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAggregateStatsReply")
-  }
+	if !IsOpenflowAggregateStatsReply(p) {
+		return NewOpenflowAggregateStatsReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowAggregateStatsReply")
+	}
 
-  return NewOpenflowAggregateStatsReplyWithBuf(p.Buf), nil
+	return NewOpenflowAggregateStatsReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowAggregateStatsReply(p OpenflowStatsReply) bool {
-  return p.StatsType() == 2 && true
+	return p.StatsType() == 2 && true
 }
 
 func (this *OpenflowAggregateStatsReply) PacketCount() uint64 {
-  offset := this.PacketCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.PacketCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAggregateStatsReply) SetPacketCount(p uint64) {
-  offset := this.PacketCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], p); offset += 8
+	offset := this.PacketCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], p)
+	offset += 8
 }
 
 func (this *OpenflowAggregateStatsReply) PacketCountOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowAggregateStatsReply) ByteCount() uint64 {
-  offset := this.ByteCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.ByteCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAggregateStatsReply) SetByteCount(b uint64) {
-  offset := this.ByteCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], b); offset += 8
+	offset := this.ByteCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], b)
+	offset += 8
 }
 
 func (this *OpenflowAggregateStatsReply) ByteCountOffset() int {
-  offset := 20
-  return offset
+	offset := 20
+	return offset
 }
 
-
 func (this *OpenflowAggregateStatsReply) FlowCount() uint32 {
-  offset := this.FlowCountOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.FlowCountOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowAggregateStatsReply) SetFlowCount(f uint32) {
-  offset := this.FlowCountOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], f); offset += 4
+	offset := this.FlowCountOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], f)
+	offset += 4
 }
 
 func (this *OpenflowAggregateStatsReply) FlowCountOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func (this *OpenflowAggregateStatsReply) Pad() [4]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [4]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [4]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowAggregateStatsReply) SetPad(p [4]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowAggregateStatsReply) PadOffset() int {
-  offset := 32
-  return offset
+	offset := 32
+	return offset
 }
 
-
 func NewOpenflowTableStatsWithBuf(b []byte) OpenflowTableStats {
-  return OpenflowTableStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowTableStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowTableStats() OpenflowTableStats {
-  s := 76
-  b := make([]byte, s)
-  p := OpenflowTableStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 76
+	b := make([]byte, s)
+	p := OpenflowTableStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowTableStats struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowTableStats) minSize() int {
-  return 76
+	return 76
 }
 
 type OpenflowTableStatsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowTableStatsConn(c net.Conn) OpenflowTableStatsConn {
-  return OpenflowTableStatsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowTableStatsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowTableStatsConn) Write(pkts []OpenflowTableStats) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowTableStatsConn) Read(pkts []OpenflowTableStats) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowTableStatsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowTableStatsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowTableStats) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(3)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(3)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowTableStats) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowTableStats(p OpenflowStatsReply) (OpenflowTableStats, error) {
-  if !IsOpenflowTableStats(p) {
-    return NewOpenflowTableStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowTableStats")
-  }
+	if !IsOpenflowTableStats(p) {
+		return NewOpenflowTableStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowTableStats")
+	}
 
-  return NewOpenflowTableStatsWithBuf(p.Buf), nil
+	return NewOpenflowTableStatsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowTableStats(p OpenflowStatsReply) bool {
-  return p.StatsType() == 3 && true
+	return p.StatsType() == 3 && true
 }
 
 func (this *OpenflowTableStats) TableId() uint8 {
-  offset := this.TableIdOffset()
-  res := uint8(this.Buf[offset])
-  return res
+	offset := this.TableIdOffset()
+	res := uint8(this.Buf[offset])
+	return res
 }
 
 func (this *OpenflowTableStats) SetTableId(t uint8) {
-  offset := this.TableIdOffset()
-  this.Buf[offset] = byte(t); offset++
+	offset := this.TableIdOffset()
+	this.Buf[offset] = byte(t)
+	offset++
 }
 
 func (this *OpenflowTableStats) TableIdOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowTableStats) Pad() [3]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [3]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [3]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowTableStats) SetPad(p [3]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowTableStats) PadOffset() int {
-  offset := 13
-  return offset
+	offset := 13
+	return offset
 }
 
-
 func (this *OpenflowTableStats) Name() [32]int8 {
-  offset := this.NameOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [32]int8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := int8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.NameOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [32]int8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := int8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowTableStats) SetName(n [32]int8) {
-  offset := this.NameOffset()
-  for _, e := range n {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.NameOffset()
+	for _, e := range n {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowTableStats) NameOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowTableStats) Wildcards() uint32 {
-  offset := this.WildcardsOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.WildcardsOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowTableStats) SetWildcards(w uint32) {
-  offset := this.WildcardsOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], w); offset += 4
+	offset := this.WildcardsOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], w)
+	offset += 4
 }
 
 func (this *OpenflowTableStats) WildcardsOffset() int {
-  offset := 48
-  return offset
+	offset := 48
+	return offset
 }
 
-
 func (this *OpenflowTableStats) MaxEntries() uint32 {
-  offset := this.MaxEntriesOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.MaxEntriesOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowTableStats) SetMaxEntries(m uint32) {
-  offset := this.MaxEntriesOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], m); offset += 4
+	offset := this.MaxEntriesOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], m)
+	offset += 4
 }
 
 func (this *OpenflowTableStats) MaxEntriesOffset() int {
-  offset := 52
-  return offset
+	offset := 52
+	return offset
 }
 
-
 func (this *OpenflowTableStats) ActiveCount() uint32 {
-  offset := this.ActiveCountOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.ActiveCountOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowTableStats) SetActiveCount(a uint32) {
-  offset := this.ActiveCountOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], a); offset += 4
+	offset := this.ActiveCountOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], a)
+	offset += 4
 }
 
 func (this *OpenflowTableStats) ActiveCountOffset() int {
-  offset := 56
-  return offset
+	offset := 56
+	return offset
 }
 
-
 func (this *OpenflowTableStats) LookupCount() uint64 {
-  offset := this.LookupCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.LookupCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowTableStats) SetLookupCount(l uint64) {
-  offset := this.LookupCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], l); offset += 8
+	offset := this.LookupCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], l)
+	offset += 8
 }
 
 func (this *OpenflowTableStats) LookupCountOffset() int {
-  offset := 60
-  return offset
+	offset := 60
+	return offset
 }
 
-
 func (this *OpenflowTableStats) MatchedCount() uint64 {
-  offset := this.MatchedCountOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.MatchedCountOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowTableStats) SetMatchedCount(m uint64) {
-  offset := this.MatchedCountOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], m); offset += 8
+	offset := this.MatchedCountOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], m)
+	offset += 8
 }
 
 func (this *OpenflowTableStats) MatchedCountOffset() int {
-  offset := 68
-  return offset
+	offset := 68
+	return offset
 }
 
-
 func NewOpenflowPortStatsRequestWithBuf(b []byte) OpenflowPortStatsRequest {
-  return OpenflowPortStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowPortStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowPortStatsRequest() OpenflowPortStatsRequest {
-  s := 20
-  b := make([]byte, s)
-  p := OpenflowPortStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 20
+	b := make([]byte, s)
+	p := OpenflowPortStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPortStatsRequest struct {
-  OpenflowStatsRequest
+	OpenflowStatsRequest
 }
 
 func (this OpenflowPortStatsRequest) minSize() int {
-  return 20
+	return 20
 }
 
 type OpenflowPortStatsRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPortStatsRequestConn(c net.Conn) OpenflowPortStatsRequestConn {
-  return OpenflowPortStatsRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPortStatsRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPortStatsRequestConn) Write(pkts []OpenflowPortStatsRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPortStatsRequestConn) Read(pkts []OpenflowPortStatsRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPortStatsRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPortStatsRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPortStatsRequest) Init() {
-  this.OpenflowStatsRequest.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(4)) // stats_type
-  this.SetType(uint8(18)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsRequest.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(4)) // stats_type
+	this.SetType(uint8(18))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowPortStatsRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPortStatsRequest(p OpenflowStatsRequest) (OpenflowPortStatsRequest, error) {
-  if !IsOpenflowPortStatsRequest(p) {
-    return NewOpenflowPortStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStatsRequest")
-  }
+	if !IsOpenflowPortStatsRequest(p) {
+		return NewOpenflowPortStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStatsRequest")
+	}
 
-  return NewOpenflowPortStatsRequestWithBuf(p.Buf), nil
+	return NewOpenflowPortStatsRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPortStatsRequest(p OpenflowStatsRequest) bool {
-  return p.StatsType() == 4 && true
+	return p.StatsType() == 4 && true
 }
 
 func (this *OpenflowPortStatsRequest) PortNo() uint16 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStatsRequest) SetPortNo(p uint16) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowPortStatsRequest) PortNoOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowPortStatsRequest) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPortStatsRequest) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPortStatsRequest) PadOffset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func NewOpenflowPortStatsWithBuf(b []byte) OpenflowPortStats {
-  return OpenflowPortStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowPortStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowPortStats() OpenflowPortStats {
-  s := 116
-  b := make([]byte, s)
-  p := OpenflowPortStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 116
+	b := make([]byte, s)
+	p := OpenflowPortStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowPortStats struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowPortStats) minSize() int {
-  return 116
+	return 116
 }
 
 type OpenflowPortStatsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPortStatsConn(c net.Conn) OpenflowPortStatsConn {
-  return OpenflowPortStatsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPortStatsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPortStatsConn) Write(pkts []OpenflowPortStats) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPortStatsConn) Read(pkts []OpenflowPortStats) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPortStatsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPortStatsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPortStats) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(4)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(4)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowPortStats) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowPortStats(p OpenflowStatsReply) (OpenflowPortStats, error) {
-  if !IsOpenflowPortStats(p) {
-    return NewOpenflowPortStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStats")
-  }
+	if !IsOpenflowPortStats(p) {
+		return NewOpenflowPortStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPortStats")
+	}
 
-  return NewOpenflowPortStatsWithBuf(p.Buf), nil
+	return NewOpenflowPortStatsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPortStats(p OpenflowStatsReply) bool {
-  return p.StatsType() == 4 && true
+	return p.StatsType() == 4 && true
 }
 
 func (this *OpenflowPortStats) PortNo() uint16 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetPortNo(p uint16) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowPortStats) PortNoOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowPortStats) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPortStats) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPortStats) PadOffset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxPackets() uint64 {
-  offset := this.RxPacketsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxPacketsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxPackets(r uint64) {
-  offset := this.RxPacketsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxPacketsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxPacketsOffset() int {
-  offset := 20
-  return offset
+	offset := 20
+	return offset
 }
 
-
 func (this *OpenflowPortStats) TxPackets() uint64 {
-  offset := this.TxPacketsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxPacketsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetTxPackets(t uint64) {
-  offset := this.TxPacketsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxPacketsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) TxPacketsOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxBytes() uint64 {
-  offset := this.RxBytesOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxBytesOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxBytes(r uint64) {
-  offset := this.RxBytesOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxBytesOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxBytesOffset() int {
-  offset := 36
-  return offset
+	offset := 36
+	return offset
 }
 
-
 func (this *OpenflowPortStats) TxBytes() uint64 {
-  offset := this.TxBytesOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxBytesOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetTxBytes(t uint64) {
-  offset := this.TxBytesOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxBytesOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) TxBytesOffset() int {
-  offset := 44
-  return offset
+	offset := 44
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxDropped() uint64 {
-  offset := this.RxDroppedOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxDroppedOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxDropped(r uint64) {
-  offset := this.RxDroppedOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxDroppedOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxDroppedOffset() int {
-  offset := 52
-  return offset
+	offset := 52
+	return offset
 }
 
-
 func (this *OpenflowPortStats) TxDropped() uint64 {
-  offset := this.TxDroppedOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxDroppedOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetTxDropped(t uint64) {
-  offset := this.TxDroppedOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxDroppedOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) TxDroppedOffset() int {
-  offset := 60
-  return offset
+	offset := 60
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxErrors() uint64 {
-  offset := this.RxErrorsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxErrorsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxErrors(r uint64) {
-  offset := this.RxErrorsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxErrorsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxErrorsOffset() int {
-  offset := 68
-  return offset
+	offset := 68
+	return offset
 }
 
-
 func (this *OpenflowPortStats) TxErrors() uint64 {
-  offset := this.TxErrorsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxErrorsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetTxErrors(t uint64) {
-  offset := this.TxErrorsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxErrorsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) TxErrorsOffset() int {
-  offset := 76
-  return offset
+	offset := 76
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxFrameErr() uint64 {
-  offset := this.RxFrameErrOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxFrameErrOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxFrameErr(r uint64) {
-  offset := this.RxFrameErrOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxFrameErrOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxFrameErrOffset() int {
-  offset := 84
-  return offset
+	offset := 84
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxOverErr() uint64 {
-  offset := this.RxOverErrOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxOverErrOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxOverErr(r uint64) {
-  offset := this.RxOverErrOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxOverErrOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxOverErrOffset() int {
-  offset := 92
-  return offset
+	offset := 92
+	return offset
 }
 
-
 func (this *OpenflowPortStats) RxCrcErr() uint64 {
-  offset := this.RxCrcErrOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.RxCrcErrOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetRxCrcErr(r uint64) {
-  offset := this.RxCrcErrOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], r); offset += 8
+	offset := this.RxCrcErrOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], r)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) RxCrcErrOffset() int {
-  offset := 100
-  return offset
+	offset := 100
+	return offset
 }
 
-
 func (this *OpenflowPortStats) Collisions() uint64 {
-  offset := this.CollisionsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.CollisionsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPortStats) SetCollisions(c uint64) {
-  offset := this.CollisionsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], c); offset += 8
+	offset := this.CollisionsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], c)
+	offset += 8
 }
 
 func (this *OpenflowPortStats) CollisionsOffset() int {
-  offset := 108
-  return offset
+	offset := 108
+	return offset
 }
 
-
 func NewOpenflowVendorHeaderWithBuf(b []byte) OpenflowVendorHeader {
-  return OpenflowVendorHeader{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowVendorHeader{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowVendorHeader() OpenflowVendorHeader {
-  s := 12
-  b := make([]byte, s)
-  p := OpenflowVendorHeader{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 12
+	b := make([]byte, s)
+	p := OpenflowVendorHeader{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowVendorHeader struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowVendorHeader) minSize() int {
-  return 12
+	return 12
 }
 
 type OpenflowVendorHeaderConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowVendorHeaderConn(c net.Conn) OpenflowVendorHeaderConn {
-  return OpenflowVendorHeaderConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowVendorHeaderConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowVendorHeaderConn) Write(pkts []OpenflowVendorHeader) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowVendorHeaderConn) Read(pkts []OpenflowVendorHeader) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowVendorHeaderWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowVendorHeaderWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowVendorHeader) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(4)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(4))    // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowVendorHeader) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowVendorHeader(p OpenflowHeaderV12) (OpenflowVendorHeader, error) {
-  if !IsOpenflowVendorHeader(p) {
-    return NewOpenflowVendorHeaderWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowVendorHeader")
-  }
+	if !IsOpenflowVendorHeader(p) {
+		return NewOpenflowVendorHeaderWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowVendorHeader")
+	}
 
-  return NewOpenflowVendorHeaderWithBuf(p.Buf), nil
+	return NewOpenflowVendorHeaderWithBuf(p.Buf), nil
 }
 
 func IsOpenflowVendorHeader(p OpenflowHeaderV12) bool {
-  return p.Type() == 4 && true
+	return p.Type() == 4 && true
 }
 
 func (this *OpenflowVendorHeader) Vendor() uint32 {
-  offset := this.VendorOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.VendorOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowVendorHeader) SetVendor(v uint32) {
-  offset := this.VendorOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], v); offset += 4
+	offset := this.VendorOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], v)
+	offset += 4
 }
 
 func (this *OpenflowVendorHeader) VendorOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func NewOpenflowQueuePropHeaderWithBuf(b []byte) OpenflowQueuePropHeader {
-  return OpenflowQueuePropHeader{packet.Packet{Buf: b}}
+	return OpenflowQueuePropHeader{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowQueuePropHeader() OpenflowQueuePropHeader {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowQueuePropHeader{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowQueuePropHeader{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueuePropHeader struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowQueuePropHeader) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowQueuePropHeaderConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueuePropHeaderConn(c net.Conn) OpenflowQueuePropHeaderConn {
-  return OpenflowQueuePropHeaderConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueuePropHeaderConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueuePropHeaderConn) Write(pkts []OpenflowQueuePropHeader) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueuePropHeaderConn) Read(pkts []OpenflowQueuePropHeader) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueuePropHeaderWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueuePropHeaderWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueuePropHeader) Init() {
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowQueuePropHeader) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowQueuePropHeader(p packet.Packet) (OpenflowQueuePropHeader, error) {
-  if !IsOpenflowQueuePropHeader(p) {
-    return NewOpenflowQueuePropHeaderWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueuePropHeader")
-  }
+	if !IsOpenflowQueuePropHeader(p) {
+		return NewOpenflowQueuePropHeaderWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueuePropHeader")
+	}
 
-  return NewOpenflowQueuePropHeaderWithBuf(p.Buf), nil
+	return NewOpenflowQueuePropHeaderWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueuePropHeader(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowQueuePropHeader) Property() uint16 {
-  offset := this.PropertyOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PropertyOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueuePropHeader) SetProperty(p uint16) {
-  offset := this.PropertyOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PropertyOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowQueuePropHeader) PropertyOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowQueuePropHeader) Len() uint16 {
-  offset := this.LenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueuePropHeader) SetLen(l uint16) {
-  offset := this.LenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowQueuePropHeader) LenOffset() int {
-  offset := 2
-  return offset
+	offset := 2
+	return offset
 }
 
-
 func (this *OpenflowQueuePropHeader) Pad() [4]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [4]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [4]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueuePropHeader) SetPad(p [4]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowQueuePropHeader) PadOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func NewOpenflowQueuePropMinRateWithBuf(b []byte) OpenflowQueuePropMinRate {
-  return OpenflowQueuePropMinRate{OpenflowQueuePropHeader{packet.Packet{Buf: b}}}
+	return OpenflowQueuePropMinRate{OpenflowQueuePropHeader{packet.Packet{Buf: b}}}
 }
 
 func NewOpenflowQueuePropMinRate() OpenflowQueuePropMinRate {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowQueuePropMinRate{OpenflowQueuePropHeader{packet.Packet{Buf: b}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowQueuePropMinRate{OpenflowQueuePropHeader{packet.Packet{Buf: b}}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueuePropMinRate struct {
-  OpenflowQueuePropHeader
+	OpenflowQueuePropHeader
 }
 
 func (this OpenflowQueuePropMinRate) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowQueuePropMinRateConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueuePropMinRateConn(c net.Conn) OpenflowQueuePropMinRateConn {
-  return OpenflowQueuePropMinRateConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueuePropMinRateConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueuePropMinRateConn) Write(pkts []OpenflowQueuePropMinRate) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueuePropMinRateConn) Read(pkts []OpenflowQueuePropMinRate) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueuePropMinRateWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueuePropMinRateWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueuePropMinRate) Init() {
-  this.OpenflowQueuePropHeader.Init()
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
-  this.SetProperty(uint16(1)) // property
+	this.OpenflowQueuePropHeader.Init()
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
+	this.SetProperty(uint16(1)) // property
 }
 
 func (this OpenflowQueuePropMinRate) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowQueuePropMinRate(p OpenflowQueuePropHeader) (OpenflowQueuePropMinRate, error) {
-  if !IsOpenflowQueuePropMinRate(p) {
-    return NewOpenflowQueuePropMinRateWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueuePropMinRate")
-  }
+	if !IsOpenflowQueuePropMinRate(p) {
+		return NewOpenflowQueuePropMinRateWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueuePropMinRate")
+	}
 
-  return NewOpenflowQueuePropMinRateWithBuf(p.Buf), nil
+	return NewOpenflowQueuePropMinRateWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueuePropMinRate(p OpenflowQueuePropHeader) bool {
-  return p.Property() == 1 && true
+	return p.Property() == 1 && true
 }
 
 func (this *OpenflowQueuePropMinRate) Rate() uint16 {
-  offset := this.RateOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.RateOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueuePropMinRate) SetRate(r uint16) {
-  offset := this.RateOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], r); offset += 2
+	offset := this.RateOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], r)
+	offset += 2
 }
 
 func (this *OpenflowQueuePropMinRate) RateOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowQueuePropMinRate) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueuePropMinRate) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowQueuePropMinRate) PadOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func NewOpenflowPacketQueueWithBuf(b []byte) OpenflowPacketQueue {
-  return OpenflowPacketQueue{packet.Packet{Buf: b}}
+	return OpenflowPacketQueue{packet.Packet{Buf: b}}
 }
 
 func NewOpenflowPacketQueue() OpenflowPacketQueue {
-  s := 8
-  b := make([]byte, s)
-  p := OpenflowPacketQueue{packet.Packet{Buf: b}}
-  p.Init()
-  return p
+	s := 8
+	b := make([]byte, s)
+	p := OpenflowPacketQueue{packet.Packet{Buf: b}}
+	p.Init()
+	return p
 }
 
 type OpenflowPacketQueue struct {
-  packet.Packet
+	packet.Packet
 }
 
 func (this OpenflowPacketQueue) minSize() int {
-  return 8
+	return 8
 }
 
 type OpenflowPacketQueueConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowPacketQueueConn(c net.Conn) OpenflowPacketQueueConn {
-  return OpenflowPacketQueueConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowPacketQueueConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowPacketQueueConn) Write(pkts []OpenflowPacketQueue) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowPacketQueueConn) Read(pkts []OpenflowPacketQueue) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowPacketQueueWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowPacketQueueWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowPacketQueue) Init() {
-  this.SetLen(uint16(this.minSize()))
-  // Invariants.
+	this.SetLen(uint16(this.minSize()))
+	// Invariants.
 }
 
 func (this OpenflowPacketQueue) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Len())
-  return size
+	size := int(this.Len())
+	return size
 }
 
 func ConvertToOpenflowPacketQueue(p packet.Packet) (OpenflowPacketQueue, error) {
-  if !IsOpenflowPacketQueue(p) {
-    return NewOpenflowPacketQueueWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketQueue")
-  }
+	if !IsOpenflowPacketQueue(p) {
+		return NewOpenflowPacketQueueWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowPacketQueue")
+	}
 
-  return NewOpenflowPacketQueueWithBuf(p.Buf), nil
+	return NewOpenflowPacketQueueWithBuf(p.Buf), nil
 }
 
 func IsOpenflowPacketQueue(p packet.Packet) bool {
-  return true
+	return true
 }
 
 func (this *OpenflowPacketQueue) QueueId() uint32 {
-  offset := this.QueueIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.QueueIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketQueue) SetQueueId(q uint32) {
-  offset := this.QueueIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], q); offset += 4
+	offset := this.QueueIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], q)
+	offset += 4
 }
 
 func (this *OpenflowPacketQueue) QueueIdOffset() int {
-  offset := 0
-  return offset
+	offset := 0
+	return offset
 }
 
-
 func (this *OpenflowPacketQueue) Len() uint16 {
-  offset := this.LenOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.LenOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowPacketQueue) SetLen(l uint16) {
-  offset := this.LenOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], l); offset += 2
+	offset := this.LenOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], l)
+	offset += 2
 }
 
 func (this *OpenflowPacketQueue) LenOffset() int {
-  offset := 4
-  return offset
+	offset := 4
+	return offset
 }
 
-
 func (this *OpenflowPacketQueue) Pad() [2]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowPacketQueue) SetPad(p [2]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowPacketQueue) PadOffset() int {
-  offset := 6
-  return offset
+	offset := 6
+	return offset
 }
 
-
 func (this *OpenflowPacketQueue) Properties() []OpenflowQueuePropHeader {
-  offset := this.PropertiesOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowQueuePropHeader
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowQueuePropHeaderWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.PropertiesOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowQueuePropHeader
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowQueuePropHeaderWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowPacketQueue) AddProperties(p OpenflowQueuePropHeader) {
-  offset := this.PropertiesOffset()
-  offset += this.PropertiesSize()
-  size := p.Size()
-  this.OpenGap(offset, size)
-  this.SetLen(uint16(this.Size() + size))
-  copy(this.Buf[offset:], p.Buf[:p.Size()]); offset += p.Size()
+	offset := this.PropertiesOffset()
+	offset += this.PropertiesSize()
+	size := p.Size()
+	this.OpenGap(offset, size)
+	this.SetLen(uint16(this.Size() + size))
+	copy(this.Buf[offset:], p.Buf[:p.Size()])
+	offset += p.Size()
 }
 
 func (this *OpenflowPacketQueue) PropertiesOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
 func (this *OpenflowPacketQueue) PropertiesSize() int {
-  offset := this.PropertiesOffset()
-  return this.Size() - offset
+	offset := this.PropertiesOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowQueueGetConfigRequestWithBuf(b []byte) OpenflowQueueGetConfigRequest {
-  return OpenflowQueueGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowQueueGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowQueueGetConfigRequest() OpenflowQueueGetConfigRequest {
-  s := 10
-  b := make([]byte, s)
-  p := OpenflowQueueGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 10
+	b := make([]byte, s)
+	p := OpenflowQueueGetConfigRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueueGetConfigRequest struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowQueueGetConfigRequest) minSize() int {
-  return 10
+	return 10
 }
 
 type OpenflowQueueGetConfigRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueueGetConfigRequestConn(c net.Conn) OpenflowQueueGetConfigRequestConn {
-  return OpenflowQueueGetConfigRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueueGetConfigRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueueGetConfigRequestConn) Write(pkts []OpenflowQueueGetConfigRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueueGetConfigRequestConn) Read(pkts []OpenflowQueueGetConfigRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueueGetConfigRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueueGetConfigRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueueGetConfigRequest) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(23)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(23))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowQueueGetConfigRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowQueueGetConfigRequest(p OpenflowHeaderV12) (OpenflowQueueGetConfigRequest, error) {
-  if !IsOpenflowQueueGetConfigRequest(p) {
-    return NewOpenflowQueueGetConfigRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueGetConfigRequest")
-  }
+	if !IsOpenflowQueueGetConfigRequest(p) {
+		return NewOpenflowQueueGetConfigRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueGetConfigRequest")
+	}
 
-  return NewOpenflowQueueGetConfigRequestWithBuf(p.Buf), nil
+	return NewOpenflowQueueGetConfigRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueueGetConfigRequest(p OpenflowHeaderV12) bool {
-  return p.Type() == 23 && true
+	return p.Type() == 23 && true
 }
 
 func (this *OpenflowQueueGetConfigRequest) Port() uint16 {
-  offset := this.PortOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueGetConfigRequest) SetPort(p uint16) {
-  offset := this.PortOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowQueueGetConfigRequest) PortOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowQueueGetConfigRequest) Pad() []uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res []uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res []uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueueGetConfigRequest) AddPad(p uint8) {
-  offset := this.PadOffset()
-  offset += 1
-  size := 1
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  this.Buf[offset] = byte(p); offset++
+	offset := this.PadOffset()
+	offset += 1
+	size := 1
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	this.Buf[offset] = byte(p)
+	offset++
 }
 
 func (this *OpenflowQueueGetConfigRequest) PadOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
 func (this *OpenflowQueueGetConfigRequest) PadSize() int {
-  offset := this.PadOffset()
-  return this.Size() - offset
+	offset := this.PadOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowQueueGetConfigReplyWithBuf(b []byte) OpenflowQueueGetConfigReply {
-  return OpenflowQueueGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	return OpenflowQueueGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
 }
 
 func NewOpenflowQueueGetConfigReply() OpenflowQueueGetConfigReply {
-  s := 16
-  b := make([]byte, s)
-  p := OpenflowQueueGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
-  p.Init()
-  return p
+	s := 16
+	b := make([]byte, s)
+	p := OpenflowQueueGetConfigReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueueGetConfigReply struct {
-  OpenflowHeaderV12
+	OpenflowHeaderV12
 }
 
 func (this OpenflowQueueGetConfigReply) minSize() int {
-  return 16
+	return 16
 }
 
 type OpenflowQueueGetConfigReplyConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueueGetConfigReplyConn(c net.Conn) OpenflowQueueGetConfigReplyConn {
-  return OpenflowQueueGetConfigReplyConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueueGetConfigReplyConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueueGetConfigReplyConn) Write(pkts []OpenflowQueueGetConfigReply) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueueGetConfigReplyConn) Read(pkts []OpenflowQueueGetConfigReply) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueueGetConfigReplyWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueueGetConfigReplyWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueueGetConfigReply) Init() {
-  this.OpenflowHeaderV12.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetType(uint8(23)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowHeaderV12.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetType(uint8(23))   // type
+	this.SetVersion(uint8(3)) // version
 }
 
 func (this OpenflowQueueGetConfigReply) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowQueueGetConfigReply(p OpenflowHeaderV12) (OpenflowQueueGetConfigReply, error) {
-  if !IsOpenflowQueueGetConfigReply(p) {
-    return NewOpenflowQueueGetConfigReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueGetConfigReply")
-  }
+	if !IsOpenflowQueueGetConfigReply(p) {
+		return NewOpenflowQueueGetConfigReplyWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueGetConfigReply")
+	}
 
-  return NewOpenflowQueueGetConfigReplyWithBuf(p.Buf), nil
+	return NewOpenflowQueueGetConfigReplyWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueueGetConfigReply(p OpenflowHeaderV12) bool {
-  return p.Type() == 23 && true
+	return p.Type() == 23 && true
 }
 
 func (this *OpenflowQueueGetConfigReply) Port() uint16 {
-  offset := this.PortOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueGetConfigReply) SetPort(p uint16) {
-  offset := this.PortOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowQueueGetConfigReply) PortOffset() int {
-  offset := 8
-  return offset
+	offset := 8
+	return offset
 }
 
-
 func (this *OpenflowQueueGetConfigReply) Pad() [6]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [6]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [6]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueueGetConfigReply) SetPad(p [6]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowQueueGetConfigReply) PadOffset() int {
-  offset := 10
-  return offset
+	offset := 10
+	return offset
 }
 
-
 func (this *OpenflowQueueGetConfigReply) Queues() []OpenflowPacketQueue {
-  offset := this.QueuesOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  var res []OpenflowPacketQueue
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := NewOpenflowPacketQueueWithBuf(this.Buf[offset:])
-    if elem.Size() > size {
-      break
-    }
-    size -= elem.Size()
-    count--
-    res = append(res, elem)
-  }
-  return res
+	offset := this.QueuesOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	var res []OpenflowPacketQueue
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := NewOpenflowPacketQueueWithBuf(this.Buf[offset:])
+		if elem.Size() > size {
+			break
+		}
+		size -= elem.Size()
+		count--
+		res = append(res, elem)
+	}
+	return res
 }
 
 func (this *OpenflowQueueGetConfigReply) AddQueues(q OpenflowPacketQueue) {
-  offset := this.QueuesOffset()
-  offset += this.QueuesSize()
-  size := q.Size()
-  this.OpenGap(offset, size)
-  this.SetLength(uint16(this.Size() + size))
-  copy(this.Buf[offset:], q.Buf[:q.Size()]); offset += q.Size()
+	offset := this.QueuesOffset()
+	offset += this.QueuesSize()
+	size := q.Size()
+	this.OpenGap(offset, size)
+	this.SetLength(uint16(this.Size() + size))
+	copy(this.Buf[offset:], q.Buf[:q.Size()])
+	offset += q.Size()
 }
 
 func (this *OpenflowQueueGetConfigReply) QueuesOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
 func (this *OpenflowQueueGetConfigReply) QueuesSize() int {
-  offset := this.QueuesOffset()
-  return this.Size() - offset
+	offset := this.QueuesOffset()
+	return this.Size() - offset
 }
 
 func NewOpenflowQueueStatsRequestWithBuf(b []byte) OpenflowQueueStatsRequest {
-  return OpenflowQueueStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowQueueStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowQueueStatsRequest() OpenflowQueueStatsRequest {
-  s := 20
-  b := make([]byte, s)
-  p := OpenflowQueueStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 20
+	b := make([]byte, s)
+	p := OpenflowQueueStatsRequest{OpenflowStatsRequest{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueueStatsRequest struct {
-  OpenflowStatsRequest
+	OpenflowStatsRequest
 }
 
 func (this OpenflowQueueStatsRequest) minSize() int {
-  return 20
+	return 20
 }
 
 type OpenflowQueueStatsRequestConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueueStatsRequestConn(c net.Conn) OpenflowQueueStatsRequestConn {
-  return OpenflowQueueStatsRequestConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueueStatsRequestConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueueStatsRequestConn) Write(pkts []OpenflowQueueStatsRequest) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueueStatsRequestConn) Read(pkts []OpenflowQueueStatsRequest) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueueStatsRequestWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueueStatsRequestWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueueStatsRequest) Init() {
-  this.OpenflowStatsRequest.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(5)) // stats_type
-  this.SetType(uint8(18)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsRequest.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(5)) // stats_type
+	this.SetType(uint8(18))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowQueueStatsRequest) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowQueueStatsRequest(p OpenflowStatsRequest) (OpenflowQueueStatsRequest, error) {
-  if !IsOpenflowQueueStatsRequest(p) {
-    return NewOpenflowQueueStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueStatsRequest")
-  }
+	if !IsOpenflowQueueStatsRequest(p) {
+		return NewOpenflowQueueStatsRequestWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueStatsRequest")
+	}
 
-  return NewOpenflowQueueStatsRequestWithBuf(p.Buf), nil
+	return NewOpenflowQueueStatsRequestWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueueStatsRequest(p OpenflowStatsRequest) bool {
-  return p.StatsType() == 5 && true
+	return p.StatsType() == 5 && true
 }
 
 func (this *OpenflowQueueStatsRequest) PortNo() uint16 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStatsRequest) SetPortNo(p uint16) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowQueueStatsRequest) PortNoOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowQueueStatsRequest) Pad() [2]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueueStatsRequest) SetPad(p [2]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowQueueStatsRequest) PadOffset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func (this *OpenflowQueueStatsRequest) QueueId() uint32 {
-  offset := this.QueueIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.QueueIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStatsRequest) SetQueueId(q uint32) {
-  offset := this.QueueIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], q); offset += 4
+	offset := this.QueueIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], q)
+	offset += 4
 }
 
 func (this *OpenflowQueueStatsRequest) QueueIdOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func NewOpenflowQueueStatsWithBuf(b []byte) OpenflowQueueStats {
-  return OpenflowQueueStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	return OpenflowQueueStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
 }
 
 func NewOpenflowQueueStats() OpenflowQueueStats {
-  s := 44
-  b := make([]byte, s)
-  p := OpenflowQueueStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
-  p.Init()
-  return p
+	s := 44
+	b := make([]byte, s)
+	p := OpenflowQueueStats{OpenflowStatsReply{OpenflowHeaderV12{openflow.OpenflowHeader{packet.Packet{Buf: b}}}}}
+	p.Init()
+	return p
 }
 
 type OpenflowQueueStats struct {
-  OpenflowStatsReply
+	OpenflowStatsReply
 }
 
 func (this OpenflowQueueStats) minSize() int {
-  return 44
+	return 44
 }
 
 type OpenflowQueueStatsConn struct {
-  net.Conn
-  buf []byte
-  offset int
+	net.Conn
+	buf    []byte
+	offset int
 }
 
 func NewOpenflowQueueStatsConn(c net.Conn) OpenflowQueueStatsConn {
-  return OpenflowQueueStatsConn {
-    Conn: c,
-    buf: make([]byte, packet.DefaultBufSize),
-  }
+	return OpenflowQueueStatsConn{
+		Conn: c,
+		buf:  make([]byte, packet.DefaultBufSize),
+	}
 }
 
 func (c *OpenflowQueueStatsConn) Write(pkts []OpenflowQueueStats) error {
-  for _, p := range pkts {
-    s := p.Size()
-    b := p.Buffer()[:s]
-    n := 0
-    for s > 0 {
-      var err error
-      if n, err = c.Conn.Write(b); err != nil {
-        return fmt.Errorf("Error in write: %v", err)
-      }
-      s -= n
-    }
-  }
-  return nil
+	for _, p := range pkts {
+		s := p.Size()
+		b := p.Buffer()[:s]
+		n := 0
+		for s > 0 {
+			var err error
+			if n, err = c.Conn.Write(b); err != nil {
+				return fmt.Errorf("Error in write: %v", err)
+			}
+			s -= n
+		}
+	}
+	return nil
 }
 
 func (c *OpenflowQueueStatsConn) Read(pkts []OpenflowQueueStats) (int, error) {
-  if len(c.buf) == c.offset {
-    newSize := packet.DefaultBufSize
-    if newSize < len(c.buf) {
-      newSize = 2 * len(c.buf)
-    }
+	if len(c.buf) == c.offset {
+		newSize := packet.DefaultBufSize
+		if newSize < len(c.buf) {
+			newSize = 2 * len(c.buf)
+		}
 
-    buf := make([]byte, newSize)
-    copy(buf, c.buf[:c.offset])
-    c.buf = buf
-  }
+		buf := make([]byte, newSize)
+		copy(buf, c.buf[:c.offset])
+		c.buf = buf
+	}
 
-  r, err := c.Conn.Read(c.buf[c.offset:])
-  if err != nil {
-    return 0, err
-  }
+	r, err := c.Conn.Read(c.buf[c.offset:])
+	if err != nil {
+		return 0, err
+	}
 
-  r += c.offset
+	r += c.offset
 
-  s := 0
-  n := 0
-  for i := range pkts {
-    p := NewOpenflowQueueStatsWithBuf(c.buf)
+	s := 0
+	n := 0
+	for i := range pkts {
+		p := NewOpenflowQueueStatsWithBuf(c.buf)
 
-    pSize := p.Size()
-    if r < s+pSize {
-      break
-    }
+		pSize := p.Size()
+		if r < s+pSize {
+			break
+		}
 
-    pkts[i] = p
-    s += pSize
-    n++
-  }
+		pkts[i] = p
+		s += pSize
+		n++
+	}
 
-  c.offset = r - s
-  if c.offset < 0 {
-    panic("Invalid value for offset")
-  }
+	c.offset = r - s
+	if c.offset < 0 {
+		panic("Invalid value for offset")
+	}
 
-  c.buf = c.buf[s:]
-  if c.offset < len(c.buf) {
-    return n, nil
-  }
+	c.buf = c.buf[s:]
+	if c.offset < len(c.buf) {
+		return n, nil
+	}
 
-  buf := make([]byte, packet.DefaultBufSize)
-  copy(buf, c.buf[:c.offset])
-  c.buf = buf
-  return n, nil
+	buf := make([]byte, packet.DefaultBufSize)
+	copy(buf, c.buf[:c.offset])
+	c.buf = buf
+	return n, nil
 }
 
 func (this *OpenflowQueueStats) Init() {
-  this.OpenflowStatsReply.Init()
-  this.SetLength(uint16(this.minSize()))
-  // Invariants.
-  this.SetStatsType(uint16(5)) // stats_type
-  this.SetType(uint8(19)) // type
-  this.SetVersion(uint8(3)) // version
+	this.OpenflowStatsReply.Init()
+	this.SetLength(uint16(this.minSize()))
+	// Invariants.
+	this.SetStatsType(uint16(5)) // stats_type
+	this.SetType(uint8(19))      // type
+	this.SetVersion(uint8(3))    // version
 }
 
 func (this OpenflowQueueStats) Size() int {
-  if len(this.Buf) < this.minSize() {
-    return 0
-  }
+	if len(this.Buf) < this.minSize() {
+		return 0
+	}
 
-  size := int(this.Length())
-  return size
+	size := int(this.Length())
+	return size
 }
 
 func ConvertToOpenflowQueueStats(p OpenflowStatsReply) (OpenflowQueueStats, error) {
-  if !IsOpenflowQueueStats(p) {
-    return NewOpenflowQueueStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueStats")
-  }
+	if !IsOpenflowQueueStats(p) {
+		return NewOpenflowQueueStatsWithBuf(nil), errors.New("Cannot convert to openflowv12.OpenflowQueueStats")
+	}
 
-  return NewOpenflowQueueStatsWithBuf(p.Buf), nil
+	return NewOpenflowQueueStatsWithBuf(p.Buf), nil
 }
 
 func IsOpenflowQueueStats(p OpenflowStatsReply) bool {
-  return p.StatsType() == 5 && true
+	return p.StatsType() == 5 && true
 }
 
 func (this *OpenflowQueueStats) PortNo() uint16 {
-  offset := this.PortNoOffset()
-  res := binary.BigEndian.Uint16(this.Buf[offset:])
-  return res
+	offset := this.PortNoOffset()
+	res := binary.BigEndian.Uint16(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStats) SetPortNo(p uint16) {
-  offset := this.PortNoOffset()
-  binary.BigEndian.PutUint16(this.Buf[offset:], p); offset += 2
+	offset := this.PortNoOffset()
+	binary.BigEndian.PutUint16(this.Buf[offset:], p)
+	offset += 2
 }
 
 func (this *OpenflowQueueStats) PortNoOffset() int {
-  offset := 12
-  return offset
+	offset := 12
+	return offset
 }
 
-
 func (this *OpenflowQueueStats) Pad() [2]uint8 {
-  offset := this.PadOffset()
-  packet_size := this.Size()
-  size := packet_size - offset
-  count := this.Size() - offset
-  i := 0
-  var res [2]uint8
-  for size > 0 && count > 0 && packet_size > offset {
-    elem := uint8(this.Buf[offset])
-    if size < 1 {
-      break
-    }
-    size -= 1
-    count--
-    res[i] = elem
-    i++
-  }
-  return res
+	offset := this.PadOffset()
+	packet_size := this.Size()
+	size := packet_size - offset
+	count := this.Size() - offset
+	i := 0
+	var res [2]uint8
+	for size > 0 && count > 0 && packet_size > offset {
+		elem := uint8(this.Buf[offset])
+		if size < 1 {
+			break
+		}
+		size -= 1
+		count--
+		res[i] = elem
+		i++
+	}
+	return res
 }
 
 func (this *OpenflowQueueStats) SetPad(p [2]uint8) {
-  offset := this.PadOffset()
-  for _, e := range p {
-    this.Buf[offset] = byte(e); offset++
-  }
+	offset := this.PadOffset()
+	for _, e := range p {
+		this.Buf[offset] = byte(e)
+		offset++
+	}
 }
 
 func (this *OpenflowQueueStats) PadOffset() int {
-  offset := 14
-  return offset
+	offset := 14
+	return offset
 }
 
-
 func (this *OpenflowQueueStats) QueueId() uint32 {
-  offset := this.QueueIdOffset()
-  res := binary.BigEndian.Uint32(this.Buf[offset:])
-  return res
+	offset := this.QueueIdOffset()
+	res := binary.BigEndian.Uint32(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStats) SetQueueId(q uint32) {
-  offset := this.QueueIdOffset()
-  binary.BigEndian.PutUint32(this.Buf[offset:], q); offset += 4
+	offset := this.QueueIdOffset()
+	binary.BigEndian.PutUint32(this.Buf[offset:], q)
+	offset += 4
 }
 
 func (this *OpenflowQueueStats) QueueIdOffset() int {
-  offset := 16
-  return offset
+	offset := 16
+	return offset
 }
 
-
 func (this *OpenflowQueueStats) TxBytes() uint64 {
-  offset := this.TxBytesOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxBytesOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStats) SetTxBytes(t uint64) {
-  offset := this.TxBytesOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxBytesOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowQueueStats) TxBytesOffset() int {
-  offset := 20
-  return offset
+	offset := 20
+	return offset
 }
 
-
 func (this *OpenflowQueueStats) TxPackets() uint64 {
-  offset := this.TxPacketsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxPacketsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStats) SetTxPackets(t uint64) {
-  offset := this.TxPacketsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxPacketsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowQueueStats) TxPacketsOffset() int {
-  offset := 28
-  return offset
+	offset := 28
+	return offset
 }
 
-
 func (this *OpenflowQueueStats) TxErrors() uint64 {
-  offset := this.TxErrorsOffset()
-  res := binary.BigEndian.Uint64(this.Buf[offset:])
-  return res
+	offset := this.TxErrorsOffset()
+	res := binary.BigEndian.Uint64(this.Buf[offset:])
+	return res
 }
 
 func (this *OpenflowQueueStats) SetTxErrors(t uint64) {
-  offset := this.TxErrorsOffset()
-  binary.BigEndian.PutUint64(this.Buf[offset:], t); offset += 8
+	offset := this.TxErrorsOffset()
+	binary.BigEndian.PutUint64(this.Buf[offset:], t)
+	offset += 8
 }
 
 func (this *OpenflowQueueStats) TxErrorsOffset() int {
-  offset := 36
-  return offset
+	offset := 36
+	return offset
 }

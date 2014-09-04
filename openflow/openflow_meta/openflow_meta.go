@@ -2,13 +2,13 @@
 package openflow_meta
 
 import (
-  "encoding/binary"
-  "errors"
-  "fmt"
-  "net"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"net"
 
-  "github.com/packet/packet/src/go/packet"
+	"github.com/packet/packet/src/go/packet"
 
-  "github.com/soheilhy/beehive/openflow/openflowv10"
-  "github.com/soheilhy/beehive/openflow/openflowv12"
+	"github.com/soheilhy/beehive/openflow/openflowv10"
+	"github.com/soheilhy/beehive/openflow/openflowv12"
 )
