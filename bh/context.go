@@ -14,11 +14,17 @@ type MapContext interface {
 
 type RcvContext interface {
 	MapContext
+
 	Emit(msgData interface{})
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	SendToBee(msgData interface{}, to BeeId)
+
 	ReplyTo(msg Msg, replyData interface{}) error
+
 	Lock(ms MapSet) error
+
+	BeeLocal() interface{}
+	SetBeeLocal(d interface{})
 }
 
 type mapContext struct {
@@ -29,7 +35,8 @@ type mapContext struct {
 
 type rcvContext struct {
 	mapContext
-	bee bee
+	bee   bee
+	local interface{}
 }
 
 // Creates a new receiver context.
@@ -98,4 +105,12 @@ func (ctx *rcvContext) Lock(ms MapSet) error {
 	}
 	res := <-resCh
 	return res.err
+}
+
+func (ctx *rcvContext) SetBeeLocal(d interface{}) {
+	ctx.local = d
+}
+
+func (ctx *rcvContext) BeeLocal() interface{} {
+	return ctx.local
 }
