@@ -21,9 +21,9 @@ type App interface {
 	HandleFunc(msgType interface{}, m Map, r Rcv) error
 
 	// Regsiters the app's detached handler.
-	Detached(h DetachedHandler) error
+	Detached(h DetachedHandler)
 	// Registers the detached handler using functions.
-	DetachedFunc(start Start, stop Stop, r Rcv) error
+	DetachedFunc(start Start, stop Stop, r Rcv)
 
 	// Returns the state of this app that is shared among all instances and the
 	// map function. This state is NOT thread-safe and apps must synchronize for
@@ -140,8 +140,8 @@ func (a *app) HandleFunc(msgType interface{}, m Map, r Rcv) error {
 	return a.Handle(msgType, &funcHandler{m, r})
 }
 
-func (a *app) DetachedFunc(start Start, stop Stop, rcv Rcv) error {
-	return a.Detached(&funcDetached{start, stop, rcv})
+func (a *app) DetachedFunc(start Start, stop Stop, rcv Rcv) {
+	a.Detached(&funcDetached{start, stop, rcv})
 }
 
 func (a *app) Handle(msg interface{}, h Handler) error {
@@ -169,8 +169,8 @@ func (a *app) handler(t MsgType) Handler {
 	return a.handlers[t]
 }
 
-func (a *app) Detached(h DetachedHandler) error {
-	return a.qee.registerDetached(h)
+func (a *app) Detached(h DetachedHandler) {
+	a.qee.registerDetached(h)
 }
 
 func (a *app) State() State {

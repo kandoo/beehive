@@ -186,7 +186,7 @@ func (g *registery) watchHives() {
 
 type beeRegVal struct {
 	HiveId HiveId `json:"hive_id"`
-	BeeId  uint32 `json:"bee_id"`
+	BeeId  uint64 `json:"bee_id"`
 }
 
 func (this *beeRegVal) Eq(that *beeRegVal) bool {

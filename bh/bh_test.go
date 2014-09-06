@@ -48,8 +48,8 @@ func (h *MyHandler) Rcv(m Msg, c RcvContext) error {
 		panic(fmt.Sprintf("Cannot change the key: %v", err))
 	}
 
-	id := c.(*rcvContext).bee.id().Id % uint32(handlers)
-	if id != uint32(hash) {
+	id := c.(*rcvContext).bee.id().Id % uint64(handlers)
+	if id != uint64(hash) {
 		panic(fmt.Sprintf("Invalid message %v received in %v.", m, id))
 	}
 

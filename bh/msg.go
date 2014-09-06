@@ -25,15 +25,15 @@ type msg struct {
 }
 
 func (m *msg) NoReply() bool {
-	return m.MsgFrom.isNil()
+	return m.MsgFrom.IsNil()
 }
 
 func (m *msg) isBroadCast() bool {
-	return m.MsgTo.isNil()
+	return m.MsgTo.IsNil()
 }
 
 func (m *msg) isUnicast() bool {
-	return !m.MsgTo.isNil()
+	return !m.MsgTo.IsNil()
 }
 
 func (m *msg) Type() MsgType {

@@ -125,7 +125,7 @@ func pulseTakerId(h HiveId) BeeId {
 	return BeeId{
 		HiveId:  h,
 		AppName: heartbeatAppName,
-		Id:      detachedBeeId,
+		Id:      1, // We only have one bee and the ID of that bee would be one.
 	}
 }
 

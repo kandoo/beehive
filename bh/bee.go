@@ -8,17 +8,14 @@ import (
 )
 
 type BeeId struct {
-	HiveId  HiveId  `json:"hive_id"`
-	AppName AppName `json:"app_name"`
-	Id      uint32  `json:"id"`
+	HiveId   HiveId  `json:"hive_id"`
+	AppName  AppName `json:"app_name"`
+	Id       uint64  `json:"id"`
+	Detached bool    `json:"detached"`
 }
 
-func (b *BeeId) isNil() bool {
+func (b *BeeId) IsNil() bool {
 	return len(b.HiveId) == 0 && len(b.AppName) == 0 && b.Id == 0
-}
-
-func (b *BeeId) isDetachedId() bool {
-	return !b.isNil() && b.Id == detachedBeeId
 }
 
 func (b *BeeId) Key() Key {

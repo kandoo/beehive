@@ -8,16 +8,12 @@ import (
 	"github.com/golang/glog"
 )
 
-const (
-	detachedBeeId = 0
-)
-
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
 	asyncRoutine
 	ctx       mapContext
-	lastBeeId uint32
+	lastBeeId uint64
 	idToBees  map[BeeId]bee
 	keyToBees map[DictionaryKey]bee
 }
@@ -29,34 +25,24 @@ func (q *qee) state() State {
 	return q.ctx.state
 }
 
-func (q *qee) detachedBeeId() BeeId {
-	id := BeeId{
-		HiveId:  q.ctx.hive.Id(),
-		AppName: q.ctx.app.Name(),
-		Id:      detachedBeeId,
-	}
-	return id
-}
-
 func (q *qee) setDetached(d *detachedBee) error {
-	if _, ok := q.detached(); ok {
-		return errors.New("App already has a detached handler.")
-	}
-
-	q.idToBees[q.detachedBeeId()] = d
+	q.idToBees[d.id()] = d
 	return nil
 }
 
-func (q *qee) detached() (*detachedBee, bool) {
-	d, ok := q.idToBees[q.detachedBeeId()]
-	if !ok {
-		return nil, false
+func (q *qee) detachedBees() []*detachedBee {
+	ds := make([]*detachedBee, 0, len(q.idToBees))
+	for id, b := range q.idToBees {
+		if !id.Detached {
+			continue
+		}
+		ds = append(ds, b.(*detachedBee))
 	}
-	return d.(*detachedBee), ok
+	return ds
 }
 
 func (q *qee) start() {
-	if d, ok := q.detached(); ok {
+	for _, d := range q.detachedBees() {
 		go d.start()
 	}
 
@@ -85,26 +71,10 @@ func (q *qee) closeChannels() {
 func (q *qee) stopBees() {
 	stopCh := make(chan asyncResult)
 	stopCmd := routineCmd{stopCmd, nil, stopCh}
-	if d, ok := q.detached(); ok {
-		d.ctrlCh <- stopCmd
-		_, err := (<-stopCh).get()
-		if err != nil {
-			glog.Errorf("Error in stopping the detached thread: %v", err)
-		}
-	}
 
-	bees := make(map[bee]bool)
-	for _, v := range q.keyToBees {
-		bees[v] = true
-	}
+	for _, b := range q.idToBees {
+		b.enqueCmd(stopCmd)
 
-	for k, _ := range bees {
-		switch r := k.(type) {
-		case *proxyBee:
-			r.ctrlCh <- stopCmd
-		case *localBee:
-			r.ctrlCh <- stopCmd
-		}
 		_, err := (<-stopCh).get()
 		if err != nil {
 			glog.Errorf("Error in stopping a bee: %v", err)
@@ -157,8 +127,9 @@ func (q *qee) handleCmd(cmd routineCmd) {
 	}
 }
 
-func (q *qee) registerDetached(h DetachedHandler) error {
-	return q.setDetached(q.newDetachedBee(h))
+func (q *qee) registerDetached(h DetachedHandler) {
+	d := q.newDetachedBee(h)
+	q.idToBees[d.id()] = d
 }
 
 func (q *qee) beeByKey(dk DictionaryKey) (bee, bool) {
@@ -228,7 +199,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			bee = q.findOrCreateBee(mh.msg.To())
 		}
 
-		if mh.handler == nil && mh.msg.To().Id != detachedBeeId {
+		if mh.handler == nil && !mh.msg.To().Detached {
 			glog.Fatalf("Handler cannot be nil for bees: %+v, %+v", mh, mh.msg)
 		}
 
@@ -263,12 +234,13 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	bee.enqueMsg(mh)
 }
 
-func (q *qee) nextBeeId() BeeId {
+func (q *qee) nextBeeId(detached bool) BeeId {
 	q.lastBeeId++
 	return BeeId{
-		AppName: q.ctx.app.Name(),
-		HiveId:  q.ctx.hive.Id(),
-		Id:      q.lastBeeId,
+		AppName:  q.ctx.app.Name(),
+		HiveId:   q.ctx.hive.Id(),
+		Id:       q.lastBeeId,
+		Detached: detached,
 	}
 }
 
@@ -364,7 +336,7 @@ func (q *qee) localFromProxy(id BeeId, pBee *proxyBee) (*localBee,
 }
 
 func (q *qee) newLocalBee() bee {
-	return q.findOrCreateBee(q.nextBeeId())
+	return q.findOrCreateBee(q.nextBeeId(false))
 }
 
 func (q *qee) findOrCreateBee(id BeeId) bee {
@@ -396,8 +368,9 @@ func (q *qee) findOrCreateBee(id BeeId) bee {
 }
 
 func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
+	id := q.nextBeeId(true)
 	d := &detachedBee{
-		localBee: q.defaultLocalBee(q.detachedBeeId()),
+		localBee: q.defaultLocalBee(id),
 		h:        h,
 	}
 	d.ctx.bee = d
@@ -405,7 +378,7 @@ func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
 }
 
 func (q *qee) newBeeForMapSet(mapSet MapSet) bee {
-	newBeeId := q.nextBeeId()
+	newBeeId := q.nextBeeId(false)
 	beeId := q.lock(mapSet, newBeeId, false)
 	if newBeeId != beeId {
 		q.lastBeeId--
@@ -427,7 +400,7 @@ func (q *qee) mapSetOfBee(id BeeId) MapSet {
 }
 
 func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
-	if beeId.isDetachedId() {
+	if beeId.Detached {
 		err := errors.New(fmt.Sprintf("Cannot migrate a detached: %+v", beeId))
 		resCh <- asyncResult{nil, err}
 		return

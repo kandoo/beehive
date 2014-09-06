@@ -38,7 +38,7 @@ func (c *appStatCollector) collect(from, to BeeId, msg Msg) {
 		return
 	}
 
-	if from.isNil() || to.isNil() {
+	if from.IsNil() || to.IsNil() {
 		return
 	}
 
@@ -95,7 +95,7 @@ func (s *communicationStat) add(count uint64) {
 }
 
 func (s *communicationStat) toAggrStat() aggrStatUpdate {
-	if s.From.isNil() {
+	if s.From.IsNil() {
 		panic(s)
 	}
 	u := aggrStatUpdate{s.From, s.To, s.Count}
@@ -221,7 +221,7 @@ func (s HiveIdSlice) Less(i, j int) bool { return s[i] < s[j] }
 func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
 	update := msg.Data().(aggrStatUpdate)
-	if update.To.isDetachedId() {
+	if update.To.Detached {
 		return nil
 	}
 
