@@ -458,7 +458,7 @@ func (c *Header12Conn) Read(pkts []Header12) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewHeader12WithBuf(c.buf)
+		p := NewHeader12WithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -476,13 +476,6 @@ func (c *Header12Conn) Read(pkts []Header12) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -595,7 +588,7 @@ func (c *HelloConn) Read(pkts []Hello) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewHelloWithBuf(c.buf)
+		p := NewHelloWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -613,13 +606,6 @@ func (c *HelloConn) Read(pkts []Hello) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -733,7 +719,7 @@ func (c *EchoRequestConn) Read(pkts []EchoRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewEchoRequestWithBuf(c.buf)
+		p := NewEchoRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -751,13 +737,6 @@ func (c *EchoRequestConn) Read(pkts []EchoRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -871,7 +850,7 @@ func (c *EchoReplyConn) Read(pkts []EchoReply) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewEchoReplyWithBuf(c.buf)
+		p := NewEchoReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -889,13 +868,6 @@ func (c *EchoReplyConn) Read(pkts []EchoReply) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -1009,7 +981,7 @@ func (c *FeaturesRequestConn) Read(pkts []FeaturesRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFeaturesRequestWithBuf(c.buf)
+		p := NewFeaturesRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -1027,13 +999,6 @@ func (c *FeaturesRequestConn) Read(pkts []FeaturesRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -1147,7 +1112,7 @@ func (c *GetConfigRequestConn) Read(pkts []GetConfigRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewGetConfigRequestWithBuf(c.buf)
+		p := NewGetConfigRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -1165,13 +1130,6 @@ func (c *GetConfigRequestConn) Read(pkts []GetConfigRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -1285,7 +1243,7 @@ func (c *SwitchGetConfigReplyConn) Read(pkts []SwitchGetConfigReply) (int, error
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewSwitchGetConfigReplyWithBuf(c.buf)
+		p := NewSwitchGetConfigReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -1303,13 +1261,6 @@ func (c *SwitchGetConfigReplyConn) Read(pkts []SwitchGetConfigReply) (int, error
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -1457,7 +1408,7 @@ func (c *SwitchSetConfigConn) Read(pkts []SwitchSetConfig) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewSwitchSetConfigWithBuf(c.buf)
+		p := NewSwitchSetConfigWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -1475,13 +1426,6 @@ func (c *SwitchSetConfigConn) Read(pkts []SwitchSetConfig) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -1629,7 +1573,7 @@ func (c *PortConn) Read(pkts []Port) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPortWithBuf(c.buf)
+		p := NewPortWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -1647,13 +1591,6 @@ func (c *PortConn) Read(pkts []Port) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -2047,7 +1984,7 @@ func (c *FeaturesReplyConn) Read(pkts []FeaturesReply) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFeaturesReplyWithBuf(c.buf)
+		p := NewFeaturesReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -2065,13 +2002,6 @@ func (c *FeaturesReplyConn) Read(pkts []FeaturesReply) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -2343,7 +2273,7 @@ func (c *PortStatusConn) Read(pkts []PortStatus) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPortStatusWithBuf(c.buf)
+		p := NewPortStatusWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -2361,13 +2291,6 @@ func (c *PortStatusConn) Read(pkts []PortStatus) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -2549,7 +2472,7 @@ func (c *PortModConn) Read(pkts []PortMod) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPortModWithBuf(c.buf)
+		p := NewPortModWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -2567,13 +2490,6 @@ func (c *PortModConn) Read(pkts []PortMod) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -2823,7 +2739,7 @@ func (c *PacketInConn) Read(pkts []PacketIn) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPacketInWithBuf(c.buf)
+		p := NewPacketInWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -2841,13 +2757,6 @@ func (c *PacketInConn) Read(pkts []PacketIn) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -2986,7 +2895,7 @@ func (this *PacketIn) Data() []uint8 {
 
 func (this *PacketIn) AddData(d uint8) {
 	offset := this.DataOffset()
-	offset += 1
+	offset += this.DataSize()
 	size := 1
 	this.OpenGap(offset, size)
 	this.SetLength(uint16(this.Size() + size))
@@ -3085,7 +2994,7 @@ func (c *ActionConn) Read(pkts []Action) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewActionWithBuf(c.buf)
+		p := NewActionWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -3103,13 +3012,6 @@ func (c *ActionConn) Read(pkts []Action) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -3254,7 +3156,7 @@ func (c *ActionOutputConn) Read(pkts []ActionOutput) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewActionOutputWithBuf(c.buf)
+		p := NewActionOutputWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -3272,13 +3174,6 @@ func (c *ActionOutputConn) Read(pkts []ActionOutput) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -3459,7 +3354,7 @@ func (c *InstructionConn) Read(pkts []Instruction) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewInstructionWithBuf(c.buf)
+		p := NewInstructionWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -3477,13 +3372,6 @@ func (c *InstructionConn) Read(pkts []Instruction) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -3628,7 +3516,7 @@ func (c *ApplyActionsConn) Read(pkts []ApplyActions) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewApplyActionsWithBuf(c.buf)
+		p := NewApplyActionsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -3646,13 +3534,6 @@ func (c *ApplyActionsConn) Read(pkts []ApplyActions) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -3838,7 +3719,7 @@ func (c *PacketOutConn) Read(pkts []PacketOut) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPacketOutWithBuf(c.buf)
+		p := NewPacketOutWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -3856,13 +3737,6 @@ func (c *PacketOutConn) Read(pkts []PacketOut) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -4040,7 +3914,7 @@ func (this *PacketOut) Data() []uint8 {
 
 func (this *PacketOut) AddData(d uint8) {
 	offset := this.DataOffset()
-	offset += 1
+	offset += this.DataSize()
 	size := 1
 	this.OpenGap(offset, size)
 	this.SetLength(uint16(this.Size() + size))
@@ -4140,7 +4014,7 @@ func (c *OxmFieldConn) Read(pkts []OxmField) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmFieldWithBuf(c.buf)
+		p := NewOxmFieldWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -4158,13 +4032,6 @@ func (c *OxmFieldConn) Read(pkts []OxmField) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -4320,7 +4187,7 @@ func (c *OxmInPortConn) Read(pkts []OxmInPort) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmInPortWithBuf(c.buf)
+		p := NewOxmInPortWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -4338,13 +4205,6 @@ func (c *OxmInPortConn) Read(pkts []OxmInPort) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -4470,7 +4330,7 @@ func (c *OxmEthDstConn) Read(pkts []OxmEthDst) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmEthDstWithBuf(c.buf)
+		p := NewOxmEthDstWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -4488,13 +4348,6 @@ func (c *OxmEthDstConn) Read(pkts []OxmEthDst) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -4637,7 +4490,7 @@ func (c *OxmEthDstMaskedConn) Read(pkts []OxmEthDstMasked) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmEthDstMaskedWithBuf(c.buf)
+		p := NewOxmEthDstMaskedWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -4655,13 +4508,6 @@ func (c *OxmEthDstMaskedConn) Read(pkts []OxmEthDstMasked) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -4838,7 +4684,7 @@ func (c *OxmEthSrcConn) Read(pkts []OxmEthSrc) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmEthSrcWithBuf(c.buf)
+		p := NewOxmEthSrcWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -4856,13 +4702,6 @@ func (c *OxmEthSrcConn) Read(pkts []OxmEthSrc) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -5005,7 +4844,7 @@ func (c *OxmEthSrcMaskedConn) Read(pkts []OxmEthSrcMasked) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewOxmEthSrcMaskedWithBuf(c.buf)
+		p := NewOxmEthSrcMaskedWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -5023,13 +4862,6 @@ func (c *OxmEthSrcMaskedConn) Read(pkts []OxmEthSrcMasked) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -5206,7 +5038,7 @@ func (c *MatchConn) Read(pkts []Match) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewMatchWithBuf(c.buf)
+		p := NewMatchWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -5224,13 +5056,6 @@ func (c *MatchConn) Read(pkts []Match) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -5414,7 +5239,7 @@ func (c *FlowModConn) Read(pkts []FlowMod) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFlowModWithBuf(c.buf)
+		p := NewFlowModWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -5432,13 +5257,6 @@ func (c *FlowModConn) Read(pkts []FlowMod) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -5844,7 +5662,7 @@ func (c *FlowRemovedConn) Read(pkts []FlowRemoved) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFlowRemovedWithBuf(c.buf)
+		p := NewFlowRemovedWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -5862,13 +5680,6 @@ func (c *FlowRemovedConn) Read(pkts []FlowRemoved) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -6227,7 +6038,7 @@ func (c *ErrorMsgConn) Read(pkts []ErrorMsg) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewErrorMsgWithBuf(c.buf)
+		p := NewErrorMsgWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -6245,13 +6056,6 @@ func (c *ErrorMsgConn) Read(pkts []ErrorMsg) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -6339,7 +6143,7 @@ func (this *ErrorMsg) Data() []uint8 {
 
 func (this *ErrorMsg) AddData(d uint8) {
 	offset := this.DataOffset()
-	offset += 1
+	offset += this.DataSize()
 	size := 1
 	this.OpenGap(offset, size)
 	this.SetLength(uint16(this.Size() + size))
@@ -6438,7 +6242,7 @@ func (c *StatsRequestConn) Read(pkts []StatsRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewStatsRequestWithBuf(c.buf)
+		p := NewStatsRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -6456,13 +6260,6 @@ func (c *StatsRequestConn) Read(pkts []StatsRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -6610,7 +6407,7 @@ func (c *StatsReplyConn) Read(pkts []StatsReply) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewStatsReplyWithBuf(c.buf)
+		p := NewStatsReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -6628,13 +6425,6 @@ func (c *StatsReplyConn) Read(pkts []StatsReply) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -6782,7 +6572,7 @@ func (c *DescStatsConn) Read(pkts []DescStats) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewDescStatsWithBuf(c.buf)
+		p := NewDescStatsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -6800,13 +6590,6 @@ func (c *DescStatsConn) Read(pkts []DescStats) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -7091,7 +6874,7 @@ func (c *FlowStatsRequestConn) Read(pkts []FlowStatsRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFlowStatsRequestWithBuf(c.buf)
+		p := NewFlowStatsRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -7109,13 +6892,6 @@ func (c *FlowStatsRequestConn) Read(pkts []FlowStatsRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -7315,7 +7091,7 @@ func (c *FlowStatsConn) Read(pkts []FlowStats) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFlowStatsWithBuf(c.buf)
+		p := NewFlowStatsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -7333,13 +7109,6 @@ func (c *FlowStatsConn) Read(pkts []FlowStats) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -7751,7 +7520,7 @@ func (c *FlowStatsReplyConn) Read(pkts []FlowStatsReply) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewFlowStatsReplyWithBuf(c.buf)
+		p := NewFlowStatsReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -7769,13 +7538,6 @@ func (c *FlowStatsReplyConn) Read(pkts []FlowStatsReply) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -7929,7 +7691,7 @@ func (c *AggregateStatsRequestConn) Read(pkts []AggregateStatsRequest) (int, err
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewAggregateStatsRequestWithBuf(c.buf)
+		p := NewAggregateStatsRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -7947,13 +7709,6 @@ func (c *AggregateStatsRequestConn) Read(pkts []AggregateStatsRequest) (int, err
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -8153,7 +7908,7 @@ func (c *AggregateStatsReplyConn) Read(pkts []AggregateStatsReply) (int, error) 
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewAggregateStatsReplyWithBuf(c.buf)
+		p := NewAggregateStatsReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -8171,13 +7926,6 @@ func (c *AggregateStatsReplyConn) Read(pkts []AggregateStatsReply) (int, error) 
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -8377,7 +8125,7 @@ func (c *TableStatsConn) Read(pkts []TableStats) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewTableStatsWithBuf(c.buf)
+		p := NewTableStatsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -8395,13 +8143,6 @@ func (c *TableStatsConn) Read(pkts []TableStats) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -8686,7 +8427,7 @@ func (c *PortStatsRequestConn) Read(pkts []PortStatsRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPortStatsRequestWithBuf(c.buf)
+		p := NewPortStatsRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -8704,13 +8445,6 @@ func (c *PortStatsRequestConn) Read(pkts []PortStatsRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -8876,7 +8610,7 @@ func (c *PortStatsConn) Read(pkts []PortStats) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPortStatsWithBuf(c.buf)
+		p := NewPortStatsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -8894,13 +8628,6 @@ func (c *PortStatsConn) Read(pkts []PortStats) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -9270,7 +8997,7 @@ func (c *VendorHeaderConn) Read(pkts []VendorHeader) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewVendorHeaderWithBuf(c.buf)
+		p := NewVendorHeaderWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -9288,13 +9015,6 @@ func (c *VendorHeaderConn) Read(pkts []VendorHeader) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -9425,7 +9145,7 @@ func (c *QueuePropHeaderConn) Read(pkts []QueuePropHeader) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueuePropHeaderWithBuf(c.buf)
+		p := NewQueuePropHeaderWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -9443,13 +9163,6 @@ func (c *QueuePropHeaderConn) Read(pkts []QueuePropHeader) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -9628,7 +9341,7 @@ func (c *QueuePropMinRateConn) Read(pkts []QueuePropMinRate) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueuePropMinRateWithBuf(c.buf)
+		p := NewQueuePropMinRateWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -9646,13 +9359,6 @@ func (c *QueuePropMinRateConn) Read(pkts []QueuePropMinRate) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -9816,7 +9522,7 @@ func (c *PacketQueueConn) Read(pkts []PacketQueue) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewPacketQueueWithBuf(c.buf)
+		p := NewPacketQueueWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -9834,13 +9540,6 @@ func (c *PacketQueueConn) Read(pkts []PacketQueue) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -10058,7 +9757,7 @@ func (c *QueueGetConfigRequestConn) Read(pkts []QueueGetConfigRequest) (int, err
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueueGetConfigRequestWithBuf(c.buf)
+		p := NewQueueGetConfigRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -10076,13 +9775,6 @@ func (c *QueueGetConfigRequestConn) Read(pkts []QueueGetConfigRequest) (int, err
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -10153,7 +9845,7 @@ func (this *QueueGetConfigRequest) Pad() []uint8 {
 
 func (this *QueueGetConfigRequest) AddPad(p uint8) {
 	offset := this.PadOffset()
-	offset += 1
+	offset += this.PadSize()
 	size := 1
 	this.OpenGap(offset, size)
 	this.SetLength(uint16(this.Size() + size))
@@ -10252,7 +9944,7 @@ func (c *QueueGetConfigReplyConn) Read(pkts []QueueGetConfigReply) (int, error) 
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueueGetConfigReplyWithBuf(c.buf)
+		p := NewQueueGetConfigReplyWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -10270,13 +9962,6 @@ func (c *QueueGetConfigReplyConn) Read(pkts []QueueGetConfigReply) (int, error) 
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -10480,7 +10165,7 @@ func (c *QueueStatsRequestConn) Read(pkts []QueueStatsRequest) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueueStatsRequestWithBuf(c.buf)
+		p := NewQueueStatsRequestWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -10498,13 +10183,6 @@ func (c *QueueStatsRequestConn) Read(pkts []QueueStatsRequest) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 
@@ -10687,7 +10365,7 @@ func (c *QueueStatsConn) Read(pkts []QueueStats) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewQueueStatsWithBuf(c.buf)
+		p := NewQueueStatsWithBuf(c.buf[s:])
 
 		pSize := p.Size()
 		if r < s+pSize {
@@ -10705,13 +10383,6 @@ func (c *QueueStatsConn) Read(pkts []QueueStats) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 

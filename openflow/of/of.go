@@ -104,6 +104,7 @@ func (c *HeaderConn) Write(pkts []Header) error {
 }
 
 func (c *HeaderConn) Read(pkts []Header) (int, error) {
+
 	if len(c.buf) == c.offset {
 		newSize := packet.DefaultBufSize
 		if newSize < len(c.buf) {
@@ -125,9 +126,13 @@ func (c *HeaderConn) Read(pkts []Header) (int, error) {
 	s := 0
 	n := 0
 	for i := range pkts {
-		p := NewHeaderWithBuf(c.buf)
+		p := NewHeaderWithBuf(c.buf[s:])
 
 		pSize := p.Size()
+		if pSize == 0 {
+			break
+		}
+
 		if r < s+pSize {
 			break
 		}
@@ -143,13 +148,6 @@ func (c *HeaderConn) Read(pkts []Header) (int, error) {
 	}
 
 	c.buf = c.buf[s:]
-	if c.offset < len(c.buf) {
-		return n, nil
-	}
-
-	buf := make([]byte, packet.DefaultBufSize)
-	copy(buf, c.buf[:c.offset])
-	c.buf = buf
 	return n, nil
 }
 

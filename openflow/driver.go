@@ -2,6 +2,7 @@ package openflow
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"net"
 
@@ -13,11 +14,27 @@ import (
 
 // OFConfig stores the configuration of the OpenFlow driver.
 type OFConfig struct {
-	Proto string // The driver's listening protocol
-	Addr  string // The driver's listening address
+	Proto string // The driver's listening protocol.
+	Addr  string // The driver's listening address.
 }
 
-// StartOpenFlowWithConfig starts the OpenFlow driver on the give hive.
+var defaultOFConfig = OFConfig{}
+
+func init() {
+	flag.StringVar(&defaultOFConfig.Proto, "ofproto", "tcp",
+		"Protocol of the OpenFlow listener.")
+	flag.StringVar(&defaultOFConfig.Addr, "ofaddr", "0.0.0.0:6633",
+		"Address of the OpenFlow listener in the form of HOST:PORT.")
+}
+
+// StartOpenFlow starts the OpenFlow driver on the given hive using the default
+// OpenFlow configuration that can be set through command line arguments.
+func StartOpenFlow(hive bh.Hive) error {
+	return StartOpenFlowWithConfig(hive, defaultOFConfig)
+}
+
+// StartOpenFlowWithConfig starts the OpenFlow driver on the give hive with the
+// provided configuration.
 func StartOpenFlowWithConfig(hive bh.Hive, cfg OFConfig) error {
 	app := hive.NewApp("OFDriver")
 	err := app.Detached(&ofListener{
@@ -61,6 +78,28 @@ func (d *ofDriver) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 			glog.Infof("Port (switch=%016x, no=%d, mac=%012x, name=%s)\n",
 				r.DatapathId(), p.PortNo(), p.HwAddr(), p.Name())
 		}
+
+		ctx.SetBeeLocal(of.conn)
+
+		glog.Infof("Disabling packet buffers in the switch.")
+		c := of10.NewSwitchSetConfig()
+		c.SetMissSendLen(0xFFFF)
+		of.conn.outCh <- c.Header
+
+	case of10.IsPacketIn(of.pkt):
+		in, _ := of10.ToPacketIn(of.pkt)
+		out := of10.NewPacketOut()
+		out.SetBufferId(in.BufferId())
+		out.SetInPort(in.InPort())
+
+		bcast := of10.NewActionOutput()
+		bcast.SetPort(uint16(of10.PP_FLOOD))
+
+		out.AddActions(bcast.ActionHeader)
+		for _, d := range in.Data() {
+			out.AddData(d)
+		}
+		of.conn.outCh <- out.Header
 	}
 	return nil
 }
@@ -189,7 +228,7 @@ func (c *ofConn) reader() {
 		for _, pkt := range pkts[:n] {
 			pkt10, err := of10.ToHeader10(pkt)
 			if err != nil {
-				glog.Error("OF Driver only support OF v1.0")
+				glog.Errorf("OF Driver only support OF v1.0")
 				return
 			}
 

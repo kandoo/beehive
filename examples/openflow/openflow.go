@@ -7,11 +7,7 @@ import (
 
 func main() {
 	h := bh.NewHive()
-	cfg := openflow.OFConfig{
-		Proto: "tcp",
-		Addr:  "192.168.0.2:6633",
-	}
-	openflow.StartOpenFlowWithConfig(h, cfg)
+	openflow.StartOpenFlow(h)
 
 	ch := make(chan bool)
 	h.Start(ch)
