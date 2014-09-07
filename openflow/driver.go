@@ -165,10 +165,6 @@ func (c *ofConn) handshake() error {
 	glog.Infof("Handshake completed for switch %016x", frep.DatapathId())
 
 	c.swtch = frep
-	c.ctx.Emit(ofMsg{
-		pkt:  frep.Header10,
-		conn: c,
-	})
 	return nil
 }
 
@@ -229,7 +225,7 @@ func (c *ofConn) readPkts(ctx bh.RcvContext) {
 				c.Write([]of.Header{out.Header})
 
 			default:
-				c.ctx.Emit(ofMsg{c, pkt10})
+				c.ctx.Emit(pkt10)
 			}
 		}
 
