@@ -3,7 +3,6 @@ package openflow
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"net"
 
 	"github.com/golang/glog"
@@ -40,70 +39,13 @@ func StartOpenFlowWithConfig(hive bh.Hive, cfg OFConfig) error {
 	app.Detached(&ofListener{
 		cfg: cfg,
 	})
-	app.Handle(ofMsg{}, &ofDriver{})
+
+	glog.V(2).Infof("OpenFlow driver registered on %s:%s", cfg.Proto, cfg.Addr)
 	return nil
 }
-
-type ofDriver struct{}
 
 type ofListener struct {
 	cfg OFConfig
-}
-
-type ofConn struct {
-	of.HeaderConn
-	listener *ofListener
-	ctx      bh.RcvContext
-	outCh    chan of.Header
-	closeCh  chan bool
-	swtch    of10.FeaturesReply
-}
-
-type ofMsg struct {
-	pkt  of10.Header10
-	conn *ofConn
-}
-
-func (d *ofDriver) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
-	of := msg.Data().(ofMsg)
-	switch {
-	case of10.IsFeaturesReply(of.pkt):
-		r, _ := of10.ToFeaturesReply(of.pkt)
-		glog.Infof("Switch joined %016x", r.DatapathId())
-		for _, p := range r.Ports() {
-			glog.Infof("Port (switch=%016x, no=%d, mac=%012x, name=%s)\n",
-				r.DatapathId(), p.PortNo(), p.HwAddr(), p.Name())
-		}
-
-		ctx.SetBeeLocal(of.conn)
-
-		glog.Infof("Disabling packet buffers in the switch.")
-		c := of10.NewSwitchSetConfig()
-		c.SetMissSendLen(0xFFFF)
-		of.conn.outCh <- c.Header
-
-	case of10.IsPacketIn(of.pkt):
-		in, _ := of10.ToPacketIn(of.pkt)
-		out := of10.NewPacketOut()
-		out.SetBufferId(in.BufferId())
-		out.SetInPort(in.InPort())
-
-		bcast := of10.NewActionOutput()
-		bcast.SetPort(uint16(of10.PP_FLOOD))
-
-		out.AddActions(bcast.ActionHeader)
-		for _, d := range in.Data() {
-			out.AddData(d)
-		}
-		of.conn.outCh <- out.Header
-	}
-	return nil
-}
-
-func (d *ofDriver) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
-	c := msg.Data().(ofMsg).conn
-	k := fmt.Sprintf("%s/%x", c.RemoteAddr().String(), c.swtch.DatapathId())
-	return bh.MapSet{{"D", bh.Key(k)}}
 }
 
 func (l *ofListener) Start(ctx bh.RcvContext) {
@@ -113,7 +55,7 @@ func (l *ofListener) Start(ctx bh.RcvContext) {
 		return
 	}
 
-	glog.Infof("OF listener started")
+	glog.Infof("OF listener started on %s:%s", l.cfg.Proto, l.cfg.Addr)
 
 	defer func() {
 		glog.Infof("OF listener closed")
@@ -127,7 +69,7 @@ func (l *ofListener) Start(ctx bh.RcvContext) {
 			return
 		}
 
-		go l.startOFConn(c, ctx)
+		l.startOFConn(c, ctx)
 	}
 }
 
@@ -135,19 +77,41 @@ func (l *ofListener) startOFConn(conn net.Conn, ctx bh.RcvContext) {
 	ofc := &ofConn{
 		HeaderConn: of.NewHeaderConn(conn),
 		listener:   l,
-		closeCh:    make(chan bool),
-		outCh:      make(chan of.Header),
 		ctx:        ctx,
 	}
 
-	if err := ofc.handshake(); err != nil {
+	ctx.StartDetached(ofc)
+}
+
+func (l *ofListener) Stop(ctx bh.RcvContext) {
+}
+
+func (l *ofListener) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
+	return errors.New("No message should be sent to the listener")
+}
+
+type ofConn struct {
+	of.HeaderConn
+	listener *ofListener
+	ctx      bh.RcvContext
+	swtch    of10.FeaturesReply
+}
+
+func (c *ofConn) Start(ctx bh.RcvContext) {
+	defer func() {
+		c.Close()
+	}()
+
+	if err := c.handshake(); err != nil {
 		glog.Errorf("Error in OpenFlow handshake: %v", err)
-		ofc.Close()
 		return
 	}
 
-	go ofc.reader()
-	go ofc.writer()
+	c.readPkts(ctx)
+}
+
+func (c *ofConn) Stop(ctx bh.RcvContext) {
+	c.Close()
 }
 
 func (c *ofConn) handshake() error {
@@ -208,12 +172,8 @@ func (c *ofConn) handshake() error {
 	return nil
 }
 
-func (c *ofConn) reader() {
+func (c *ofConn) readPkts(ctx bh.RcvContext) {
 	pkts := make([]of.Header, 10)
-	defer func() {
-		c.Close()
-	}()
-
 	for {
 		n, err := c.Read(pkts)
 		if err != nil {
@@ -239,8 +199,37 @@ func (c *ofConn) reader() {
 					return
 				}
 				glog.V(2).Infof("Sent an echo reply from the switch")
+
+			case of10.IsFeaturesReply(pkt10):
+				r, _ := of10.ToFeaturesReply(pkt10)
+				glog.Infof("Switch joined %016x", r.DatapathId())
+				for _, p := range r.Ports() {
+					glog.Infof("Port (switch=%016x, no=%d, mac=%012x, name=%s)\n",
+						r.DatapathId(), p.PortNo(), p.HwAddr(), p.Name())
+				}
+
+				glog.Infof("Disabling packet buffers in the switch.")
+				cfg := of10.NewSwitchSetConfig()
+				cfg.SetMissSendLen(0xFFFF)
+				c.Write([]of.Header{cfg.Header})
+
+			case of10.IsPacketIn(pkt10):
+				in, _ := of10.ToPacketIn(pkt10)
+				out := of10.NewPacketOut()
+				out.SetBufferId(in.BufferId())
+				out.SetInPort(in.InPort())
+
+				bcast := of10.NewActionOutput()
+				bcast.SetPort(uint16(of10.PP_FLOOD))
+
+				out.AddActions(bcast.ActionHeader)
+				for _, d := range in.Data() {
+					out.AddData(d)
+				}
+				c.Write([]of.Header{out.Header})
+
 			default:
-				c.ctx.Emit(ofMsg{pkt10, c})
+				c.ctx.Emit(ofMsg{c, pkt10})
 			}
 		}
 
@@ -251,21 +240,7 @@ func (c *ofConn) reader() {
 	}
 }
 
-func (c *ofConn) writer() {
-	defer c.Close()
-	for {
-		select {
-		case pkt := <-c.outCh:
-			c.Write([]of.Header{pkt})
-		case <-c.closeCh:
-			return
-		}
-	}
-}
-
-func (l *ofListener) Stop(ctx bh.RcvContext) {
-}
-
-func (l *ofListener) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
-	return errors.New("No message should be sent to the listener")
+func (c *ofConn) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
+	pkt := msg.Data().(of.Header)
+	return c.Write([]of.Header{pkt})
 }
