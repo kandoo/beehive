@@ -53,6 +53,7 @@ type localBee struct {
 	asyncRoutine
 	ctx rcvContext
 	rId BeeId
+	qee *qee
 }
 
 func (bee *localBee) id() BeeId {

@@ -170,7 +170,10 @@ func (a *app) handler(t MsgType) Handler {
 }
 
 func (a *app) Detached(h DetachedHandler) {
-	a.qee.registerDetached(h)
+	a.qee.ctrlCh <- routineCmd{
+		cmdType: startDetachedCmd,
+		cmdData: h,
+	}
 }
 
 func (a *app) State() State {
@@ -202,7 +205,7 @@ func (a *app) initQee() {
 	a.qee = &qee{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, a.hive.config.DataChBufSize),
-			ctrlCh: make(chan routineCmd),
+			ctrlCh: make(chan routineCmd, a.hive.config.CmdChBufSize),
 		},
 		ctx: mapContext{
 			hive: a.hive,

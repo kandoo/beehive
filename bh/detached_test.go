@@ -1,19 +1,37 @@
 package bh
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 type testDetachedHandler struct {
-	ch chan bool
+	ch   chan bool
+	fork bool
 }
 
+type testDetachedMsg int
+
 func (d *testDetachedHandler) Start(ctx RcvContext) {
-	d.ch <- true
+	if !d.fork {
+		d.ch <- true
+		return
+	}
+
+	b := ctx.StartDetached(&testDetachedHandler{
+		ch:   d.ch,
+		fork: false,
+	})
+
+	msg := testDetachedMsg(0)
+	ctx.SendToBee(msg, b)
 }
 
 func (d *testDetachedHandler) Stop(ctx RcvContext) {
 }
 
 func (d *testDetachedHandler) Rcv(msg Msg, ctx RcvContext) error {
+	d.ch <- true
 	return nil
 }
 
@@ -25,14 +43,21 @@ func TestDetached(t *testing.T) {
 
 	msgCh := make(chan bool)
 	for i := 0; i < nDetached; i++ {
-		app.Detached(&testDetachedHandler{msgCh})
+		app.Detached(&testDetachedHandler{
+			ch:   msgCh,
+			fork: true,
+		})
 	}
 
 	joinCh := make(chan bool)
 	go h.Start(joinCh)
 
-	for i := 0; i < nDetached; i++ {
-		<-msgCh
+	for i := 0; i < nDetached*2; i++ {
+		select {
+		case <-msgCh:
+		case <-time.After(2 * time.Second):
+			t.Errorf("Did not receive any message on the channel.")
+		}
 	}
 
 	h.Stop()

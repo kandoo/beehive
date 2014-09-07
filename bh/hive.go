@@ -58,7 +58,8 @@ type Hive interface {
 type HiveConfig struct {
 	HiveAddr        string        // Listening address of the hive.
 	RegAddrs        []string      // Reigstery service addresses.
-	DataChBufSize   int           // Buffer size in the data channel.
+	DataChBufSize   int           // Buffer size of the data channels.
+	CmdChBufSize    int           // Buffer size of the control channels.
 	Instrument      bool          // Whether to instrument apps on the hive.
 	DBDir           string        // Directory to persist application state.
 	HBQueryInterval time.Duration // Heartbeating interval.
@@ -131,7 +132,9 @@ func init() {
 	flag.Var(&commaSeparatedValue{&DefaultCfg.RegAddrs}, "raddrs",
 		"Address of etcd machines. Separate entries with a semi-colon ';'")
 	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
-		"Buffer size of channels.")
+		"Buffer size of data channels.")
+	flag.IntVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
+		"Buffer size of command channels.")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"Whether to insturment apps.")
 	flag.StringVar(&DefaultCfg.DBDir, "dbdir", "/tmp",

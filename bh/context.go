@@ -18,8 +18,10 @@ type RcvContext interface {
 	Emit(msgData interface{})
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	SendToBee(msgData interface{}, to BeeId)
-
 	ReplyTo(msg Msg, replyData interface{}) error
+
+	StartDetached(h DetachedHandler) BeeId
+	StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId
 
 	Lock(ms MapSet) error
 
@@ -113,4 +115,26 @@ func (ctx *rcvContext) SetBeeLocal(d interface{}) {
 
 func (ctx *rcvContext) BeeLocal() interface{} {
 	return ctx.local
+}
+
+func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
+	resCh := make(chan asyncResult)
+	cmd := routineCmd{
+		cmdType: startDetachedCmd,
+		cmdData: h,
+		resCh:   resCh,
+	}
+
+	switch b := ctx.bee.(type) {
+	case *localBee:
+		b.qee.ctrlCh <- cmd
+	case *detachedBee:
+		b.qee.ctrlCh <- cmd
+	}
+
+	return (<-resCh).data.(BeeId)
+}
+
+func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId {
+	return ctx.StartDetached(&funcDetached{start, stop, rcv})
 }

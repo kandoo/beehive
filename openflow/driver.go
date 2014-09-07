@@ -37,13 +37,9 @@ func StartOpenFlow(hive bh.Hive) error {
 // provided configuration.
 func StartOpenFlowWithConfig(hive bh.Hive, cfg OFConfig) error {
 	app := hive.NewApp("OFDriver")
-	err := app.Detached(&ofListener{
+	app.Detached(&ofListener{
 		cfg: cfg,
 	})
-	if err != nil {
-		return err
-	}
-
 	app.Handle(ofMsg{}, &ofDriver{})
 	return nil
 }

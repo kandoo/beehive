@@ -42,10 +42,6 @@ func (q *qee) detachedBees() []*detachedBee {
 }
 
 func (q *qee) start() {
-	for _, d := range q.detachedBees() {
-		go d.start()
-	}
-
 	for {
 		select {
 		case d, ok := <-q.dataCh:
@@ -124,12 +120,17 @@ func (q *qee) handleCmd(cmd routineCmd) {
 
 		q.lockLocally(q.findOrCreateBee(id), d.MapSet...)
 		cmd.resCh <- asyncResult{id, nil}
-	}
-}
 
-func (q *qee) registerDetached(h DetachedHandler) {
-	d := q.newDetachedBee(h)
-	q.idToBees[d.id()] = d
+	case startDetachedCmd:
+		h := cmd.cmdData.(DetachedHandler)
+		b := q.newDetachedBee(h)
+		q.idToBees[b.id()] = b
+		go b.start()
+
+		if cmd.resCh != nil {
+			cmd.resCh <- asyncResult{data: b.id()}
+		}
+	}
 }
 
 func (q *qee) beeByKey(dk DictionaryKey) (bee, bool) {
@@ -288,10 +289,11 @@ func (q *qee) defaultLocalBee(id BeeId) localBee {
 	return localBee{
 		asyncRoutine: asyncRoutine{
 			dataCh: make(chan msgAndHandler, cap(q.dataCh)),
-			ctrlCh: make(chan routineCmd),
+			ctrlCh: make(chan routineCmd, cap(q.ctrlCh)),
 		},
 		ctx: q.ctx.newRcvContext(),
 		rId: id,
+		qee: q,
 	}
 }
 

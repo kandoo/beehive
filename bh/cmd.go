@@ -9,13 +9,14 @@ type routineCmd struct {
 type routineCmdType int
 
 const (
-	stopCmd       routineCmdType = iota
-	startCmd                     = iota
-	findBeeCmd                   = iota
-	createBeeCmd                 = iota
-	migrateBeeCmd                = iota
-	replaceBeeCmd                = iota
-	lockMapSetCmd                = iota
+	stopCmd          routineCmdType = iota
+	startCmd                        = iota
+	findBeeCmd                      = iota
+	createBeeCmd                    = iota
+	migrateBeeCmd                   = iota
+	replaceBeeCmd                   = iota
+	lockMapSetCmd                   = iota
+	startDetachedCmd                = iota
 )
 
 type migrateBeeCmdData struct {
