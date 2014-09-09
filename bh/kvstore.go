@@ -307,6 +307,10 @@ type persistentDict struct {
 	name  DictionaryName
 }
 
+func (d persistentDict) Name() DictionaryName {
+	return d.name
+}
+
 func (d *persistentDict) Get(k Key) (Value, error) {
 	return d.state.get(d.name, k)
 }

@@ -61,8 +61,12 @@ func (s *inMemoryState) inMemDict(name DictionaryName) *inMemDict {
 }
 
 type inMemDict struct {
-	Name DictionaryName
-	Dict map[Key]Value
+	DictName DictionaryName
+	Dict     map[Key]Value
+}
+
+func (d inMemDict) Name() DictionaryName {
+	return d.DictName
 }
 
 func (d *inMemDict) Get(k Key) (Value, error) {
@@ -126,10 +130,14 @@ func (t *inMemoryTx) Abort() {
 	return
 }
 
+func (d *inMemStagedDict) Name() DictionaryName {
+	return d.dict.Name()
+}
+
 func (d *inMemStagedDict) Put(k Key, v Value) error {
 	d.ops[k] = StateOp{
 		T: Put,
-		D: d.dict.Name,
+		D: d.dict.Name(),
 		K: k,
 		V: v,
 	}
@@ -153,7 +161,7 @@ func (d *inMemStagedDict) Get(k Key) (Value, error) {
 func (d *inMemStagedDict) Del(k Key) error {
 	d.ops[k] = StateOp{
 		T: Del,
-		D: d.dict.Name,
+		D: d.dict.Name(),
 		K: k,
 	}
 	return nil

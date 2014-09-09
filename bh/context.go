@@ -15,6 +15,8 @@ type MapContext interface {
 type RcvContext interface {
 	MapContext
 
+	BeeId() BeeId
+
 	Emit(msgData interface{})
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	SendToBee(msgData interface{}, to BeeId)
@@ -137,4 +139,8 @@ func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
 
 func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId {
 	return ctx.StartDetached(&funcDetached{start, stop, rcv})
+}
+
+func (ctx *rcvContext) BeeId() BeeId {
+	return ctx.bee.id()
 }

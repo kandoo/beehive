@@ -20,6 +20,7 @@ type IterFn func(k Key, v Value)
 
 // Simply a key-value store.
 type Dictionary interface {
+	Name() DictionaryName
 	Get(k Key) (Value, error)
 	Put(k Key, v Value) error
 	Del(k Key) error
