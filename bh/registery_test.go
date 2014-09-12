@@ -34,21 +34,21 @@ func TestRegisteryUnregisterHive(t *testing.T) {
 }
 
 type testRegisteryWatchHandler struct {
-	resCh chan HiveId
+	resCh chan HiveID
 }
 
 func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
 	switch d := msg.Data().(type) {
 	case HiveJoined:
-		h.resCh <- d.HiveId
+		h.resCh <- d.HiveID
 	case HiveLeft:
-		h.resCh <- d.HiveId
+		h.resCh <- d.HiveID
 	}
 	return nil
 }
 
 func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MapSet {
-	return MapSet{{"W", Key(ctx.Hive().Id())}}
+	return MapSet{{"W", Key(ctx.Hive().ID())}}
 }
 
 func TestRegisteryWatchHives(t *testing.T) {
@@ -56,7 +56,7 @@ func TestRegisteryWatchHives(t *testing.T) {
 	h1 := hiveWithAddressForRegisteryTests(h1Id, t)
 	maybeSkipRegisteryTest(h1, t)
 
-	watchCh := make(chan HiveId, 3)
+	watchCh := make(chan HiveID, 3)
 
 	app := h1.NewApp("RegisteryWatchHandler")
 	hndlr := &testRegisteryWatchHandler{
@@ -81,15 +81,15 @@ func TestRegisteryWatchHives(t *testing.T) {
 	<-joinCh2
 
 	id := <-watchCh
-	if id != HiveId(h1Id) {
+	if id != HiveID(h1Id) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}
 	id = <-watchCh
-	if id != HiveId(h2Id) {
+	if id != HiveID(h2Id) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}
 	id = <-watchCh
-	if id != HiveId(h2Id) {
+	if id != HiveID(h2Id) {
 		t.Errorf("Invalid hive left: %v", id)
 	}
 

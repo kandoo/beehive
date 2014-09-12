@@ -17,12 +17,12 @@ type proxyBee struct {
 }
 
 type proxy struct {
-	to     HiveId
+	to     HiveID
 	msgURL string
 	cmdURL string
 }
 
-func NewProxy(to HiveId) proxy {
+func NewProxy(to HiveID) proxy {
 	return proxy{
 		to:     to,
 		msgURL: to.msgURL(),
@@ -30,11 +30,11 @@ func NewProxy(to HiveId) proxy {
 	}
 }
 
-func (id HiveId) msgURL() string {
+func (id HiveID) msgURL() string {
 	return fmt.Sprintf("http://%s/hive/v1/msg", id)
 }
 
-func (id HiveId) cmdURL() string {
+func (id HiveID) cmdURL() string {
 	return fmt.Sprintf("http://%s/hive/v1/cmd", id)
 }
 
@@ -86,7 +86,7 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
-	b.proxy = NewProxy(b.bID.HiveId)
+	b.proxy = NewProxy(b.bID.HiveID)
 
 	for {
 		select {

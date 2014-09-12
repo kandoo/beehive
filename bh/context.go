@@ -15,15 +15,15 @@ type MapContext interface {
 type RcvContext interface {
 	MapContext
 
-	BeeId() BeeId
+	BeeID() BeeID
 
 	Emit(msgData interface{})
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
-	SendToBee(msgData interface{}, to BeeId)
+	SendToBee(msgData interface{}, to BeeID)
 	ReplyTo(msg Msg, replyData interface{}) error
 
-	StartDetached(h DetachedHandler) BeeId
-	StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId
+	StartDetached(h DetachedHandler) BeeID
+	StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID
 
 	Lock(ms MapSet) error
 
@@ -44,8 +44,8 @@ type rcvContext struct {
 }
 
 // Creates a new receiver context.
-func (mc mapContext) newRcvContext() rcvContext {
-	rc := rcvContext{mapContext: mc}
+func (ctx mapContext) newRcvContext() rcvContext {
+	rc := rcvContext{mapContext: ctx}
 	// We need to reset the state for the new bees.
 	rc.state = nil
 	return rc
@@ -69,20 +69,20 @@ func (ctx *mapContext) Hive() Hive {
 
 // Emits a message. Note that m should be your data not an instance of Msg.
 func (ctx *rcvContext) Emit(msgData interface{}) {
-	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), BeeId{}))
+	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), BeeID{}))
 }
 
 func (ctx *rcvContext) SendToDictKey(msgData interface{}, to AppName,
 	dk DictionaryKey) {
 
 	// TODO(soheil): Implement send to.
-	msg := newMsgFromData(msgData, ctx.bee.id(), BeeId{})
+	msg := newMsgFromData(msgData, ctx.bee.id(), BeeID{})
 	ctx.hive.emitMsg(msg)
 
 	glog.Fatal("Sendto is not implemented.")
 }
 
-func (ctx *rcvContext) SendToBee(msgData interface{}, to BeeId) {
+func (ctx *rcvContext) SendToBee(msgData interface{}, to BeeID) {
 	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), to))
 }
 
@@ -103,7 +103,7 @@ func (ctx *rcvContext) Lock(ms MapSet) error {
 		CmdType: lockMapSetCmd,
 		CmdData: lockMapSetData{
 			MapSet: ms,
-			BeeId:  ctx.bee.id(),
+			BeeID:  ctx.bee.id(),
 		},
 		ResCh: resCh,
 	}
@@ -119,7 +119,7 @@ func (ctx *rcvContext) BeeLocal() interface{} {
 	return ctx.local
 }
 
-func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
+func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeID {
 	resCh := make(chan CmdResult)
 	cmd := LocalCmd{
 		CmdType: startDetachedCmd,
@@ -134,13 +134,13 @@ func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
 		b.qee.ctrlCh <- cmd
 	}
 
-	return (<-resCh).Data.(BeeId)
+	return (<-resCh).Data.(BeeID)
 }
 
-func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId {
+func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID {
 	return ctx.StartDetached(&funcDetached{start, stop, rcv})
 }
 
-func (ctx *rcvContext) BeeId() BeeId {
+func (ctx *rcvContext) BeeID() BeeID {
 	return ctx.bee.id()
 }

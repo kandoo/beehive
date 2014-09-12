@@ -14,7 +14,7 @@ type persistentStateManager struct {
 	sync.Mutex
 	hive   *hive
 	dbs    map[AppName][]*bolt.DB
-	nextId int
+	nextID int
 }
 
 func newPersistentStateManager(h *hive) *persistentStateManager {
@@ -36,10 +36,10 @@ func (m *persistentStateManager) newAppDB(a *app) (*bolt.DB, error) {
 	m.Lock()
 	defer m.Unlock()
 
-	m.nextId++
+	m.nextID++
 
 	path := filepath.Join(
-		m.hive.config.DBDir, string(a.Name())+"-"+strconv.Itoa(m.nextId))
+		m.hive.config.DBDir, string(a.Name())+"-"+strconv.Itoa(m.nextID))
 	glog.V(1).Infof("Creating/Opening the db file for %s in %s.", a.Name(), path)
 	db, err := bolt.Open(path, 0600, nil)
 	if err == nil {

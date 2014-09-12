@@ -7,18 +7,18 @@ import (
 	"github.com/golang/glog"
 )
 
-type BeeId struct {
-	HiveId   HiveId  `json:"hive_id"`
+type BeeID struct {
+	HiveID   HiveID  `json:"hive_id"`
 	AppName  AppName `json:"app_name"`
-	Id       uint64  `json:"id"`
+	ID       uint64  `json:"id"`
 	Detached bool    `json:"detached"`
 }
 
-func (b *BeeId) IsNil() bool {
-	return len(b.HiveId) == 0 && len(b.AppName) == 0 && b.Id == 0
+func (b *BeeID) IsNil() bool {
+	return len(b.HiveID) == 0 && len(b.AppName) == 0 && b.ID == 0
 }
 
-func (b *BeeId) Key() Key {
+func (b *BeeID) Key() Key {
 	j, err := json.Marshal(b)
 	if err != nil {
 		glog.Fatalf("Cannot marshall a bee ID into json: %v", err)
@@ -26,8 +26,8 @@ func (b *BeeId) Key() Key {
 	return Key(j)
 }
 
-func BeeIdFromKey(k Key) BeeId {
-	b := BeeId{}
+func BeeIDFromKey(k Key) BeeID {
+	b := BeeID{}
 	err := json.Unmarshal([]byte(k), &b)
 	if err != nil {
 		glog.Fatalf("Cannot unmarshall a bee ID from json: %v", err)
@@ -36,7 +36,7 @@ func BeeIdFromKey(k Key) BeeId {
 }
 
 type bee interface {
-	id() BeeId
+	id() BeeID
 	start()
 
 	state() State
@@ -53,11 +53,11 @@ type localBee struct {
 	dataCh chan msgAndHandler
 	ctrlCh chan LocalCmd
 	ctx    rcvContext
-	bID    BeeId
+	bID    BeeID
 	qee    *qee
 }
 
-func (bee *localBee) id() BeeId {
+func (bee *localBee) id() BeeID {
 	return bee.bID
 }
 

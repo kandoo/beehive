@@ -11,9 +11,9 @@ import (
 	"github.com/golang/glog"
 )
 
-// HiveId represents the globally unique ID of a hive. These IDs are
+// HiveID represents the globally unique ID of a hive. These IDs are
 // automatically assigned using the distributed configuration service.
-type HiveId string
+type HiveID string
 
 // HiveStatus represents the status of a hive.
 type HiveStatus int
@@ -26,7 +26,7 @@ const (
 
 type Hive interface {
 	// ID of the hive. Valid only if the hive is started.
-	Id() HiveId
+	ID() HiveID
 
 	// Starts the hive and will close the waitCh once the hive stops.
 	Start(joinCh chan bool) error
@@ -44,7 +44,7 @@ type Hive interface {
 	// Sends a message to a specific bee that owns a specific dictionary key.
 	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
 	// Sends a message to a sepcific bee.
-	SendToBee(msgData interface{}, to BeeId)
+	SendToBee(msgData interface{}, to BeeID)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
 
@@ -69,7 +69,7 @@ type HiveConfig struct {
 // Creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h := &hive{
-		id:     HiveId(cfg.HiveAddr),
+		id:     HiveID(cfg.HiveAddr),
 		status: HiveStopped,
 		config: cfg,
 		dataCh: make(chan *msg, cfg.DataChBufSize),
@@ -89,8 +89,8 @@ func (h *hive) init() {
 	gob.Register(StateOp{})
 	gob.Register(StateBatch{})
 	gob.Register(msg{})
-	gob.Register(BeeId{})
-	gob.Register(HiveId(""))
+	gob.Register(BeeID{})
+	gob.Register(HiveID(""))
 	gob.Register(CmdResult{})
 	gob.Register(migrateBeeCmdData{})
 	gob.Register(replaceBeeCmdData{})
@@ -158,7 +158,7 @@ type qeeAndHandler struct {
 
 // The internal implementation of Hive.
 type hive struct {
-	id     HiveId
+	id     HiveID
 	status HiveStatus
 	config HiveConfig
 
@@ -176,7 +176,7 @@ type hive struct {
 	listener net.Listener
 }
 
-func (h *hive) Id() HiveId {
+func (h *hive) ID() HiveID {
 	return h.id
 }
 
@@ -368,8 +368,8 @@ func (h *hive) SendToDictKey(msgData interface{}, to AppName,
 	glog.Fatalf("Not implemented yet.")
 }
 
-func (h *hive) SendToBee(msgData interface{}, to BeeId) {
-	h.emitMsg(newMsgFromData(msgData, BeeId{}, to))
+func (h *hive) SendToBee(msgData interface{}, to BeeID) {
+	h.emitMsg(newMsgFromData(msgData, BeeID{}, to))
 }
 
 // Reply to thatMsg with the provided replyData.
@@ -379,6 +379,6 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	h.emitMsg(newMsgFromData(replyData, BeeId{}, m.From()))
+	h.emitMsg(newMsgFromData(replyData, BeeID{}, m.From()))
 	return nil
 }

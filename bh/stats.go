@@ -10,12 +10,12 @@ import (
 )
 
 type statCollector interface {
-	collect(from, to BeeId, msg Msg)
+	collect(from, to BeeID, msg Msg)
 }
 
 type dummyStatCollector struct{}
 
-func (c *dummyStatCollector) collect(from, to BeeId, msg Msg) {}
+func (c *dummyStatCollector) collect(from, to BeeID, msg Msg) {}
 func (c *dummyStatCollector) init(h Hive)                     {}
 
 type appStatCollector struct {
@@ -32,7 +32,7 @@ func newAppStatCollector(h Hive) statCollector {
 	return c
 }
 
-func (c *appStatCollector) collect(from, to BeeId, msg Msg) {
+func (c *appStatCollector) collect(from, to BeeID, msg Msg) {
 	switch msg.Data().(type) {
 	case localStatUpdate, aggrStatUpdate:
 		return
@@ -54,14 +54,14 @@ const (
 )
 
 type localStatUpdate struct {
-	From  BeeId
-	To    BeeId
+	From  BeeID
+	To    BeeID
 	Count uint64
 }
 
 type communicationStat struct {
-	From      BeeId
-	To        BeeId
+	From      BeeID
+	To        BeeID
 	Count     uint64
 	LastCount uint64
 	LastEvent time.Time
@@ -119,7 +119,7 @@ func (u *localStatUpdate) Key() Key {
 }
 
 func (u *localStatUpdate) localCommunication() bool {
-	return u.From.HiveId == u.To.HiveId
+	return u.From.HiveID == u.To.HiveID
 }
 
 func (u *localStatUpdate) selfCommunication() bool {
@@ -185,7 +185,7 @@ func (a *aggrStatUpdate) ReverseKey() Key {
 
 type aggrStat struct {
 	Migrated bool
-	Matrix   map[HiveId]uint64
+	Matrix   map[HiveID]uint64
 }
 
 func aggrStatFromBytes(b []byte) aggrStat {
@@ -205,22 +205,22 @@ func (s *aggrStat) Bytes() []byte {
 
 type optimizer struct{}
 
-func (o *optimizer) stat(id BeeId, dict Dictionary) aggrStat {
+func (o *optimizer) stat(id BeeID, dict Dictionary) aggrStat {
 	v, err := dict.Get(id.Key())
 	if err != nil {
 		return aggrStat{
-			Matrix: make(map[HiveId]uint64),
+			Matrix: make(map[HiveID]uint64),
 		}
 	}
 
 	return aggrStatFromBytes([]byte(v))
 }
 
-type HiveIdSlice []HiveId
+type HiveIDSlice []HiveID
 
-func (s HiveIdSlice) Len() int           { return len(s) }
-func (s HiveIdSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s HiveIdSlice) Less(i, j int) bool { return s[i] < s[j] }
+func (s HiveIDSlice) Len() int           { return len(s) }
+func (s HiveIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s HiveIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 
 func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
@@ -235,7 +235,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return nil
 	}
 
-	stat.Matrix[update.From.HiveId] += update.Count
+	stat.Matrix[update.From.HiveID] += update.Count
 	defer func() {
 		dict.Put(update.To.Key(), stat.Bytes())
 	}()
@@ -250,20 +250,20 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	}
 
 	max := uint64(0)
-	maxHive := HiveId("")
+	maxHive := HiveID("")
 	for id, cnt := range stat.Matrix {
 		if max < cnt {
 			max = cnt
 			maxHive = id
 		}
 
-		if max == cnt && update.To.HiveId == id {
+		if max == cnt && update.To.HiveID == id {
 			max = cnt
 			maxHive = id
 		}
 	}
 
-	if maxHive == "" || update.To.HiveId == maxHive {
+	if maxHive == "" || update.To.HiveID == maxHive {
 		return nil
 	}
 

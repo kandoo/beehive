@@ -210,6 +210,6 @@ func (a *app) initQee() {
 			app:  a,
 		},
 		keyToBees: make(map[DictionaryKey]bee),
-		idToBees:  make(map[BeeId]bee),
+		idToBees:  make(map[BeeID]bee),
 	}
 }

@@ -3,7 +3,7 @@ package bh
 type RemoteCmd struct {
 	CmdType CmdType
 	CmdData interface{}
-	CmdTo   BeeId
+	CmdTo   BeeID
 }
 
 type LocalCmd struct {
@@ -35,18 +35,18 @@ const (
 )
 
 type migrateBeeCmdData struct {
-	From BeeId
-	To   HiveId
+	From BeeID
+	To   HiveID
 }
 
 type replaceBeeCmdData struct {
-	OldBee BeeId
-	NewBee BeeId
+	OldBee BeeID
+	NewBee BeeID
 	State  *inMemoryState
 	MapSet MapSet
 }
 
 type lockMapSetData struct {
-	BeeId  BeeId
+	BeeID  BeeID
 	MapSet MapSet
 }
