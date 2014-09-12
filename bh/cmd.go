@@ -1,22 +1,37 @@
 package bh
 
-type routineCmd struct {
-	cmdType routineCmdType
-	cmdData interface{}
-	resCh   chan asyncResult
+type RemoteCmd struct {
+	CmdType CmdType
+	CmdData interface{}
+	CmdTo   BeeId
 }
 
-type routineCmdType int
+type LocalCmd struct {
+	CmdType CmdType
+	CmdData interface{}
+	ResCh   chan CmdResult
+}
+
+type CmdResult struct {
+	Data interface{}
+	Err  error
+}
+
+func (r CmdResult) get() (interface{}, error) {
+	return r.Data, r.Err
+}
+
+type CmdType int
 
 const (
-	stopCmd          routineCmdType = iota
-	startCmd                        = iota
-	findBeeCmd                      = iota
-	createBeeCmd                    = iota
-	migrateBeeCmd                   = iota
-	replaceBeeCmd                   = iota
-	lockMapSetCmd                   = iota
-	startDetachedCmd                = iota
+	stopCmd          CmdType = iota
+	startCmd                 = iota
+	findBeeCmd               = iota
+	createBeeCmd             = iota
+	migrateBeeCmd            = iota
+	replaceBeeCmd            = iota
+	lockMapSetCmd            = iota
+	startDetachedCmd         = iota
 )
 
 type migrateBeeCmdData struct {

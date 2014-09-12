@@ -160,8 +160,12 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 			return fmt.Errorf("Cannot find app for migrate command: %+v", m)
 		}
 
-		resCh := make(chan asyncResult)
-		a.qee.ctrlCh <- routineCmd{migrateBeeCmd, m, resCh}
+		resCh := make(chan CmdResult)
+		a.qee.ctrlCh <- LocalCmd{
+			CmdType: migrateBeeCmd,
+			CmdData: m,
+			ResCh:   resCh,
+		}
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}

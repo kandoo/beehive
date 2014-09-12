@@ -98,17 +98,17 @@ func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 }
 
 func (ctx *rcvContext) Lock(ms MapSet) error {
-	resCh := make(chan asyncResult)
-	ctx.app.qee.ctrlCh <- routineCmd{
-		lockMapSetCmd,
-		lockMapSetData{
+	resCh := make(chan CmdResult)
+	ctx.app.qee.ctrlCh <- LocalCmd{
+		CmdType: lockMapSetCmd,
+		CmdData: lockMapSetData{
 			MapSet: ms,
 			BeeId:  ctx.bee.id(),
 		},
-		resCh,
+		ResCh: resCh,
 	}
 	res := <-resCh
-	return res.err
+	return res.Err
 }
 
 func (ctx *rcvContext) SetBeeLocal(d interface{}) {
@@ -120,11 +120,11 @@ func (ctx *rcvContext) BeeLocal() interface{} {
 }
 
 func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
-	resCh := make(chan asyncResult)
-	cmd := routineCmd{
-		cmdType: startDetachedCmd,
-		cmdData: h,
-		resCh:   resCh,
+	resCh := make(chan CmdResult)
+	cmd := LocalCmd{
+		CmdType: startDetachedCmd,
+		CmdData: h,
+		ResCh:   resCh,
 	}
 
 	switch b := ctx.bee.(type) {
@@ -134,7 +134,7 @@ func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeId {
 		b.qee.ctrlCh <- cmd
 	}
 
-	return (<-resCh).data.(BeeId)
+	return (<-resCh).Data.(BeeId)
 }
 
 func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeId {

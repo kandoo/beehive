@@ -123,9 +123,10 @@ func (p *pulseTaker) Rcv(m Msg, ctx RcvContext) error {
 
 func pulseTakerId(h HiveId) BeeId {
 	return BeeId{
-		HiveId:  h,
-		AppName: heartbeatAppName,
-		Id:      1, // We only have one bee and the ID of that bee would be one.
+		HiveId:   h,
+		AppName:  heartbeatAppName,
+		Id:       1, // We only have one bee and the ID of that bee would be one.
+		Detached: true,
 	}
 }
 

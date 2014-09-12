@@ -1,17 +1,22 @@
 package bh
 
 import (
-	"encoding/gob"
 	"errors"
 	"fmt"
 
 	"github.com/golang/glog"
 )
 
+type QeeId struct {
+	Hive HiveId
+	App  AppName
+}
+
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
-	asyncRoutine
+	dataCh    chan msgAndHandler
+	ctrlCh    chan LocalCmd
 	ctx       mapContext
 	lastBeeId uint64
 	idToBees  map[BeeId]bee
@@ -65,8 +70,12 @@ func (q *qee) closeChannels() {
 }
 
 func (q *qee) stopBees() {
-	stopCh := make(chan asyncResult)
-	stopCmd := routineCmd{stopCmd, nil, stopCh}
+	stopCh := make(chan CmdResult)
+	stopCmd := LocalCmd{
+		CmdType: stopCmd,
+		CmdData: nil,
+		ResCh:   stopCh,
+	}
 
 	for _, b := range q.idToBees {
 		b.enqueCmd(stopCmd)
@@ -78,57 +87,57 @@ func (q *qee) stopBees() {
 	}
 }
 
-func (q *qee) handleCmd(cmd routineCmd) {
-	switch cmd.cmdType {
+func (q *qee) handleCmd(cmd LocalCmd) {
+	switch cmd.CmdType {
 	case stopCmd:
 		glog.V(3).Infof("Stopping bees of %p", q)
 		q.stopBees()
 		q.closeChannels()
-		cmd.resCh <- asyncResult{}
+		cmd.ResCh <- CmdResult{}
 
 	case findBeeCmd:
-		id := cmd.cmdData.(BeeId)
+		id := cmd.CmdData.(BeeId)
 		r, ok := q.idToBees[id]
 		if ok {
-			cmd.resCh <- asyncResult{r, nil}
+			cmd.ResCh <- CmdResult{r, nil}
 			return
 		}
 
-		err := errors.New(fmt.Sprintf("No bee found: %+v", id))
-		cmd.resCh <- asyncResult{nil, err}
+		err := fmt.Errorf("No bee found: %+v", id)
+		cmd.ResCh <- CmdResult{nil, err}
 
 	case createBeeCmd:
 		r := q.newLocalBee()
 		glog.V(2).Infof("Created a new local bee: %+v", r.id())
-		cmd.resCh <- asyncResult{r.id(), nil}
+		cmd.ResCh <- CmdResult{r.id(), nil}
 
 	case migrateBeeCmd:
-		m := cmd.cmdData.(migrateBeeCmdData)
-		q.migrate(m.From, m.To, cmd.resCh)
+		m := cmd.CmdData.(migrateBeeCmdData)
+		q.migrate(m.From, m.To, cmd.ResCh)
 
 	case replaceBeeCmd:
-		d := cmd.cmdData.(replaceBeeCmdData)
-		q.replaceBee(d, cmd.resCh)
+		d := cmd.CmdData.(replaceBeeCmdData)
+		q.replaceBee(d, cmd.ResCh)
 
 	case lockMapSetCmd:
-		d := cmd.cmdData.(lockMapSetData)
+		d := cmd.CmdData.(lockMapSetData)
 		id := q.lock(d.MapSet, d.BeeId, true)
 		if id != d.BeeId {
-			cmd.resCh <- asyncResult{nil, errors.New("Cannot lock mapset")}
+			cmd.ResCh <- CmdResult{nil, errors.New("Cannot lock mapset")}
 			return
 		}
 
 		q.lockLocally(q.findOrCreateBee(id), d.MapSet...)
-		cmd.resCh <- asyncResult{id, nil}
+		cmd.ResCh <- CmdResult{id, nil}
 
 	case startDetachedCmd:
-		h := cmd.cmdData.(DetachedHandler)
+		h := cmd.CmdData.(DetachedHandler)
 		b := q.newDetachedBee(h)
 		q.idToBees[b.id()] = b
 		go b.start()
 
-		if cmd.resCh != nil {
-			cmd.resCh <- asyncResult{data: b.id()}
+		if cmd.ResCh != nil {
+			cmd.ResCh <- CmdResult{Data: b.id()}
 		}
 	}
 }
@@ -194,7 +203,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		bee, ok := q.beeById(mh.msg.To())
 		if !ok {
 			if q.isLocalBee(mh.msg.To()) {
-				glog.Fatalf("Cannot find a local bee: %v", mh.msg.To)
+				glog.Fatalf("Cannot find a local bee: %+v", mh.msg.To())
 			}
 
 			bee = q.findOrCreateBee(mh.msg.To())
@@ -287,13 +296,11 @@ func (q *qee) isLocalBee(id BeeId) bool {
 
 func (q *qee) defaultLocalBee(id BeeId) localBee {
 	return localBee{
-		asyncRoutine: asyncRoutine{
-			dataCh: make(chan msgAndHandler, cap(q.dataCh)),
-			ctrlCh: make(chan routineCmd, cap(q.ctrlCh)),
-		},
-		ctx: q.ctx.newRcvContext(),
-		rId: id,
-		qee: q,
+		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
+		ctrlCh: make(chan LocalCmd, cap(q.ctrlCh)),
+		ctx:    q.ctx.newRcvContext(),
+		bID:    id,
+		qee:    q,
 	}
 }
 
@@ -301,17 +308,17 @@ func (q *qee) proxyFromLocal(id BeeId, lBee *localBee) (*proxyBee,
 	error) {
 
 	if q.isLocalBee(id) {
-		return nil, errors.New(fmt.Sprintf("Bee ID is a local ID: %+v", id))
+		return nil, fmt.Errorf("Bee ID is a local ID: %+v", id)
 	}
 
 	if r, ok := q.beeById(id); ok {
-		return nil, errors.New(fmt.Sprintf("Bee already exists: %+v", r))
+		return nil, fmt.Errorf("Bee already exists: %+v", r)
 	}
 
 	r := &proxyBee{
 		localBee: *lBee,
 	}
-	r.rId = id
+	r.bID = id
 	r.ctx.bee = r
 	q.idToBees[id] = r
 	q.idToBees[lBee.id()] = r
@@ -322,15 +329,15 @@ func (q *qee) localFromProxy(id BeeId, pBee *proxyBee) (*localBee,
 	error) {
 
 	if !q.isLocalBee(id) {
-		return nil, errors.New(fmt.Sprintf("Bee ID is a proxy ID: %+v", id))
+		return nil, fmt.Errorf("Bee ID is a proxy ID: %+v", id)
 	}
 
 	if r, ok := q.beeById(id); ok {
-		return nil, errors.New(fmt.Sprintf("Bee already exists: %+v", r))
+		return nil, fmt.Errorf("Bee already exists: %+v", r)
 	}
 
 	r := pBee.localBee
-	r.rId = id
+	r.bID = id
 	r.ctx.bee = &r
 	q.idToBees[id] = &r
 	q.idToBees[pBee.id()] = &r
@@ -401,25 +408,28 @@ func (q *qee) mapSetOfBee(id BeeId) MapSet {
 	return ms
 }
 
-func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
+func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan CmdResult) {
 	if beeId.Detached {
-		err := errors.New(fmt.Sprintf("Cannot migrate a detached: %+v", beeId))
-		resCh <- asyncResult{nil, err}
+		err := fmt.Errorf("Cannot migrate a detached: %+v", beeId)
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
 	oldBee, ok := q.beeById(beeId)
 	if !ok {
-		err := errors.New(fmt.Sprintf("Bee not found: %+v", oldBee))
-		resCh <- asyncResult{nil, err}
+		err := fmt.Errorf("Bee not found: %+v", oldBee)
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
-	stopCh := make(chan asyncResult)
-	oldBee.enqueCmd(routineCmd{stopCmd, nil, stopCh})
+	stopCh := make(chan CmdResult)
+	oldBee.enqueCmd(LocalCmd{
+		CmdType: stopCmd,
+		ResCh:   stopCh,
+	})
 	_, err := (<-stopCh).get()
 	if err != nil {
-		resCh <- asyncResult{nil, err}
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
@@ -427,87 +437,70 @@ func (q *qee) migrate(beeId BeeId, to HiveId, resCh chan asyncResult) {
 
 	// TODO(soheil): There is a possibility of a deadlock. If the number of
 	// migrrations pass the control channel's buffer size.
-	conn, err := dialHive(to)
-	if err != nil {
-		resCh <- asyncResult{nil, err}
-		return
-	}
 
-	defer conn.Close()
-
-	enc := gob.NewEncoder(conn)
-	dec := gob.NewDecoder(conn)
-
-	if err := enc.Encode(hiveHandshake{ctrlHandshake}); err != nil {
-		glog.Errorf("Cannot encode handshake: %+v", err)
-		resCh <- asyncResult{nil, err}
-		return
-	}
+	prx := NewProxy(to)
 
 	id := BeeId{HiveId: to, AppName: beeId.AppName}
-	if err := enc.Encode(hiveRemoteCommand{createBeeCmd, id}); err != nil {
-		glog.Errorf("Cannot encode command: %+v", err)
-		resCh <- asyncResult{nil, err}
+
+	cmd := RemoteCmd{
+		CmdType: createBeeCmd,
+		CmdTo:   id,
+	}
+
+	data, err := prx.SendCmd(&cmd)
+	if err != nil {
+		glog.Errorf("Error in creating a new bee: %s", err)
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
-	if err := dec.Decode(&id); err != nil {
-		glog.V(2).Infof("Cannot decode the new bee: %+v", err)
-		resCh <- asyncResult{nil, err}
-		return
-	}
+	id = data.(BeeId)
 
-	glog.V(2).Infof("Got the new bee: %+v", id)
+	glog.V(2).Infof("Created a new bee for migration: %+v", id)
 
 	newBee, err := q.proxyFromLocal(id, oldBee.(*localBee))
 	if err != nil {
-		resCh <- asyncResult{nil, err}
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
 	glog.V(2).Infof("Created a proxy for the new bee: %+v", newBee)
 
-	if err := enc.Encode(hiveRemoteCommand{replaceBeeCmd, id}); err != nil {
-		glog.Errorf("Cannot encode replace command: %v", err)
-		return
-	}
-
 	mapSet := q.mapSetOfBee(oldBee.id())
-	replaceData := replaceBeeCmdData{
-		OldBee: oldBee.id(),
-		NewBee: newBee.id(),
-		State:  oldBee.state().(*inMemoryState),
-		MapSet: mapSet,
-	}
-	if err := enc.Encode(replaceData); err != nil {
-		glog.Errorf("Cannot encode replace command data: %v", err)
-		return
+	cmd = RemoteCmd{
+		CmdType: replaceBeeCmd,
+		CmdTo:   id,
+		CmdData: replaceBeeCmdData{
+			OldBee: oldBee.id(),
+			NewBee: newBee.id(),
+			State:  oldBee.state().(*inMemoryState),
+			MapSet: mapSet,
+		},
 	}
 
-	newId := BeeId{}
-	if err := dec.Decode(&newId); err != nil {
-		glog.Errorf("Cannot replace the bee: %v", err)
+	_, err = prx.SendCmd(&cmd)
+	if err != nil {
+		glog.Errorf("Error in replacing the bee: %s", err)
 		return
 	}
 
 	q.lockLocally(newBee, mapSet...)
 
 	go newBee.start()
-	resCh <- asyncResult{newBee, nil}
+	resCh <- CmdResult{newBee, nil}
 }
 
-func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan asyncResult) {
+func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan CmdResult) {
 	if !q.isLocalBee(d.NewBee) {
-		err := errors.New(
-			fmt.Sprintf("Cannot replace with a non-local bee: %+v", d.NewBee))
-		resCh <- asyncResult{nil, err}
+		err := fmt.Errorf("Cannot replace with a non-local bee: %+v", d.NewBee)
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
 	b, ok := q.beeById(d.NewBee)
 	if !ok {
-		err := errors.New(fmt.Sprintf("Cannot find bee: %+v", d.NewBee))
-		resCh <- asyncResult{nil, err}
+		err := fmt.Errorf("Cannot find bee: %+v", d.NewBee)
+		resCh <- CmdResult{nil, err}
 		return
 	}
 
@@ -525,5 +518,5 @@ func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan asyncResult) {
 
 	q.lockLocally(b, d.MapSet...)
 
-	resCh <- asyncResult{b, nil}
+	resCh <- CmdResult{b.id(), nil}
 }

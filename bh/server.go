@@ -2,173 +2,122 @@ package bh
 
 import (
 	"encoding/gob"
-	"io"
+	"fmt"
 	"net"
+	"net/http"
 
 	"github.com/golang/glog"
+	"github.com/gorilla/mux"
 )
 
 type handShakeType int
 
-const (
-	ctrlHandshake handShakeType = iota
-	dataHandshake
-)
-
-type hiveHandshake struct {
-	Type handShakeType
-}
-
-type hiveRemoteCommand struct {
-	Type routineCmdType
-	BeeId
-}
-
-func (h *hive) handleCtrlConn(conn net.Conn, dec *gob.Decoder,
-	enc *gob.Encoder) {
-
-	for {
-		var cmd hiveRemoteCommand
-		if err := dec.Decode(&cmd); err != nil {
-			glog.Errorf("Cannot decode the command: %v", err)
-			return
-		}
-
-		if cmd.HiveId != h.id {
-			glog.Errorf("Command is not for this hive: %+v", cmd)
-			return
-		}
-
-		a, ok := h.app(cmd.AppName)
-		if !ok {
-			glog.Errorf("Cannot find app: %v", cmd.BeeId.AppName)
-			return
-		}
-
-		switch cmd.Type {
-		case createBeeCmd:
-			resCh := make(chan asyncResult)
-			a.qee.ctrlCh <- routineCmd{createBeeCmd, nil, resCh}
-			res, err := (<-resCh).get()
-			if err != nil {
-				glog.Error(err)
-				return
-			}
-
-			if err := enc.Encode(res.(BeeId)); err != nil {
-				glog.Errorf("Cannot encode bee id: %v", err)
-				return
-			}
-
-		case replaceBeeCmd:
-			data := replaceBeeCmdData{}
-			if err := dec.Decode(&data); err != nil {
-				glog.Errorf("Cannot decode the data for replace bee command: %+v",
-					err)
-				return
-			}
-
-			resCh := make(chan asyncResult)
-			a.qee.ctrlCh <- routineCmd{replaceBeeCmd, data, resCh}
-			res, err := (<-resCh).get()
-			if err != nil {
-				glog.Error(err)
-				return
-			}
-
-			if err := enc.Encode(res.(bee).id()); err != nil {
-				glog.Errorf("Cannot encode bee id: %v", err)
-				return
-			}
-		}
+func (h *hive) listen() error {
+	l, e := net.Listen("tcp", h.config.HiveAddr)
+	if e != nil {
+		glog.Errorf("Hive cannot listen: %v", e)
+		return e
 	}
+	glog.Infof("Hive listens at: %s", h.config.HiveAddr)
+	h.listener = l
+
+	s := h.newServer(h.config.HiveAddr)
+	go s.Serve(l)
+	return nil
 }
 
-func (h *hive) handleDataConn(conn net.Conn, dec *gob.Decoder,
-	enc *gob.Encoder) {
+// Server is the HTTP server that act as the remote endpoint for Beehive.
+type server struct {
+	http.Server
 
-	var to BeeId
-	if err := dec.Decode(&to); err != nil {
-		glog.Errorf("Cannot decode the target bee id for data conn: %+v", err)
+	hive   *hive
+	router *mux.Router
+}
+
+// Provides the net/http interface for the server.
+func (s *server) HandleFunc(p string,
+	h func(http.ResponseWriter, *http.Request)) {
+
+	s.router.HandleFunc(p, h)
+}
+
+// NewServer creates a server for the given addr. It installs all required
+// handlers for Beehive.
+func (h *hive) newServer(addr string) *server {
+	r := mux.NewRouter()
+	s := server{
+		Server: http.Server{
+			Addr:    addr,
+			Handler: r,
+		},
+		router: r,
+		hive:   h,
+	}
+
+	handlerV1 := v1Handler{
+		srv: &s,
+	}
+	handlerV1.Install(r)
+
+	return &s
+}
+
+type v1Handler struct {
+	srv *server
+}
+
+func (h *v1Handler) Install(r *mux.Router) {
+	r.HandleFunc("/hive/v1/msg", h.handleMsg)
+	r.HandleFunc("/hive/v1/cmd", h.handleCmd)
+}
+
+func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
+	var msg msg
+	if err := gob.NewDecoder(r.Body).Decode(&msg); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	a, ok := h.app(to.AppName)
+	a, ok := h.srv.hive.app(msg.MsgTo.AppName)
 	if !ok {
-		glog.Errorf("Cannot find app: %s", to.AppName)
+		http.Error(w, fmt.Sprintf("Cannot find app %s", msg.MsgTo.AppName),
+			http.StatusBadRequest)
 		return
 	}
 
-	resCh := make(chan asyncResult)
-	a.qee.ctrlCh <- routineCmd{findBeeCmd, to, resCh}
-	res, err := (<-resCh).get()
-	if err != nil {
-		glog.Error(err)
-		return
-	}
-
-	bee := res.(bee)
-	id := bee.id()
-	enc.Encode(id)
-	glog.V(2).Infof("Encoded bee id: %+v", id)
-
-	for {
-		m := msg{}
-		if err := dec.Decode(&m); err != nil {
-			if err != io.EOF {
-				glog.Errorf("Cannot decode message: %v", err)
-			}
-			return
-		}
-
-		glog.V(3).Infof("Received a message from peer: %+v", m)
-		a.qee.dataCh <- msgAndHandler{&m, a.handlers[m.Type()]}
-	}
+	a.qee.dataCh <- msgAndHandler{&msg, a.handlers[msg.Type()]}
 }
 
-func (h *hive) handleConn(conn net.Conn) {
-	defer conn.Close()
-
-	dec := gob.NewDecoder(conn)
-	enc := gob.NewEncoder(conn)
-
-	var hs hiveHandshake
-	err := dec.Decode(&hs)
-	if err != nil {
-		glog.Errorf("Cannot decode server handshake: %+v", err)
+func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
+	var cmd RemoteCmd
+	if err := gob.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	glog.V(2).Infof("Peer handshaked: %+v", hs)
+	resCh := make(chan CmdResult)
 
-	switch hs.Type {
-	case ctrlHandshake:
-		h.handleCtrlConn(conn, dec, enc)
-	case dataHandshake:
-		h.handleDataConn(conn, dec, enc)
-	}
-}
-
-func (h *hive) listen() {
-	var err error
-	h.listener, err = net.Listen("tcp", h.config.HiveAddr)
-	if err != nil {
-		glog.Fatalf("Cannot start listener: %v", err)
+	a, ok := h.srv.hive.app(cmd.CmdTo.AppName)
+	if !ok {
+		http.Error(w, fmt.Sprintf("Cannot find app %s", cmd.CmdTo.AppName),
+			http.StatusBadRequest)
+		return
 	}
 
-	go func() {
-		defer h.listener.Close()
+	a.qee.ctrlCh <- LocalCmd{
+		CmdType: cmd.CmdType,
+		CmdData: cmd.CmdData,
+		ResCh:   resCh,
+	}
 
-		glog.Infof("Hive listening at: %s", h.config.HiveAddr)
-		for {
-			c, err := h.listener.Accept()
-			if err != nil {
-				glog.V(2).Info("Listener closed.")
-				return
-			}
-			glog.V(2).Infof("Accepting a new connection: %v -> %v", c.RemoteAddr(),
-				c.LocalAddr())
-			go h.handleConn(c)
-		}
-	}()
+	res := <-resCh
+
+	if res.Err != nil {
+		glog.Errorf("Error in running the remote command: %v", res.Err)
+	}
+
+	if err := gob.NewEncoder(w).Encode(res); err != nil {
+		glog.Errorf("Error in encoding the command results: %s", err)
+		return
+	}
 }

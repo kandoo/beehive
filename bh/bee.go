@@ -42,22 +42,23 @@ type bee interface {
 	state() State
 
 	enqueMsg(mh msgAndHandler)
-	enqueCmd(cmd routineCmd)
+	enqueCmd(cmd LocalCmd)
 
 	handleMsg(mh msgAndHandler)
 	// Handles a command and returns false if the bee should stop.
-	handleCmd(cmd routineCmd) bool
+	handleCmd(cmd LocalCmd) bool
 }
 
 type localBee struct {
-	asyncRoutine
-	ctx rcvContext
-	rId BeeId
-	qee *qee
+	dataCh chan msgAndHandler
+	ctrlCh chan LocalCmd
+	ctx    rcvContext
+	bID    BeeId
+	qee    *qee
 }
 
 func (bee *localBee) id() BeeId {
-	return bee.rId
+	return bee.bID
 }
 
 func (bee *localBee) state() State {
@@ -86,7 +87,7 @@ func (bee *localBee) start() {
 
 func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
 	stack bool) {
-	glog.Errorf("Error in %s: %v", bee.rId.AppName, err)
+	glog.Errorf("Error in %s: %v", bee.bID.AppName, err)
 	if stack {
 		glog.Errorf("%s", debug.Stack())
 	}
@@ -110,13 +111,13 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 	}
 	bee.ctx.State().CommitTx()
 
-	bee.ctx.hive.collector.collect(mh.msg.From(), bee.rId, mh.msg)
+	bee.ctx.hive.collector.collect(mh.msg.From(), bee.bID, mh.msg)
 }
 
-func (bee *localBee) handleCmd(cmd routineCmd) bool {
-	switch cmd.cmdType {
+func (bee *localBee) handleCmd(cmd LocalCmd) bool {
+	switch cmd.CmdType {
 	case stopCmd:
-		cmd.resCh <- asyncResult{}
+		cmd.ResCh <- CmdResult{}
 		return false
 	}
 
@@ -127,6 +128,6 @@ func (bee *localBee) enqueMsg(mh msgAndHandler) {
 	bee.dataCh <- mh
 }
 
-func (bee *localBee) enqueCmd(cmd routineCmd) {
+func (bee *localBee) enqueCmd(cmd LocalCmd) {
 	bee.ctrlCh <- cmd
 }

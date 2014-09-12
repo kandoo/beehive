@@ -89,6 +89,12 @@ func (h *hive) init() {
 	gob.Register(StateOp{})
 	gob.Register(StateBatch{})
 	gob.Register(msg{})
+	gob.Register(BeeId{})
+	gob.Register(HiveId(""))
+	gob.Register(CmdResult{})
+	gob.Register(migrateBeeCmdData{})
+	gob.Register(replaceBeeCmdData{})
+	gob.Register(lockMapSetData{})
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -192,7 +198,7 @@ func (h *hive) closeChannels() {
 	h.listener.Close()
 
 	glog.Info("Stopping qees...")
-	stopCh := make(chan asyncResult)
+	stopCh := make(chan CmdResult)
 	qs := make(map[*qee]bool)
 	for _, mhs := range h.qees {
 		for _, mh := range mhs {
@@ -201,7 +207,10 @@ func (h *hive) closeChannels() {
 	}
 
 	for m, _ := range qs {
-		m.ctrlCh <- routineCmd{stopCmd, nil, stopCh}
+		m.ctrlCh <- LocalCmd{
+			CmdType: stopCmd,
+			ResCh:   stopCh,
+		}
 		glog.V(3).Infof("Waiting on a qee: %p", m)
 		select {
 		case res := <-stopCh:

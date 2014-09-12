@@ -170,9 +170,9 @@ func (a *app) handler(t MsgType) Handler {
 }
 
 func (a *app) Detached(h DetachedHandler) {
-	a.qee.ctrlCh <- routineCmd{
-		cmdType: startDetachedCmd,
-		cmdData: h,
+	a.qee.ctrlCh <- LocalCmd{
+		CmdType: startDetachedCmd,
+		CmdData: h,
 	}
 }
 
@@ -203,10 +203,8 @@ func (a *app) SetPersistentState(p bool) {
 func (a *app) initQee() {
 	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
-		asyncRoutine: asyncRoutine{
-			dataCh: make(chan msgAndHandler, a.hive.config.DataChBufSize),
-			ctrlCh: make(chan routineCmd, a.hive.config.CmdChBufSize),
-		},
+		dataCh: make(chan msgAndHandler, a.hive.config.DataChBufSize),
+		ctrlCh: make(chan LocalCmd, a.hive.config.CmdChBufSize),
 		ctx: mapContext{
 			hive: a.hive,
 			app:  a,
