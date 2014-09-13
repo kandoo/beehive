@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-etcd/etcd"
@@ -34,15 +35,16 @@ const (
 
 type registery struct {
 	*etcd.Client
-	hive          *hive
-	prefix        string
-	hiveDir       string
-	hiveTTL       uint64
-	appDir        string
-	appTTL        uint64
-	watchCancelCh chan bool
-	watchJoinCh   chan bool
-	ttlCancelCh   chan chan bool
+	hive        *hive
+	prefix      string
+	hiveDir     string
+	hiveTTL     uint64
+	appDir      string
+	appTTL      uint64
+	ttlCancelCh chan chan bool
+	watchCmdCh  chan LocalCmd
+	watchMutex  sync.Mutex
+	liveHives   map[HiveID]bool
 }
 
 func (h *hive) connectToRegistery() {
@@ -76,8 +78,12 @@ func (g *registery) disconnect() {
 		return
 	}
 
-	g.watchCancelCh <- true
-	<-g.watchJoinCh
+	watchStopCh := make(chan CmdResult)
+	g.watchCmdCh <- LocalCmd{
+		CmdType: stopCmd,
+		ResCh:   watchStopCh,
+	}
+	<-watchStopCh
 
 	cancelRes := make(chan bool)
 	g.ttlCancelCh <- cancelRes
@@ -113,8 +119,8 @@ func (g *registery) startPollers() {
 	g.ttlCancelCh = make(chan chan bool)
 	go g.updateTTL()
 
-	g.watchCancelCh = make(chan bool)
-	g.watchJoinCh = make(chan bool)
+	g.liveHives = make(map[HiveID]bool)
+	g.watchCmdCh = make(chan LocalCmd)
 	go g.watchHives()
 }
 
@@ -151,35 +157,65 @@ func (g *registery) watchHives() {
 
 	resCh := make(chan *etcd.Response)
 	joinCh := make(chan bool)
+	stopCh := make(chan bool)
 	go func() {
-		g.Watch(g.hivePath(), 0, true, resCh, g.watchCancelCh)
+		g.Watch(g.hivePath(), 0, true, resCh, stopCh)
 		joinCh <- true
 	}()
 
 	for {
 		select {
-		case <-joinCh:
-			g.watchJoinCh <- true
-			return
+		case cmd := <-g.watchCmdCh:
+			switch cmd.CmdType {
+			case stopCmd:
+				stopCh <- true
+				<-joinCh
+				return
+			}
 		case res := <-resCh:
 			if res == nil {
 				continue
 			}
 
+			id := g.hiveIDFromPath(res.Node.Key)
 			switch res.Action {
 			case "create":
 				if res.PrevNode == nil {
-					g.hive.Emit(HiveJoined{g.hiveIDFromPath(res.Node.Key)})
+					g.AddHive(id)
+					g.hive.Emit(HiveJoined{id})
 				}
 			case "delete":
 				if res.PrevNode != nil {
-					g.hive.Emit(HiveLeft{g.hiveIDFromPath(res.Node.Key)})
+					g.DelHive(id)
+					g.hive.Emit(HiveLeft{id})
 				}
 			default:
 				glog.V(2).Infof("Received an update from registery: %+v", *res)
 			}
 		}
 	}
+}
+
+func (g *registery) AddHive(id HiveID) {
+	g.watchMutex.Lock()
+	defer g.watchMutex.Unlock()
+	g.liveHives[id] = true
+}
+
+func (g *registery) DelHive(id HiveID) {
+	g.watchMutex.Lock()
+	defer g.watchMutex.Unlock()
+	delete(g.liveHives, id)
+}
+
+func (g *registery) ListHives() []HiveID {
+	g.watchMutex.Lock()
+	defer g.watchMutex.Unlock()
+	hives := make([]HiveID, 0, len(g.liveHives))
+	for h := range g.liveHives {
+		hives = append(hives, h)
+	}
+	return hives
 }
 
 func (g registery) path(elem ...string) string {
