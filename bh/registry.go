@@ -33,7 +33,7 @@ const (
 	lockFileName = "__lock__"
 )
 
-type registery struct {
+type registry struct {
 	*etcd.Client
 	hive        *hive
 	prefix      string
@@ -47,13 +47,13 @@ type registery struct {
 	liveHives   map[HiveID]bool
 }
 
-func (h *hive) connectToRegistery() {
+func (h *hive) connectToRegistry() {
 	if len(h.config.RegAddrs) == 0 {
 		return
 	}
 
-	// TODO(soheil): Add TLS registery.
-	h.registery = registery{
+	// TODO(soheil): Add TLS registry.
+	h.registry = registry{
 		Client:  etcd.NewClient(h.config.RegAddrs),
 		hive:    h,
 		prefix:  regPrefix,
@@ -63,17 +63,17 @@ func (h *hive) connectToRegistery() {
 		appTTL:  regAppTTL,
 	}
 
-	if ok := h.registery.SyncCluster(); !ok {
-		glog.Fatalf("Cannot connect to registery nodes: %s", h.config.RegAddrs)
+	if ok := h.registry.SyncCluster(); !ok {
+		glog.Fatalf("Cannot connect to registry nodes: %s", h.config.RegAddrs)
 	}
 
 	h.RegisterMsg(HiveJoined{})
 	h.RegisterMsg(HiveLeft{})
-	h.registery.registerHive()
-	h.registery.startPollers()
+	h.registry.registerHive()
+	h.registry.startPollers()
 }
 
-func (g *registery) disconnect() {
+func (g *registry) disconnect() {
 	if !g.connected() {
 		return
 	}
@@ -92,30 +92,30 @@ func (g *registery) disconnect() {
 	g.unregisterHive()
 }
 
-func (g registery) connected() bool {
+func (g registry) connected() bool {
 	return g.Client != nil
 }
 
-func (g *registery) hiveRegKeyVal() (string, string) {
+func (g *registry) hiveRegKeyVal() (string, string) {
 	v := string(g.hive.ID())
 	return g.hivePath(v), v
 }
 
-func (g *registery) registerHive() {
+func (g *registry) registerHive() {
 	k, v := g.hiveRegKeyVal()
 	if _, err := g.Create(k, v, g.hiveTTL); err != nil {
 		glog.Fatalf("Error in registering hive entry: %v", err)
 	}
 }
 
-func (g *registery) unregisterHive() {
+func (g *registry) unregisterHive() {
 	k, _ := g.hiveRegKeyVal()
 	if _, err := g.Delete(k, false); err != nil {
 		glog.Fatalf("Error in unregistering hive entry: %v", err)
 	}
 }
 
-func (g *registery) startPollers() {
+func (g *registry) startPollers() {
 	g.ttlCancelCh = make(chan chan bool)
 	go g.updateTTL()
 
@@ -124,7 +124,7 @@ func (g *registery) startPollers() {
 	go g.watchHives()
 }
 
-func (g *registery) updateTTL() {
+func (g *registry) updateTTL() {
 	waitTimeout := g.hiveTTL / 2
 	if waitTimeout == 0 {
 		waitTimeout = 1
@@ -138,14 +138,14 @@ func (g *registery) updateTTL() {
 		case <-time.After(time.Duration(waitTimeout) * time.Second):
 			k, v := g.hiveRegKeyVal()
 			if _, err := g.Update(k, v, g.hiveTTL); err != nil {
-				glog.Fatalf("Error in updating hive entry in the registery: %v", err)
+				glog.Fatalf("Error in updating hive entry in the registry: %v", err)
 			}
-			glog.V(1).Infof("Hive %s's TTL updated in registery", g.hive.ID())
+			glog.V(1).Infof("Hive %s's TTL updated in registry", g.hive.ID())
 		}
 	}
 }
 
-func (g *registery) watchHives() {
+func (g *registry) watchHives() {
 	res, err := g.Get(g.hivePath(), false, true)
 	if err != nil {
 		glog.Fatalf("Cannot find the hive directory: %v", err)
@@ -170,6 +170,7 @@ func (g *registery) watchHives() {
 			case stopCmd:
 				stopCh <- true
 				<-joinCh
+				cmd.ResCh <- CmdResult{}
 				return
 			}
 		case res := <-resCh:
@@ -190,25 +191,25 @@ func (g *registery) watchHives() {
 					g.hive.Emit(HiveLeft{id})
 				}
 			default:
-				glog.V(2).Infof("Received an update from registery: %+v", *res)
+				glog.V(2).Infof("Received an update from registry: %+v", *res)
 			}
 		}
 	}
 }
 
-func (g *registery) AddHive(id HiveID) {
+func (g *registry) AddHive(id HiveID) {
 	g.watchMutex.Lock()
 	defer g.watchMutex.Unlock()
 	g.liveHives[id] = true
 }
 
-func (g *registery) DelHive(id HiveID) {
+func (g *registry) DelHive(id HiveID) {
 	g.watchMutex.Lock()
 	defer g.watchMutex.Unlock()
 	delete(g.liveHives, id)
 }
 
-func (g *registery) ListHives() []HiveID {
+func (g *registry) ListHives() []HiveID {
 	g.watchMutex.Lock()
 	defer g.watchMutex.Unlock()
 	hives := make([]HiveID, 0, len(g.liveHives))
@@ -218,24 +219,24 @@ func (g *registery) ListHives() []HiveID {
 	return hives
 }
 
-func (g registery) path(elem ...string) string {
+func (g registry) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) appPath(elem ...string) string {
+func (g registry) appPath(elem ...string) string {
 	return g.prefix + "/" + g.appDir + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) hivePath(elem ...string) string {
+func (g registry) hivePath(elem ...string) string {
 	return g.prefix + "/" + g.hiveDir + "/" + strings.Join(elem, "/")
 }
 
-func (g registery) hiveIDFromPath(path string) HiveID {
+func (g registry) hiveIDFromPath(path string) HiveID {
 	prefixLen := len(g.hivePath()) + 1
 	return HiveID(path[prefixLen:])
 }
 
-func (g registery) lockApp(id BeeID) error {
+func (g registry) lockApp(id BeeID) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
 	k := g.appPath(string(id.AppName), lockFileName)
@@ -254,7 +255,7 @@ func (g registery) lockApp(id BeeID) error {
 	}
 }
 
-func (g registery) unlockApp(id BeeID) error {
+func (g registry) unlockApp(id BeeID) error {
 	k := g.appPath(string(id.AppName), lockFileName)
 	res, err := g.Get(k, false, false)
 	if err != nil {
@@ -274,7 +275,7 @@ func (g registery) unlockApp(id BeeID) error {
 	return nil
 }
 
-func (g registery) set(c BeeColony, ms MappedCells) BeeID {
+func (g registry) set(c BeeColony, ms MappedCells) BeeID {
 	err := g.lockApp(c.Master)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)
@@ -304,7 +305,7 @@ func (g registery) set(c BeeColony, ms MappedCells) BeeID {
 	return c.Master
 }
 
-func (g registery) storeOrGet(c BeeColony, ms MappedCells) BeeID {
+func (g registry) storeOrGet(c BeeColony, ms MappedCells) BeeID {
 	err := g.lockApp(c.Master)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)

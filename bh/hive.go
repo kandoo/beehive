@@ -52,6 +52,10 @@ type Hive interface {
 	// only on messages that have no active handler. Such messages are almost
 	// always replies to some detached handler.
 	RegisterMsg(msg interface{})
+
+	// ReplicationStrategy returns the registered replication strategy for this
+	// hive.
+	ReplicationStrategy() ReplicationStrategy
 }
 
 // Configuration of a hive.
@@ -104,6 +108,8 @@ func (h *hive) init() {
 
 	startHeartbeatHandler(h)
 	h.stateMan = newPersistentStateManager(h)
+
+	h.replStrategy = newRndRepl(h)
 }
 
 var (
@@ -169,11 +175,13 @@ type hive struct {
 	apps map[AppName]*app
 	qees map[MsgType][]qeeAndHandler
 
-	registery registery
+	registry  registry
 	collector statCollector
 	stateMan  *persistentStateManager
 
 	listener net.Listener
+
+	replStrategy ReplicationStrategy
 }
 
 func (h *hive) ID() HiveID {
@@ -185,7 +193,7 @@ func (h *hive) RegisterMsg(msg interface{}) {
 }
 
 func (h *hive) isolated() bool {
-	return !h.registery.connected()
+	return !h.registry.connected()
 }
 
 func (h *hive) app(name AppName) (*app, bool) {
@@ -239,7 +247,7 @@ func (h *hive) handleCmd(cmd HiveCmd) step {
 	case StopHive:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
 		h.status = HiveStopped
-		h.registery.disconnect()
+		h.registry.disconnect()
 		h.closeChannels()
 		h.stateMan.closeDBs()
 		return stop
@@ -283,7 +291,7 @@ func (h *hive) Start(joinCh chan bool) error {
 	h.status = HiveStarted
 	h.startListener()
 	h.registerSignals()
-	h.connectToRegistery()
+	h.connectToRegistry()
 	h.startQees()
 
 	for {
@@ -381,4 +389,8 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 
 	h.emitMsg(newMsgFromData(replyData, BeeID{}, m.From()))
 	return nil
+}
+
+func (h *hive) ReplicationStrategy() ReplicationStrategy {
+	return h.replStrategy
 }

@@ -73,7 +73,7 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 
 // TODO(soheil): We should batch here.
 func (b *proxyBee) handleMsg(mh msgAndHandler) {
-	mh.msg.MsgTo = b.bID
+	mh.msg.MsgTo = b.id()
 	var data bytes.Buffer
 	if err := gob.NewEncoder(&data).Encode(mh.msg); err != nil {
 		glog.Errorf("Cannot encode message: %v", err)
@@ -86,7 +86,7 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
-	b.proxy = NewProxy(b.bID.HiveID)
+	b.proxy = NewProxy(b.id().HiveID)
 
 	for {
 		select {

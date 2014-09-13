@@ -41,6 +41,12 @@ type App interface {
 	PersistentState() bool
 	// Whether to use persistent state.
 	SetPersistentState(p bool)
+
+	// ReplicationFactor is the number of backup bees for the application. 1 means
+	// no replication.
+	ReplicationFactor() int
+	// SetReplicationFactor sets the number of backup bees for this application.
+	SetReplicationFactor(f int)
 }
 
 // This is the list of dictionary keys returned by the map functions.
@@ -134,6 +140,7 @@ type app struct {
 	handlers   map[MsgType]Handler
 	sticky     bool
 	persistent bool
+	replFactor int
 }
 
 func (a *app) HandleFunc(msgType interface{}, m Map, r Rcv) error {
@@ -212,4 +219,12 @@ func (a *app) initQee() {
 		keyToBees: make(map[CellKey]bee),
 		idToBees:  make(map[BeeID]bee),
 	}
+}
+
+func (a *app) ReplicationFactor() int {
+	return a.replFactor
+}
+
+func (a *app) SetReplicationFactor(f int) {
+	a.replFactor = f
 }

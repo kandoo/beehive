@@ -103,7 +103,7 @@ func (ctx *rcvContext) Lock(ms MappedCells) error {
 		CmdType: lockMappedCellsCmd,
 		CmdData: lockMappedCellsData{
 			MappedCells: ms,
-			BeeID:  ctx.bee.id(),
+			Colony:      ctx.bee.colonyUnsafe(),
 		},
 		ResCh: resCh,
 	}

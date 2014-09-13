@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	handlers int = 10
-	msgs         = 1000000
+	handlers int = 1
+	msgs         = 2
 )
 
 var testHiveCh = make(chan interface{})
@@ -85,6 +85,8 @@ func TestHive(t *testing.T) {
 		<-testHiveCh
 	}
 
-	hive.Stop()
+	if err := hive.Stop(); err != nil {
+		t.Errorf("Cannot stop the hive %v", err)
+	}
 	<-joinCh
 }

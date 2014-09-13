@@ -2,42 +2,42 @@ package bh
 
 import "testing"
 
-func maybeSkipRegisteryTest(h *hive, t *testing.T) {
+func maybeSkipRegistryTest(h *hive, t *testing.T) {
 	if len(h.config.RegAddrs) != 0 {
 		return
 	}
 
-	t.Skip("Registery tests run only when the hive is connected to registery.")
+	t.Skip("Registry tests run only when the hive is connected to registry.")
 }
 
-func hiveWithAddressForRegisteryTests(addr string, t *testing.T) *hive {
+func hiveWithAddressForRegistryTests(addr string, t *testing.T) *hive {
 	cfg := DefaultCfg
 	cfg.HiveAddr = addr
 	return NewHiveWithConfig(cfg).(*hive)
 }
 
-func TestRegisteryUnregisterHive(t *testing.T) {
-	h := hiveWithAddressForRegisteryTests("127.0.0.1:32771", t)
+func TestRegistryUnregisterHive(t *testing.T) {
+	h := hiveWithAddressForRegistryTests("127.0.0.1:32771", t)
 	joinCh := make(chan bool)
-	maybeSkipRegisteryTest(h, t)
+	maybeSkipRegistryTest(h, t)
 
 	go h.Start(joinCh)
 	h.waitUntilStarted()
 	h.Stop()
 	<-joinCh
 
-	k, _ := h.registery.hiveRegKeyVal()
-	_, err := h.registery.Get(k, false, false)
+	k, _ := h.registry.hiveRegKeyVal()
+	_, err := h.registry.Get(k, false, false)
 	if err == nil {
-		t.Errorf("Registery entry is not removed.")
+		t.Errorf("Registry entry is not removed.")
 	}
 }
 
-type testRegisteryWatchHandler struct {
+type testRegistryWatchHandler struct {
 	resCh chan HiveID
 }
 
-func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
+func (h *testRegistryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
 	switch d := msg.Data().(type) {
 	case HiveJoined:
 		h.resCh <- d.HiveID
@@ -47,27 +47,27 @@ func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MappedCells {
+func (h *testRegistryWatchHandler) Map(msg Msg, ctx MapContext) MappedCells {
 	return MappedCells{{"W", Key(ctx.Hive().ID())}}
 }
 
-func TestRegisteryWatchHives(t *testing.T) {
+func TestRegistryWatchHives(t *testing.T) {
 	h1Id := "127.0.0.1:32771"
-	h1 := hiveWithAddressForRegisteryTests(h1Id, t)
-	maybeSkipRegisteryTest(h1, t)
+	h1 := hiveWithAddressForRegistryTests(h1Id, t)
+	maybeSkipRegistryTest(h1, t)
 
 	watchCh := make(chan HiveID, 3)
 
-	app := h1.NewApp("RegisteryWatchHandler")
-	hndlr := &testRegisteryWatchHandler{
+	app := h1.NewApp("RegistryWatchHandler")
+	hndlr := &testRegistryWatchHandler{
 		resCh: watchCh,
 	}
 	app.Handle(HiveJoined{}, hndlr)
 	app.Handle(HiveLeft{}, hndlr)
 
 	h2Id := "127.0.0.1:32772"
-	h2 := hiveWithAddressForRegisteryTests(h2Id, t)
-	maybeSkipRegisteryTest(h2, t)
+	h2 := hiveWithAddressForRegistryTests(h2Id, t)
+	maybeSkipRegistryTest(h2, t)
 
 	joinCh1 := make(chan bool)
 	go h1.Start(joinCh1)

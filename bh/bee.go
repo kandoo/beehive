@@ -2,6 +2,7 @@ package bh
 
 import (
 	"encoding/json"
+	"fmt"
 	"runtime/debug"
 
 	"github.com/golang/glog"
@@ -20,6 +21,10 @@ func (b *BeeID) IsNil() bool {
 
 func (b *BeeID) Key() Key {
 	return Key(b.Bytes())
+}
+
+func (b *BeeID) String() string {
+	return string(b.Bytes())
 }
 
 func (b *BeeID) Bytes() []byte {
@@ -46,6 +51,27 @@ func BeeIDFromKey(k Key) BeeID {
 type BeeColony struct {
 	Master BeeID   `json:"master"`
 	Slaves []BeeID `json:"slaves"`
+}
+
+func (c *BeeColony) AddSlave(id BeeID) bool {
+	for _, s := range c.Slaves {
+		if s == id {
+			return false
+		}
+	}
+	c.Slaves = append(c.Slaves, id)
+	return true
+}
+
+func (c *BeeColony) DelSlave(id BeeID) bool {
+	for i, s := range c.Slaves {
+		if s == id {
+			c.Slaves = append(c.Slaves[:i], c.Slaves[i+1:]...)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c BeeColony) Eq(thatC BeeColony) bool {
@@ -91,9 +117,13 @@ func BeeColonyFromBytes(b []byte) (BeeColony, error) {
 
 type bee interface {
 	id() BeeID
+	slaves() []BeeID
+	colonyUnsafe() BeeColony
+
 	start()
 
 	state() State
+	setState(s State)
 
 	enqueMsg(mh msgAndHandler)
 	enqueCmd(cmd LocalCmd)
@@ -104,19 +134,42 @@ type bee interface {
 }
 
 type localBee struct {
-	dataCh chan msgAndHandler
-	ctrlCh chan LocalCmd
-	ctx    rcvContext
-	bID    BeeID
-	qee    *qee
+	dataCh    chan msgAndHandler
+	ctrlCh    chan LocalCmd
+	ctx       rcvContext
+	beeColony BeeColony
+	qee       *qee
 }
 
 func (bee *localBee) id() BeeID {
-	return bee.bID
+	return bee.beeColony.Master
+}
+
+func (bee *localBee) colonyUnsafe() BeeColony {
+	return bee.beeColony
+}
+
+func (bee *localBee) slaves() []BeeID {
+	resCh := make(chan CmdResult)
+	bee.enqueCmd(LocalCmd{
+		CmdType: listSlavesCmd,
+		ResCh:   resCh,
+	})
+	d, err := (<-resCh).get()
+	if err != nil {
+		glog.Errorf("Error in list slaves: %v", err)
+		return nil
+	}
+
+	return d.([]BeeID)
 }
 
 func (bee *localBee) state() State {
 	return bee.ctx.State()
+}
+
+func (bee *localBee) setState(s State) {
+	bee.ctx.state = s
 }
 
 func (bee *localBee) start() {
@@ -141,7 +194,7 @@ func (bee *localBee) start() {
 
 func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
 	stack bool) {
-	glog.Errorf("Error in %s: %v", bee.bID.AppName, err)
+	glog.Errorf("Error in %s: %v", bee.id().AppName, err)
 	if stack {
 		glog.Errorf("%s", debug.Stack())
 	}
@@ -165,7 +218,7 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 	}
 	bee.ctx.State().CommitTx()
 
-	bee.ctx.hive.collector.collect(mh.msg.From(), bee.bID, mh.msg)
+	bee.ctx.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
 }
 
 func (bee *localBee) handleCmd(cmd LocalCmd) bool {
@@ -173,15 +226,41 @@ func (bee *localBee) handleCmd(cmd LocalCmd) bool {
 	case stopCmd:
 		cmd.ResCh <- CmdResult{}
 		return false
-	}
 
+	case listSlavesCmd:
+		cmd.ResCh <- CmdResult{Data: bee.beeColony.Slaves}
+
+	case addSlaveCmd:
+		var err error
+		if ok := bee.beeColony.AddSlave(cmd.CmdData.(BeeID)); !ok {
+			err = fmt.Errorf("Slave %s already exists", cmd.CmdData.(BeeID))
+		}
+		cmd.ResCh <- CmdResult{Err: err}
+
+	case delSlaveCmd:
+		var err error
+		if ok := bee.beeColony.DelSlave(cmd.CmdData.(BeeID)); !ok {
+			err = fmt.Errorf("Slave %s already exists", cmd.CmdData.(BeeID))
+		}
+		cmd.ResCh <- CmdResult{Err: err}
+
+	default:
+		if cmd.ResCh != nil {
+			glog.Errorf("Unknown bee command %v", cmd)
+			cmd.ResCh <- CmdResult{
+				Err: fmt.Errorf("Unknown bee command %v", cmd),
+			}
+		}
+	}
 	return true
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
+	glog.V(2).Infof("Enqueue message %+v in bee %+v", mh.msg, bee)
 	bee.dataCh <- mh
 }
 
 func (bee *localBee) enqueCmd(cmd LocalCmd) {
+	glog.V(2).Infof("Enqueue a command %+v in bee %+v", cmd, bee)
 	bee.ctrlCh <- cmd
 }

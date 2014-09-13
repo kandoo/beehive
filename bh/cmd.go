@@ -24,14 +24,17 @@ func (r CmdResult) get() (interface{}, error) {
 type CmdType int
 
 const (
-	stopCmd          CmdType = iota
-	startCmd                 = iota
-	findBeeCmd               = iota
-	createBeeCmd             = iota
-	migrateBeeCmd            = iota
-	replaceBeeCmd            = iota
-	lockMappedCellsCmd            = iota
-	startDetachedCmd         = iota
+	stopCmd            CmdType = iota
+	startCmd                   = iota
+	findBeeCmd                 = iota
+	createBeeCmd               = iota
+	migrateBeeCmd              = iota
+	replaceBeeCmd              = iota
+	lockMappedCellsCmd         = iota
+	startDetachedCmd           = iota
+	addSlaveCmd                = iota
+	delSlaveCmd                = iota
+	listSlavesCmd              = iota
 )
 
 type migrateBeeCmdData struct {
@@ -40,13 +43,21 @@ type migrateBeeCmdData struct {
 }
 
 type replaceBeeCmdData struct {
-	OldBee BeeID
-	NewBee BeeID
-	State  *inMemoryState
+	OldBees     BeeColony
+	NewBees     BeeColony
+	State       *inMemoryState
 	MappedCells MappedCells
 }
 
 type lockMappedCellsData struct {
-	BeeID  BeeID
+	Colony      BeeColony
 	MappedCells MappedCells
+}
+
+type addSlaveCmdData struct {
+	BeeID
+}
+
+type delSlaveCmdData struct {
+	BeeID
 }
