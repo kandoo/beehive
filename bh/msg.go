@@ -64,3 +64,8 @@ func newMsgFromData(data interface{}, from BeeID, to BeeID) *msg {
 		MsgTo:   to,
 	}
 }
+
+type msgAndHandler struct {
+	msg     *msg
+	handler Handler
+}
