@@ -5,7 +5,7 @@ import "errors"
 // A simple dictionary that uses in memory maps.
 type inMemoryState struct {
 	Name  string
-	Dicts map[DictionaryName]*inMemDict
+	Dicts map[DictName]*inMemDict
 	tx    *inMemoryTx
 }
 
@@ -21,7 +21,7 @@ func (s *inMemoryState) BeginTx() error {
 func (s *inMemoryState) newTransaction() *inMemoryTx {
 	return &inMemoryTx{
 		state: s,
-		stage: make(map[DictionaryName]*inMemStagedDict),
+		stage: make(map[DictName]*inMemStagedDict),
 	}
 }
 
@@ -43,7 +43,7 @@ func (s *inMemoryState) AbortTx() error {
 	return nil
 }
 
-func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
+func (s *inMemoryState) Dict(name DictName) Dict {
 	if s.tx != nil {
 		return s.tx.Dict(name)
 	}
@@ -51,7 +51,7 @@ func (s *inMemoryState) Dict(name DictionaryName) Dictionary {
 	return s.inMemDict(name)
 }
 
-func (s *inMemoryState) inMemDict(name DictionaryName) *inMemDict {
+func (s *inMemoryState) inMemDict(name DictName) *inMemDict {
 	d, ok := s.Dicts[name]
 	if !ok {
 		d = &inMemDict{name, make(map[Key]Value)}
@@ -61,11 +61,11 @@ func (s *inMemoryState) inMemDict(name DictionaryName) *inMemDict {
 }
 
 type inMemDict struct {
-	DictName DictionaryName
+	DictName DictName
 	Dict     map[Key]Value
 }
 
-func (d inMemDict) Name() DictionaryName {
+func (d inMemDict) Name() DictName {
 	return d.DictName
 }
 
@@ -95,7 +95,7 @@ func (d *inMemDict) ForEach(f IterFn) {
 
 type inMemoryTx struct {
 	state *inMemoryState
-	stage map[DictionaryName]*inMemStagedDict
+	stage map[DictName]*inMemStagedDict
 }
 
 type inMemStagedDict struct {
@@ -103,7 +103,7 @@ type inMemStagedDict struct {
 	ops  map[Key]StateOp
 }
 
-func (t *inMemoryTx) Dict(n DictionaryName) Dictionary {
+func (t *inMemoryTx) Dict(n DictName) Dict {
 	d := &inMemStagedDict{
 		dict: t.state.inMemDict(n),
 		ops:  make(map[Key]StateOp),
@@ -130,7 +130,7 @@ func (t *inMemoryTx) Abort() {
 	return
 }
 
-func (d *inMemStagedDict) Name() DictionaryName {
+func (d *inMemStagedDict) Name() DictName {
 	return d.dict.Name()
 }
 

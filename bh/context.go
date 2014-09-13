@@ -9,7 +9,7 @@ import (
 type MapContext interface {
 	Hive() Hive
 	State() State
-	Dict(n DictionaryName) Dictionary
+	Dict(n DictName) Dict
 }
 
 type RcvContext interface {
@@ -18,14 +18,14 @@ type RcvContext interface {
 	BeeID() BeeID
 
 	Emit(msgData interface{})
-	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
+	SendToCellKey(msgData interface{}, to AppName, dk CellKey)
 	SendToBee(msgData interface{}, to BeeID)
 	ReplyTo(msg Msg, replyData interface{}) error
 
 	StartDetached(h DetachedHandler) BeeID
 	StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID
 
-	Lock(ms MapSet) error
+	Lock(ms MappedCells) error
 
 	BeeLocal() interface{}
 	SetBeeLocal(d interface{})
@@ -59,7 +59,7 @@ func (ctx *mapContext) State() State {
 	return ctx.state
 }
 
-func (ctx *mapContext) Dict(n DictionaryName) Dictionary {
+func (ctx *mapContext) Dict(n DictName) Dict {
 	return ctx.State().Dict(n)
 }
 
@@ -72,8 +72,8 @@ func (ctx *rcvContext) Emit(msgData interface{}) {
 	ctx.hive.emitMsg(newMsgFromData(msgData, ctx.bee.id(), BeeID{}))
 }
 
-func (ctx *rcvContext) SendToDictKey(msgData interface{}, to AppName,
-	dk DictionaryKey) {
+func (ctx *rcvContext) SendToCellKey(msgData interface{}, to AppName,
+	dk CellKey) {
 
 	// TODO(soheil): Implement send to.
 	msg := newMsgFromData(msgData, ctx.bee.id(), BeeID{})
@@ -97,12 +97,12 @@ func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	return nil
 }
 
-func (ctx *rcvContext) Lock(ms MapSet) error {
+func (ctx *rcvContext) Lock(ms MappedCells) error {
 	resCh := make(chan CmdResult)
 	ctx.app.qee.ctrlCh <- LocalCmd{
-		CmdType: lockMapSetCmd,
-		CmdData: lockMapSetData{
-			MapSet: ms,
+		CmdType: lockMappedCellsCmd,
+		CmdData: lockMappedCellsData{
+			MappedCells: ms,
 			BeeID:  ctx.bee.id(),
 		},
 		ResCh: resCh,

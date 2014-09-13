@@ -20,7 +20,7 @@ type qee struct {
 	ctx       mapContext
 	lastBeeID uint64
 	idToBees  map[BeeID]bee
-	keyToBees map[DictionaryKey]bee
+	keyToBees map[CellKey]bee
 }
 
 func (q *qee) state() State {
@@ -119,15 +119,15 @@ func (q *qee) handleCmd(cmd LocalCmd) {
 		d := cmd.CmdData.(replaceBeeCmdData)
 		q.replaceBee(d, cmd.ResCh)
 
-	case lockMapSetCmd:
-		d := cmd.CmdData.(lockMapSetData)
-		id := q.lock(d.MapSet, d.BeeID, true)
+	case lockMappedCellsCmd:
+		d := cmd.CmdData.(lockMappedCellsData)
+		id := q.lock(d.MappedCells, d.BeeID, true)
 		if id != d.BeeID {
 			cmd.ResCh <- CmdResult{nil, errors.New("Cannot lock mapset")}
 			return
 		}
 
-		q.lockLocally(q.findOrCreateBee(id), d.MapSet...)
+		q.lockLocally(q.findOrCreateBee(id), d.MappedCells...)
 		cmd.ResCh <- CmdResult{id, nil}
 
 	case startDetachedCmd:
@@ -142,7 +142,7 @@ func (q *qee) handleCmd(cmd LocalCmd) {
 	}
 }
 
-func (q *qee) beeByKey(dk DictionaryKey) (bee, bool) {
+func (q *qee) beeByKey(dk CellKey) (bee, bool) {
 	r, ok := q.keyToBees[dk]
 	return r, ok
 }
@@ -152,13 +152,13 @@ func (q *qee) beeByID(id BeeID) (bee, bool) {
 	return r, ok
 }
 
-func (q *qee) lockLocally(bee bee, dks ...DictionaryKey) {
+func (q *qee) lockLocally(bee bee, dks ...CellKey) {
 	for _, dk := range dks {
 		q.keyToBees[dk] = bee
 	}
 }
 
-func (q *qee) syncBees(ms MapSet, bee bee) {
+func (q *qee) syncBees(ms MappedCells, bee bee) {
 	for _, dictKey := range ms {
 		dkRcvr, ok := q.beeByKey(dictKey)
 		if !ok {
@@ -170,12 +170,12 @@ func (q *qee) syncBees(ms MapSet, bee bee) {
 			continue
 		}
 
-		glog.Fatalf("Incosistent shards for keys %v in MapSet %v", dictKey,
+		glog.Fatalf("Incosistent shards for keys %v in MappedCells %v", dictKey,
 			ms)
 	}
 }
 
-func (q *qee) anyBee(ms MapSet) bee {
+func (q *qee) anyBee(ms MappedCells) bee {
 	for _, dictKey := range ms {
 		bee, ok := q.beeByKey(dictKey)
 		if ok {
@@ -186,7 +186,7 @@ func (q *qee) anyBee(ms MapSet) bee {
 	return nil
 }
 
-func (q *qee) callMap(mh msgAndHandler) (ms MapSet) {
+func (q *qee) callMap(mh msgAndHandler) (ms MappedCells) {
 	defer func() {
 		if r := recover(); r != nil {
 			glog.Errorf("Error in map of %s: %v", q.ctx.app.Name(), r)
@@ -235,7 +235,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	bee := q.anyBee(mapSet)
 	if bee == nil {
-		bee = q.newBeeForMapSet(mapSet)
+		bee = q.newBeeForMappedCells(mapSet)
 	} else {
 		q.syncBees(mapSet, bee)
 	}
@@ -257,7 +257,7 @@ func (q *qee) nextBeeID(detached bool) BeeID {
 // lock locks the map set for the given bee. If the mapset is already locked,
 // it will return the ID of the owner. If force forced it will force the local
 // bee to lock the map set.
-func (q *qee) lock(mapSet MapSet, bee BeeID, force bool) BeeID {
+func (q *qee) lock(mapSet MappedCells, bee BeeID, force bool) BeeID {
 	if q.ctx.hive.isolated() {
 		return bee
 	}
@@ -279,13 +279,13 @@ func (q *qee) lock(mapSet MapSet, bee BeeID, force bool) BeeID {
 	return bee
 }
 
-func (q *qee) lockKey(dk DictionaryKey, bee bee) bool {
+func (q *qee) lockKey(dk CellKey, bee bee) bool {
 	q.lockLocally(bee, dk)
 	if q.ctx.hive.isolated() {
 		return true
 	}
 
-	q.ctx.hive.registery.storeOrGet(bee.id(), []DictionaryKey{dk})
+	q.ctx.hive.registery.storeOrGet(bee.id(), []CellKey{dk})
 
 	return true
 }
@@ -386,7 +386,7 @@ func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
 	return d
 }
 
-func (q *qee) newBeeForMapSet(mapSet MapSet) bee {
+func (q *qee) newBeeForMappedCells(mapSet MappedCells) bee {
 	newBeeID := q.nextBeeID(false)
 	beeID := q.lock(mapSet, newBeeID, false)
 	if newBeeID != beeID {
@@ -398,8 +398,8 @@ func (q *qee) newBeeForMapSet(mapSet MapSet) bee {
 	return bee
 }
 
-func (q *qee) mapSetOfBee(id BeeID) MapSet {
-	ms := MapSet{}
+func (q *qee) mapSetOfBee(id BeeID) MappedCells {
+	ms := MappedCells{}
 	for k, r := range q.keyToBees {
 		if r.id() == id {
 			ms = append(ms, k)
@@ -474,7 +474,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 			OldBee: oldBee.id(),
 			NewBee: newBee.id(),
 			State:  oldBee.state().(*inMemoryState),
-			MapSet: mapSet,
+			MappedCells: mapSet,
 		},
 	}
 
@@ -506,17 +506,17 @@ func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan CmdResult) {
 
 	newState := b.state()
 	for name, oldDict := range d.State.Dicts {
-		newDict := newState.Dict(DictionaryName(name))
+		newDict := newState.Dict(DictName(name))
 		oldDict.ForEach(func(k Key, v Value) {
 			newDict.Put(k, v)
 		})
 	}
 	glog.V(2).Infof("Replicated the state of %+v on %+v", d.OldBee, d.NewBee)
 
-	q.ctx.hive.registery.set(d.NewBee, d.MapSet)
-	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MapSet, d.NewBee)
+	q.ctx.hive.registery.set(d.NewBee, d.MappedCells)
+	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MappedCells, d.NewBee)
 
-	q.lockLocally(b, d.MapSet...)
+	q.lockLocally(b, d.MappedCells...)
 
 	resCh <- CmdResult{b.id(), nil}
 }

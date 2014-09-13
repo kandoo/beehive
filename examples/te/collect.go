@@ -89,7 +89,7 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	glog.V(2).Infof("Previous stats: %+v, Now: %+v", stat, res.Bytes)
 	if !ok || res.Bytes-stat > c.delta {
 		glog.Infof("Found an elephent flow: %+v, %+v, %+v", res, stat,
-			ctx.Hive().Id())
+			ctx.Hive().ID())
 		ctx.Emit(MatrixUpdate(res))
 	}
 
@@ -97,8 +97,8 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
-	return bh.MapSet{{matrixDict, m.Data().(StatResult).Switch.Key()}}
+func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
+	return bh.MappedCells{{matrixDict, m.Data().(StatResult).Switch.Key()}}
 }
 
 type Poller struct {
@@ -179,7 +179,7 @@ func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 }
 
 func (s *SwitchJoinHandler) Map(m bh.Msg,
-	ctx bh.MapContext) bh.MapSet {
+	ctx bh.MapContext) bh.MappedCells {
 
-	return bh.MapSet{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
+	return bh.MappedCells{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
 }

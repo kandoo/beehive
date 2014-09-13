@@ -153,7 +153,7 @@ func (h *heartbeatReqHandler) Rcv(msg Msg, ctx RcvContext) error {
 	return fmt.Errorf("An invalid message received: %+v", msg)
 }
 
-func (h *heartbeatReqHandler) Map(msg Msg, ctx MapContext) MapSet {
+func (h *heartbeatReqHandler) Map(msg Msg, ctx MapContext) MappedCells {
 	glog.Fatal("Heartbeat requests should always be unicast.")
 	return nil
 }

@@ -30,7 +30,7 @@ const (
 	createBeeCmd             = iota
 	migrateBeeCmd            = iota
 	replaceBeeCmd            = iota
-	lockMapSetCmd            = iota
+	lockMappedCellsCmd            = iota
 	startDetachedCmd         = iota
 )
 
@@ -43,10 +43,10 @@ type replaceBeeCmdData struct {
 	OldBee BeeID
 	NewBee BeeID
 	State  *inMemoryState
-	MapSet MapSet
+	MappedCells MappedCells
 }
 
-type lockMapSetData struct {
+type lockMappedCellsData struct {
 	BeeID  BeeID
-	MapSet MapSet
+	MappedCells MappedCells
 }

@@ -36,9 +36,9 @@ type Calculator struct{}
 
 // Operations are mapped based on their type. With this mapping, additions are
 // all handled on the same stage, and so are subtractions.
-func (c *Calculator) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
+func (c *Calculator) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	op := msg.Data().(Op)
-	return bh.MapSet{
+	return bh.MappedCells{
 		{"Op", bh.Key(strconv.Itoa(int(op.OpT)))},
 	}
 }

@@ -21,7 +21,7 @@ func testLockFromValue(v Value) testLockMsg {
 type testLockHandler struct {
 }
 
-const testLockDict = DictionaryName("S")
+const testLockDict = DictName("S")
 
 var testLockCh = make(chan error)
 
@@ -51,7 +51,7 @@ func (l *testLockHandler) Rcv(msg Msg, ctx RcvContext) error {
 	switch data {
 	case 1:
 		data++
-		ctx.Lock(MapSet{{testLockDict, Key(data.String())}})
+		ctx.Lock(MappedCells{{testLockDict, Key(data.String())}})
 		testLockCh <- nil
 	case 2:
 		testLockCh <- nil
@@ -61,9 +61,9 @@ func (l *testLockHandler) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-func (l *testLockHandler) Map(msg Msg, ctx MapContext) MapSet {
+func (l *testLockHandler) Map(msg Msg, ctx MapContext) MappedCells {
 	d := msg.Data().(testLockMsg)
-	return MapSet{{testLockDict, Key(d.String())}}
+	return MappedCells{{testLockDict, Key(d.String())}}
 }
 
 func TestLock(t *testing.T) {

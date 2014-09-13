@@ -126,9 +126,9 @@ func (u *localStatUpdate) selfCommunication() bool {
 	return u.From == u.To
 }
 
-func (c *localStatCollector) Map(msg Msg, ctx MapContext) MapSet {
+func (c *localStatCollector) Map(msg Msg, ctx MapContext) MappedCells {
 	u := msg.Data().(localStatUpdate)
-	return MapSet{{localStatDict, u.Key()}}
+	return MappedCells{{localStatDict, u.Key()}}
 }
 
 func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
@@ -205,7 +205,7 @@ func (s *aggrStat) Bytes() []byte {
 
 type optimizer struct{}
 
-func (o *optimizer) stat(id BeeID, dict Dictionary) aggrStat {
+func (o *optimizer) stat(id BeeID, dict Dict) aggrStat {
 	v, err := dict.Get(id.Key())
 	if err != nil {
 		return aggrStat{
@@ -274,6 +274,6 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-func (o *optimizer) Map(msg Msg, ctx MapContext) MapSet {
-	return MapSet{{aggrStatDict, "Centeralized"}}
+func (o *optimizer) Map(msg Msg, ctx MapContext) MappedCells {
+	return MappedCells{{aggrStatDict, "Centeralized"}}
 }

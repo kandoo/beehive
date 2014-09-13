@@ -22,8 +22,8 @@ func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
-	return bh.MapSet{
+func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
+	return bh.MappedCells{
 		{matrixDict, bh.Key("0")},
 		{topologyDict, bh.Key("0")},
 	}
@@ -35,6 +35,6 @@ func (t *TopologyHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (t *TopologyHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
-	return bh.MapSet{{topologyDict, bh.Key("0")}}
+func (t *TopologyHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
+	return bh.MappedCells{{topologyDict, bh.Key("0")}}
 }

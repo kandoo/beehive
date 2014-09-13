@@ -7,7 +7,7 @@ import (
 
 func testInMemTx(t *testing.T, abort bool) {
 	state := inMemoryState{
-		Dicts: make(map[DictionaryName]*inMemDict),
+		Dicts: make(map[DictName]*inMemDict),
 	}
 
 	err := state.BeginTx()
@@ -15,7 +15,7 @@ func testInMemTx(t *testing.T, abort bool) {
 		t.Errorf("Error in tx begin: %v", err)
 	}
 
-	n1 := DictionaryName("TestDict1")
+	n1 := DictName("TestDict1")
 	d1 := state.Dict(n1)
 
 	keys := []Key{Key("k1"), Key("k2")}

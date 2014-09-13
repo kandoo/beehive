@@ -42,7 +42,7 @@ type Hive interface {
 	// Emits a message containing msgData from this hive.
 	Emit(msgData interface{})
 	// Sends a message to a specific bee that owns a specific dictionary key.
-	SendToDictKey(msgData interface{}, to AppName, dk DictionaryKey)
+	SendToCellKey(msgData interface{}, to AppName, dk CellKey)
 	// Sends a message to a sepcific bee.
 	SendToBee(msgData interface{}, to BeeID)
 	// Replies to a message.
@@ -94,7 +94,7 @@ func (h *hive) init() {
 	gob.Register(CmdResult{})
 	gob.Register(migrateBeeCmdData{})
 	gob.Register(replaceBeeCmdData{})
-	gob.Register(lockMapSetData{})
+	gob.Register(lockMappedCellsData{})
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -362,8 +362,8 @@ func (h *hive) emitMsg(msg *msg) {
 	}
 }
 
-func (h *hive) SendToDictKey(msgData interface{}, to AppName,
-	dk DictionaryKey) {
+func (h *hive) SendToCellKey(msgData interface{}, to AppName,
+	dk CellKey) {
 	// TODO(soheil): Implement this hive.SendTo.
 	glog.Fatalf("Not implemented yet.")
 }

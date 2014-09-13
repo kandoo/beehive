@@ -10,7 +10,7 @@ const (
 	mapFunc  = "Map"
 
 	msgType    = "bh.Msg"
-	mapSetType = "bh.MapSet"
+	mapSetType = "bh.MappedCells"
 
 	rcvCtxType = "bh.RcvContext"
 	mapCtxType = "bh.MapContext"
@@ -77,7 +77,7 @@ type dictKey struct {
 	k string
 }
 
-// Keeps the statements that are need to calculate MapSet.
+// Keeps the statements that are need to calculate MappedCells.
 func filterBlock(blk *ast.BlockStmt, filterIDs map[string]bool) (*ast.BlockStmt,
 	[]dictKey) {
 
@@ -94,7 +94,7 @@ func filterBlock(blk *ast.BlockStmt, filterIDs map[string]bool) (*ast.BlockStmt,
 		default:
 			// TODO(soheil): It's actually more complicated that. What about
 			// functional calls, what about multiple return values, ...?
-			dks, yes := accessesDictionary(s, dicts)
+			dks, yes := accessesDict(s, dicts)
 			if yes {
 				for _, dk := range dks {
 					filterIDs[dk.k] = true
@@ -159,7 +159,7 @@ func (v *dictVisitor) Visit(n ast.Node) (w ast.Visitor) {
 			dict, isDict = v.dicts[s]
 		} else {
 			c, ok := expr.X.(*ast.CallExpr)
-			isDict = ok && isDictionary(c)
+			isDict = ok && isDict(c)
 
 			dict, err = str(c.Args[0])
 			if err != nil {
@@ -180,7 +180,7 @@ func (v *dictVisitor) Visit(n ast.Node) (w ast.Visitor) {
 	return
 }
 
-func accessesDictionary(s ast.Stmt, dicts map[string]string) ([]dictKey, bool) {
+func accessesDict(s ast.Stmt, dicts map[string]string) ([]dictKey, bool) {
 	v := dictVisitor{
 		dicts: dicts,
 	}
@@ -204,7 +204,7 @@ func dictionaries(block *ast.BlockStmt) map[string]string {
 					continue
 				}
 
-				if !isDictionary(c) {
+				if !isDict(c) {
 					continue
 				}
 
@@ -225,7 +225,7 @@ func dictionaries(block *ast.BlockStmt) map[string]string {
 }
 
 // Whether the function call returns a dictionary.
-func isDictionary(call *ast.CallExpr) bool {
+func isDict(call *ast.CallExpr) bool {
 	if call == nil {
 		return false
 	}

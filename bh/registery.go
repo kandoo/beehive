@@ -285,7 +285,7 @@ func (g registery) unlockApp(id BeeID) error {
 	return nil
 }
 
-func (g registery) set(id BeeID, ms MapSet) beeRegVal {
+func (g registery) set(id BeeID, ms MappedCells) beeRegVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -315,7 +315,7 @@ func (g registery) set(id BeeID, ms MapSet) beeRegVal {
 	return v
 }
 
-func (g registery) storeOrGet(id BeeID, ms MapSet) beeRegVal {
+func (g registery) storeOrGet(id BeeID, ms MappedCells) beeRegVal {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)

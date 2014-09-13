@@ -19,9 +19,9 @@ type MyMsg int
 
 type MyHandler struct{}
 
-func (h *MyHandler) Map(m Msg, c MapContext) MapSet {
+func (h *MyHandler) Map(m Msg, c MapContext) MappedCells {
 	v := int(m.Data().(MyMsg))
-	return MapSet{{"D", Key(strconv.Itoa(v % handlers))}}
+	return MappedCells{{"D", Key(strconv.Itoa(v % handlers))}}
 }
 
 func intToBytes(i int) []byte {

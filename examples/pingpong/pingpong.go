@@ -13,7 +13,7 @@ const (
 	PingPongDict = "PingPong"
 )
 
-var centralizedMapSet = bh.MapSet{{PingPongDict, "0"}}
+var centralizedMappedCells = bh.MappedCells{{PingPongDict, "0"}}
 
 type Pxng struct {
 	Seq int
@@ -47,8 +47,8 @@ func (p pong) ping() ping {
 
 type pinger struct{}
 
-func (p *pinger) Map(msg bh.Msg, ctx bh.MapContext) bh.MapSet {
-	return centralizedMapSet
+func (p *pinger) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
+	return centralizedMappedCells
 }
 
 func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {

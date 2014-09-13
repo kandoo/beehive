@@ -47,8 +47,8 @@ func (h *testRegisteryWatchHandler) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MapSet {
-	return MapSet{{"W", Key(ctx.Hive().ID())}}
+func (h *testRegisteryWatchHandler) Map(msg Msg, ctx MapContext) MappedCells {
+	return MappedCells{{"W", Key(ctx.Hive().ID())}}
 }
 
 func TestRegisteryWatchHives(t *testing.T) {

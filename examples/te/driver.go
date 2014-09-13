@@ -77,7 +77,7 @@ func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
+func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	var k bh.Key
 	switch d := m.Data().(type) {
 	case StatQuery:
@@ -85,5 +85,5 @@ func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MapSet {
 	case FlowMod:
 		k = d.Switch.Key()
 	}
-	return bh.MapSet{{switchStateDict, k}}
+	return bh.MappedCells{{switchStateDict, k}}
 }

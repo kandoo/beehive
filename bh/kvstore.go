@@ -70,7 +70,7 @@ type boltCmd struct {
 
 type boltGet struct {
 	boltCmd
-	dict DictionaryName
+	dict DictName
 	key  Key
 }
 
@@ -81,20 +81,20 @@ type boltGetResult struct {
 
 type boltPut struct {
 	boltCmd
-	dict DictionaryName
+	dict DictName
 	key  Key
 	val  Value
 }
 
 type boltDel struct {
 	boltCmd
-	dict DictionaryName
+	dict DictName
 	key  Key
 }
 
 type boltIterate struct {
 	boltCmd
-	dict DictionaryName
+	dict DictName
 	fn   IterFn
 }
 
@@ -202,7 +202,7 @@ func (s *persistentState) AbortTx() error {
 	return nil
 }
 
-func (s *persistentState) get(d DictionaryName, k Key) (Value, error) {
+func (s *persistentState) get(d DictName, k Key) (Value, error) {
 	if s.maybeBeginTx(false) {
 		defer s.CommitTx()
 	}
@@ -232,7 +232,7 @@ func (s *persistentState) get(d DictionaryName, k Key) (Value, error) {
 	panic("Invalid result received from the channel.")
 }
 
-func (s *persistentState) put(d DictionaryName, k Key, v Value) error {
+func (s *persistentState) put(d DictName, k Key, v Value) error {
 	newTx := s.maybeBeginTx(false)
 
 	rCh := make(chan interface{})
@@ -259,7 +259,7 @@ func (s *persistentState) put(d DictionaryName, k Key, v Value) error {
 	return nil
 }
 
-func (s *persistentState) del(d DictionaryName, k Key) error {
+func (s *persistentState) del(d DictName, k Key) error {
 	newTx := s.maybeBeginTx(false)
 
 	rCh := make(chan interface{})
@@ -280,7 +280,7 @@ func (s *persistentState) del(d DictionaryName, k Key) error {
 	return err
 }
 
-func (s *persistentState) forEach(d DictionaryName, f IterFn) {
+func (s *persistentState) forEach(d DictName, f IterFn) {
 	if s.maybeBeginTx(false) {
 		defer s.CommitTx()
 	}
@@ -295,7 +295,7 @@ func (s *persistentState) forEach(d DictionaryName, f IterFn) {
 	<-rCh
 }
 
-func (s *persistentState) Dict(n DictionaryName) Dictionary {
+func (s *persistentState) Dict(n DictName) Dict {
 	return &persistentDict{
 		state: s,
 		name:  n,
@@ -304,10 +304,10 @@ func (s *persistentState) Dict(n DictionaryName) Dictionary {
 
 type persistentDict struct {
 	state *persistentState
-	name  DictionaryName
+	name  DictName
 }
 
-func (d persistentDict) Name() DictionaryName {
+func (d persistentDict) Name() DictName {
 	return d.name
 }
 

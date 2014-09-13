@@ -44,17 +44,17 @@ type App interface {
 }
 
 // This is the list of dictionary keys returned by the map functions.
-type MapSet []DictionaryKey
+type MappedCells []CellKey
 
-func (ms MapSet) Len() int      { return len(ms) }
-func (ms MapSet) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
-func (ms MapSet) Less(i, j int) bool {
+func (ms MappedCells) Len() int      { return len(ms) }
+func (ms MappedCells) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
+func (ms MappedCells) Less(i, j int) bool {
 	return ms[i].Dict < ms[j].Dict ||
 		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
 }
 
 // An empty mapset means a local broadcast of message.
-func (ms MapSet) LocalBroadcast() bool {
+func (ms MappedCells) LocalBroadcast() bool {
 	return len(ms) == 0
 }
 
@@ -63,7 +63,7 @@ func (ms MapSet) LocalBroadcast() bool {
 // called sequentially. If the return value is an empty set the message is
 // broadcasted to all local bees. Also, if the return value is nil, the message
 // is drop.
-type Map func(m Msg, c MapContext) MapSet
+type Map func(m Msg, c MapContext) MappedCells
 
 // An application recv function that handles a message. This method is called in
 // parallel for different map-sets and sequentially within a map-set.
@@ -71,7 +71,7 @@ type Rcv func(m Msg, c RcvContext) error
 
 // The interface msg handlers should implement.
 type Handler interface {
-	Map(m Msg, c MapContext) MapSet
+	Map(m Msg, c MapContext) MappedCells
 	Rcv(m Msg, c RcvContext) error
 }
 
@@ -101,7 +101,7 @@ type funcHandler struct {
 	recvFunc Rcv
 }
 
-func (h *funcHandler) Map(m Msg, c MapContext) MapSet {
+func (h *funcHandler) Map(m Msg, c MapContext) MappedCells {
 	return h.mapFunc(m, c)
 }
 
@@ -209,7 +209,7 @@ func (a *app) initQee() {
 			hive: a.hive,
 			app:  a,
 		},
-		keyToBees: make(map[DictionaryKey]bee),
+		keyToBees: make(map[CellKey]bee),
 		idToBees:  make(map[BeeID]bee),
 	}
 }
