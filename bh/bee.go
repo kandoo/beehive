@@ -43,6 +43,52 @@ func BeeIDFromKey(k Key) BeeID {
 	return BeeIDFromBytes([]byte(k))
 }
 
+type BeeColony struct {
+	Master BeeID   `json:"master"`
+	Slaves []BeeID `json:"slaves"`
+}
+
+func (c BeeColony) Eq(thatC BeeColony) bool {
+	if c.Master != thatC.Master {
+		return false
+	}
+
+	if len(c.Slaves) != len(thatC.Slaves) {
+		return false
+	}
+
+	if len(c.Slaves) == 0 && len(thatC.Slaves) == 0 {
+		return true
+	}
+
+	slaves := make(map[BeeID]bool)
+	for _, b := range c.Slaves {
+		slaves[b] = true
+	}
+
+	for _, b := range thatC.Slaves {
+		if _, ok := slaves[b]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (c *BeeColony) Bytes() ([]byte, error) {
+	j, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func BeeColonyFromBytes(b []byte) (BeeColony, error) {
+	c := BeeColony{}
+	err := json.Unmarshal(b, &c)
+	return c, err
+}
+
 type bee interface {
 	id() BeeID
 	start()

@@ -238,74 +238,86 @@ func (g registery) unlockApp(id BeeID) error {
 	return nil
 }
 
-func (g registery) set(id BeeID, ms MappedCells) BeeID {
-	err := g.lockApp(id)
+func (g registery) set(c BeeColony, ms MappedCells) BeeID {
+	err := g.lockApp(c.Master)
 	if err != nil {
-		glog.Fatalf("Cannot lock app %v: %v", id, err)
+		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)
 	}
 
 	defer func() {
-		err := g.unlockApp(id)
+		err := g.unlockApp(c.Master)
 		if err != nil {
-			glog.Fatalf("Cannot unlock app %v: %v", id, err)
+			glog.Fatalf("Cannot unlock app %v: %v", c.Master, err)
 		}
 	}()
 
 	sort.Sort(ms)
 
-	v := string(id.Bytes())
+	v, err := c.Bytes()
+	if err != nil {
+		glog.Fatalf("Cannot serialize BeeColony: %s", err)
+	}
+
 	for _, dk := range ms {
-		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		_, err := g.Set(k, v, g.appTTL)
+		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
+		_, err := g.Set(k, string(v), g.appTTL)
 		if err != nil {
 			glog.Fatalf("Cannot set bee: %+v", k)
 		}
 	}
-	return id
+	return c.Master
 }
 
-func (g registery) storeOrGet(id BeeID, ms MappedCells) BeeID {
-	err := g.lockApp(id)
+func (g registery) storeOrGet(c BeeColony, ms MappedCells) BeeID {
+	err := g.lockApp(c.Master)
 	if err != nil {
-		glog.Fatalf("Cannot lock app %v: %v", id, err)
+		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)
 	}
 
 	defer func() {
-		err := g.unlockApp(id)
+		err := g.unlockApp(c.Master)
 		if err != nil {
-			glog.Fatalf("Cannot unlock app %v: %v", id, err)
+			glog.Fatalf("Cannot unlock app %v: %v", c.Master, err)
 		}
 	}()
 
 	sort.Sort(ms)
 
-	v := string(id.Bytes())
+	v, err := c.Bytes()
+	if err != nil {
+		glog.Fatalf("Cannot serialize BeeColony: %s", err)
+	}
+
 	validate := false
 	for _, dk := range ms {
-		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
+		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
 		res, err := g.Get(k, false, false)
 		if err != nil {
 			continue
 		}
 
-		entryID := BeeIDFromBytes([]byte(res.Node.Value))
-		if entryID == id {
+		entry, err := BeeColonyFromBytes([]byte(res.Node.Value))
+		if err != nil {
+			glog.Fatalf("Cannot decode a BeeColony: %s", err)
+		}
+
+		if entry.Eq(c) {
 			continue
 		}
 
 		if validate {
-			glog.Fatalf("Incosistencies for bee %v: %v", id, entryID)
+			glog.Fatalf("Incosistencies for bee %v: %v != %v", c.Master, c, entry)
 		}
 
-		id = entryID
-		v = res.Node.Value
+		c = entry
+		v = []byte(res.Node.Value)
 		validate = true
 	}
 
 	for _, dk := range ms {
-		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		g.Create(k, v, g.appTTL)
+		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
+		g.Create(k, string(v), g.appTTL)
 	}
 
-	return id
+	return c.Master
 }
