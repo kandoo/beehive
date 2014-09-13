@@ -262,21 +262,15 @@ func (q *qee) lock(mapSet MappedCells, bee BeeID, force bool) BeeID {
 		return bee
 	}
 
-	var v beeRegVal
+	var prevBee BeeID
 	if force {
 		// FIXME(soheil): We should migrate the previous owner first.
-		v = q.ctx.hive.registery.set(bee, mapSet)
+		prevBee = q.ctx.hive.registery.set(bee, mapSet)
 	} else {
-		v = q.ctx.hive.registery.storeOrGet(bee, mapSet)
+		prevBee = q.ctx.hive.registery.storeOrGet(bee, mapSet)
 	}
 
-	if v.HiveID == bee.HiveID && v.BeeID == bee.ID {
-		return bee
-	}
-
-	bee.HiveID = v.HiveID
-	bee.ID = v.BeeID
-	return bee
+	return prevBee
 }
 
 func (q *qee) lockKey(dk CellKey, bee bee) bool {
@@ -471,9 +465,9 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		CmdType: replaceBeeCmd,
 		CmdTo:   id,
 		CmdData: replaceBeeCmdData{
-			OldBee: oldBee.id(),
-			NewBee: newBee.id(),
-			State:  oldBee.state().(*inMemoryState),
+			OldBee:      oldBee.id(),
+			NewBee:      newBee.id(),
+			State:       oldBee.state().(*inMemoryState),
 			MappedCells: mapSet,
 		},
 	}

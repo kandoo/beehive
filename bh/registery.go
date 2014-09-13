@@ -1,8 +1,6 @@
 package bh
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -184,42 +182,6 @@ func (g *registery) watchHives() {
 	}
 }
 
-type beeRegVal struct {
-	HiveID HiveID `json:"hive_id"`
-	BeeID  uint64 `json:"bee_id"`
-}
-
-func (v *beeRegVal) Eq(that *beeRegVal) bool {
-	return v.HiveID == that.HiveID && v.BeeID == that.BeeID
-}
-
-func unmarshallRegVal(d string) (beeRegVal, error) {
-	var v beeRegVal
-	err := json.Unmarshal([]byte(d), &v)
-	return v, err
-}
-
-func unmarshallRegValOrFail(d string) beeRegVal {
-	v, err := unmarshallRegVal(d)
-	if err != nil {
-		glog.Fatalf("Cannot unmarshall registery value %v: %v", d, err)
-	}
-	return v
-}
-
-func marshallRegVal(v beeRegVal) (string, error) {
-	b, err := json.Marshal(v)
-	return string(b), err
-}
-
-func marshallRegValOrFail(v beeRegVal) string {
-	d, err := marshallRegVal(v)
-	if err != nil {
-		glog.Fatalf("Cannot marshall registery value %v: %v", v, err)
-	}
-	return d
-}
-
 func (g registery) path(elem ...string) string {
 	return g.prefix + "/" + strings.Join(elem, "/")
 }
@@ -240,14 +202,11 @@ func (g registery) hiveIDFromPath(path string) HiveID {
 func (g registery) lockApp(id BeeID) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
-	v := beeRegVal{
-		HiveID: id.HiveID,
-		BeeID:  id.ID,
-	}
 	k := g.appPath(string(id.AppName), lockFileName)
 
 	for {
-		_, err := g.Create(k, marshallRegValOrFail(v), g.appTTL)
+		// FIXME(soheil): This is very dangerous when the bee dies before unlock.
+		_, err := g.Create(k, string(id.Bytes()), g.appTTL)
 		if err == nil {
 			return nil
 		}
@@ -260,21 +219,15 @@ func (g registery) lockApp(id BeeID) error {
 }
 
 func (g registery) unlockApp(id BeeID) error {
-	v := beeRegVal{
-		HiveID: id.HiveID,
-		BeeID:  id.ID,
-	}
 	k := g.appPath(string(id.AppName), lockFileName)
-
 	res, err := g.Get(k, false, false)
 	if err != nil {
 		return err
 	}
 
-	tempV := unmarshallRegValOrFail(res.Node.Value)
-	if !v.Eq(&tempV) {
-		return errors.New(
-			fmt.Sprintf("Unlocking someone else's lock: %v, %v", v, tempV))
+	v := BeeIDFromBytes([]byte(res.Node.Value))
+	if id != v {
+		return fmt.Errorf("Unlocking someone else's lock: %v, %v", id, v)
 	}
 
 	_, err = g.Delete(k, false)
@@ -285,7 +238,7 @@ func (g registery) unlockApp(id BeeID) error {
 	return nil
 }
 
-func (g registery) set(id BeeID, ms MappedCells) beeRegVal {
+func (g registery) set(id BeeID, ms MappedCells) BeeID {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -300,22 +253,18 @@ func (g registery) set(id BeeID, ms MappedCells) beeRegVal {
 
 	sort.Sort(ms)
 
-	v := beeRegVal{
-		HiveID: id.HiveID,
-		BeeID:  id.ID,
-	}
-	mv := marshallRegValOrFail(v)
+	v := string(id.Bytes())
 	for _, dk := range ms {
 		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		_, err := g.Set(k, mv, g.appTTL)
+		_, err := g.Set(k, v, g.appTTL)
 		if err != nil {
 			glog.Fatalf("Cannot set bee: %+v", k)
 		}
 	}
-	return v
+	return id
 }
 
-func (g registery) storeOrGet(id BeeID, ms MappedCells) beeRegVal {
+func (g registery) storeOrGet(id BeeID, ms MappedCells) BeeID {
 	err := g.lockApp(id)
 	if err != nil {
 		glog.Fatalf("Cannot lock app %v: %v", id, err)
@@ -330,11 +279,7 @@ func (g registery) storeOrGet(id BeeID, ms MappedCells) beeRegVal {
 
 	sort.Sort(ms)
 
-	v := beeRegVal{
-		HiveID: id.HiveID,
-		BeeID:  id.ID,
-	}
-	mv := marshallRegValOrFail(v)
+	v := string(id.Bytes())
 	validate := false
 	for _, dk := range ms {
 		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
@@ -343,24 +288,24 @@ func (g registery) storeOrGet(id BeeID, ms MappedCells) beeRegVal {
 			continue
 		}
 
-		resV := unmarshallRegValOrFail(res.Node.Value)
-		if resV.Eq(&v) {
+		entryID := BeeIDFromBytes([]byte(res.Node.Value))
+		if entryID == id {
 			continue
 		}
 
 		if validate {
-			glog.Fatalf("Incosistencies for bee %v: %v, %v", id, v, resV)
+			glog.Fatalf("Incosistencies for bee %v: %v", id, entryID)
 		}
 
-		v = resV
-		mv = res.Node.Value
+		id = entryID
+		v = res.Node.Value
 		validate = true
 	}
 
 	for _, dk := range ms {
 		k := g.appPath(string(id.AppName), string(dk.Dict), string(dk.Key))
-		g.Create(k, mv, g.appTTL)
+		g.Create(k, v, g.appTTL)
 	}
 
-	return v
+	return id
 }

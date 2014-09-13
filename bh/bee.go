@@ -19,20 +19,28 @@ func (b *BeeID) IsNil() bool {
 }
 
 func (b *BeeID) Key() Key {
+	return Key(b.Bytes())
+}
+
+func (b *BeeID) Bytes() []byte {
 	j, err := json.Marshal(b)
 	if err != nil {
 		glog.Fatalf("Cannot marshall a bee ID into json: %v", err)
 	}
-	return Key(j)
+	return j
 }
 
-func BeeIDFromKey(k Key) BeeID {
-	b := BeeID{}
-	err := json.Unmarshal([]byte(k), &b)
+func BeeIDFromBytes(b []byte) BeeID {
+	id := BeeID{}
+	err := json.Unmarshal(b, &id)
 	if err != nil {
 		glog.Fatalf("Cannot unmarshall a bee ID from json: %v", err)
 	}
-	return b
+	return id
+}
+
+func BeeIDFromKey(k Key) BeeID {
+	return BeeIDFromBytes([]byte(k))
 }
 
 type bee interface {
