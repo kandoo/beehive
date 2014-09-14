@@ -1,9 +1,6 @@
 package bh
 
-import (
-	"fmt"
-	"math/rand"
-)
+import "math/rand"
 
 type ReplicationStrategy interface {
 	SelectSlaveHives(mc MappedCells, repFactor int) []HiveID
@@ -50,12 +47,12 @@ type rndRepl struct {
 }
 
 func (h *rndRepl) Rcv(msg Msg, ctx RcvContext) error {
-	fmt.Println("sss")
 	switch d := msg.Data().(type) {
 	case ReplicationQuery:
+		nSlaves := d.RepFactor - 1
 		hives := h.Hives(ctx)
-		rndHives := make([]HiveID, 0, d.RepFactor)
-		for i := range rand.Perm(d.RepFactor) {
+		rndHives := make([]HiveID, 0, nSlaves)
+		for _, i := range rand.Perm(nSlaves) {
 			rndHives = append(rndHives, hives[i])
 		}
 		d.Res <- rndHives
@@ -88,5 +85,7 @@ func newRndRepl(h Hive) *rndRepl {
 	}
 	app := h.NewApp("RndRepl")
 	app.Handle(ReplicationQuery{}, r)
+	app.Handle(HiveJoined{}, r)
+	app.Handle(HiveLeft{}, r)
 	return r
 }
