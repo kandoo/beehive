@@ -8,6 +8,14 @@ import (
 
 type AppName string
 
+type AppFlag uint64
+
+const (
+	AppFlagSticky        AppFlag = 1 << iota
+	AppFlagPersistent            = 1 << iota
+	AppFlagTransactional         = 1 << iota
+)
+
 // Apps simply process and exchange messages. App methods are not
 // thread-safe and we assume that neither are its map and receive functions.
 type App interface {
@@ -32,15 +40,17 @@ type App interface {
 	// Returns the app name.
 	Name() AppName
 
+	// SetFlags sets the flags for this application.
+	SetFlags(flag AppFlag)
+	// Flags return the flags for this application.
+	Flags() AppFlag
+
 	// Whether the app is sticky.
 	Sticky() bool
-	// Sets whether the app is sticky, i.e., should not be migrated.
-	SetSticky(sticky bool)
-
-	// Whether to use PersistentState.
-	PersistentState() bool
-	// Whether to use persistent state.
-	SetPersistentState(p bool)
+	// Whether to use the persistent state.
+	Persistent() bool
+	// Whether to use transactions.
+	Transactional() bool
 
 	// ReplicationFactor is the number of backup bees for the application. 1 means
 	// no replication.
@@ -138,8 +148,7 @@ type app struct {
 	hive       *hive
 	qee        *qee
 	handlers   map[MsgType]Handler
-	sticky     bool
-	persistent bool
+	flags      AppFlag
 	replFactor int
 }
 
@@ -191,20 +200,24 @@ func (a *app) Name() AppName {
 	return a.name
 }
 
-func (a *app) SetSticky(sticky bool) {
-	a.sticky = sticky
+func (a *app) SetFlags(flags AppFlag) {
+	a.flags = flags
+}
+
+func (a *app) Flags() AppFlag {
+	return a.flags
 }
 
 func (a *app) Sticky() bool {
-	return a.sticky
+	return a.flags&AppFlagSticky == AppFlagSticky
 }
 
-func (a *app) PersistentState() bool {
-	return a.persistent
+func (a *app) Persistent() bool {
+	return a.flags&AppFlagPersistent == AppFlagPersistent
 }
 
-func (a *app) SetPersistentState(p bool) {
-	a.persistent = p
+func (a *app) Transactional() bool {
+	return a.flags&AppFlagTransactional == AppFlagTransactional
 }
 
 func (a *app) initQee() {

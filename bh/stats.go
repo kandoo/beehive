@@ -245,7 +245,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return fmt.Errorf("App not found: %s", update.To.AppName)
 	}
 
-	if a.sticky {
+	if a.Sticky() {
 		return nil
 	}
 

@@ -48,7 +48,7 @@ func (dk *CellKey) String() string {
 }
 
 func newState(a *app) State {
-	if a.PersistentState() {
+	if a.Persistent() {
 		return a.hive.stateMan.newState(a)
 	}
 

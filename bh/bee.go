@@ -155,6 +155,7 @@ func (bee *localBee) slaves() []BeeID {
 		CmdType: listSlavesCmd,
 		ResCh:   resCh,
 	})
+
 	d, err := (<-resCh).get()
 	if err != nil {
 		glog.Errorf("Error in list slaves: %v", err)
@@ -211,11 +212,15 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("Bee handles a message: %+v", mh.msg)
 
-	bee.ctx.State().BeginTx()
+	if bee.ctx.app.Transactional() {
+		bee.ctx.State().BeginTx()
+	}
+
 	if err := mh.handler.Rcv(mh.msg, &bee.ctx); err != nil {
 		bee.recoverFromError(mh, err, false)
 		return
 	}
+
 	bee.ctx.State().CommitTx()
 
 	bee.ctx.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
