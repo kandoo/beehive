@@ -234,7 +234,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	mappedCells := q.invokeMap(mh)
 	if mappedCells == nil {
-		glog.V(2).Infof("Message dropped: %+v", mh)
+		glog.V(2).Infof("Message dropped: %+v", mh.msg)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		q.syncBees(mappedCells, bee)
 	}
 
-	glog.V(2).Infof("Sending to bee: %v", bee.id())
+	glog.V(2).Infof("Sending %+v to bee %v", mh.msg, bee.id())
 	bee.enqueMsg(mh)
 }
 

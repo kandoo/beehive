@@ -73,6 +73,11 @@ func TestRegistryWatchHives(t *testing.T) {
 	go h1.Start(joinCh1)
 	h1.waitUntilStarted()
 
+	id := <-watchCh
+	if id != HiveID(h1Id) {
+		t.Errorf("Invalid hive joined: %v", id)
+	}
+
 	joinCh2 := make(chan bool)
 	go h2.Start(joinCh2)
 	h2.waitUntilStarted()
@@ -80,10 +85,6 @@ func TestRegistryWatchHives(t *testing.T) {
 	h2.Stop()
 	<-joinCh2
 
-	id := <-watchCh
-	if id != HiveID(h1Id) {
-		t.Errorf("Invalid hive joined: %v", id)
-	}
 	id = <-watchCh
 	if id != HiveID(h2Id) {
 		t.Errorf("Invalid hive joined: %v", id)

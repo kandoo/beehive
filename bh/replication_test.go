@@ -80,16 +80,15 @@ func (h *replicatedTestApp) Map(msg Msg, ctx MapContext) MappedCells {
 }
 
 func TestReplicatedBee(t *testing.T) {
-	rcvCh := make(chan bool)
+	addrs := []string{"127.0.0.1:32771", "127.0.0.1:32772", "127.0.0.1:32773"}
+	rcvCh := make(chan bool, len(addrs)*len(addrs))
 	registerApp := func(h Hive) {
 		app := h.NewApp("MyApp")
 		app.Handle(replicatedTestAppMsg(0), &replicatedTestApp{rcvCh})
-		app.SetReplicationFactor(3)
+		app.SetReplicationFactor(len(addrs))
 	}
 
-	hives, joinChs := startHivesForReplicationTest(t,
-		[]string{"127.0.0.1:32771", "127.0.0.1:32772", "127.0.0.1:32773"},
-		registerApp)
+	hives, joinChs := startHivesForReplicationTest(t, addrs, registerApp)
 
 	hives[0].Emit(replicatedTestAppMsg(0))
 	<-rcvCh
@@ -97,7 +96,7 @@ func TestReplicatedBee(t *testing.T) {
 	stopHivesForReplicationTest(hives, joinChs)
 	for _, b := range hives[0].(*hive).apps["MyApp"].qee.idToBees {
 		colony := b.colonyUnsafe()
-		if len(colony.Slaves) != 2 {
+		if len(colony.Slaves) != len(addrs)-1 {
 			t.Errorf("Incorrect number of slaves for MyApp: %+v", colony)
 		}
 	}
