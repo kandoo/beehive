@@ -232,14 +232,16 @@ func (bee *localBee) handleCmd(cmd LocalCmd) bool {
 
 	case addSlaveCmd:
 		var err error
-		if ok := bee.beeColony.AddSlave(cmd.CmdData.(BeeID)); !ok {
+		slaveID := cmd.CmdData.(addSlaveCmdData).BeeID
+		if ok := bee.beeColony.AddSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.CmdData.(BeeID))
 		}
 		cmd.ResCh <- CmdResult{Err: err}
 
 	case delSlaveCmd:
 		var err error
-		if ok := bee.beeColony.DelSlave(cmd.CmdData.(BeeID)); !ok {
+		slaveID := cmd.CmdData.(delSlaveCmdData).BeeID
+		if ok := bee.beeColony.DelSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.CmdData.(BeeID))
 		}
 		cmd.ResCh <- CmdResult{Err: err}

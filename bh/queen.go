@@ -428,16 +428,21 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 			glog.Fatalf("Failed to create the new bee on %s", h)
 		}
 
-		newColony.AddSlave(d.(BeeID))
+		slaveID := d.(BeeID)
+		glog.V(2).Infof("Adding slave %v to %v", slaveID, newColony.Master)
+		newColony.AddSlave(slaveID)
 	}
 
 	bee := q.findOrCreateBee(beeID)
 
 	for _, s := range newColony.Slaves {
+		resCh := make(chan CmdResult)
 		bee.enqueCmd(LocalCmd{
 			CmdType: addSlaveCmd,
 			CmdData: addSlaveCmdData{s},
+			ResCh:   resCh,
 		})
+		<-resCh
 	}
 
 	q.lockLocally(bee, mc...)
