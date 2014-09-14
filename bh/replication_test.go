@@ -1,9 +1,6 @@
 package bh
 
-import (
-	"fmt"
-	"testing"
-)
+import "testing"
 
 type joinedHandler struct {
 	joined chan bool
@@ -103,6 +100,5 @@ func TestReplicatedBee(t *testing.T) {
 		if len(colony.Slaves) != 2 {
 			t.Errorf("Incorrect number of slaves for MyApp: %+v", colony)
 		}
-		fmt.Println(colony)
 	}
 }

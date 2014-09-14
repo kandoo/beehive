@@ -412,9 +412,9 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		return bee
 	}
 
-	backups := q.ctx.hive.ReplicationStrategy().SelectSlaveHives(
+	slaveHives := q.ctx.hive.ReplicationStrategy().SelectSlaveHives(
 		mc, q.ctx.app.ReplicationFactor())
-	for _, h := range backups {
+	for _, h := range slaveHives {
 		prx := NewProxy(h)
 		cmd := RemoteCmd{
 			CmdType: createBeeCmd,
@@ -445,6 +445,7 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		<-resCh
 	}
 
+	q.lock(mc, newColony, true)
 	q.lockLocally(bee, mc...)
 	return bee
 }
