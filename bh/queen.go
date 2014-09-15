@@ -71,12 +71,7 @@ func (q *qee) closeChannels() {
 
 func (q *qee) stopBees() {
 	stopCh := make(chan CmdResult)
-	stopCmd := LocalCmd{
-		CmdType: stopCmd,
-		CmdData: nil,
-		ResCh:   stopCh,
-	}
-
+	stopCmd := NewLocalCmd(stopCmd, nil, BeeID{}, stopCh)
 	for _, b := range q.idToBees {
 		b.enqueCmd(stopCmd)
 
@@ -88,6 +83,28 @@ func (q *qee) stopBees() {
 }
 
 func (q *qee) handleCmd(cmd LocalCmd) {
+	if cmd.CmdTo.ID != 0 {
+		if bee, ok := q.idToBees[cmd.CmdTo]; ok {
+			cmdResCh := cmd.ResCh
+			if cmdResCh != nil {
+				cmd.ResCh = make(chan CmdResult)
+			}
+			bee.enqueCmd(cmd)
+			res := <-cmd.ResCh
+			if cmdResCh != nil {
+				cmdResCh <- res
+			}
+			return
+		}
+
+		if cmd.ResCh != nil {
+			cmd.ResCh <- CmdResult{
+				Err: fmt.Errorf("Cannot find bee for the command %+v", cmd),
+			}
+		}
+		return
+	}
+
 	switch cmd.CmdType {
 	case stopCmd:
 		glog.V(3).Infof("Stopping bees of %p", q)
@@ -437,11 +454,7 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 
 	for _, s := range newColony.Slaves {
 		resCh := make(chan CmdResult)
-		bee.enqueCmd(LocalCmd{
-			CmdType: addSlaveCmd,
-			CmdData: addSlaveCmdData{s},
-			ResCh:   resCh,
-		})
+		bee.enqueCmd(NewLocalCmd(addSlaveCmd, addSlaveCmdData{s}, BeeID{}, resCh))
 		<-resCh
 	}
 
@@ -477,10 +490,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	slaves := oldBee.slaves()
 
 	stopCh := make(chan CmdResult)
-	oldBee.enqueCmd(LocalCmd{
-		CmdType: stopCmd,
-		ResCh:   stopCh,
-	})
+	oldBee.enqueCmd(NewLocalCmd(stopCmd, nil, BeeID{}, stopCh))
 	_, err := (<-stopCh).get()
 	if err != nil {
 		resCh <- CmdResult{nil, err}

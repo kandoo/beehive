@@ -86,6 +86,7 @@ func TestReplicatedBee(t *testing.T) {
 		app := h.NewApp("MyApp")
 		app.Handle(replicatedTestAppMsg(0), &replicatedTestApp{rcvCh})
 		app.SetReplicationFactor(len(addrs))
+		app.SetFlags(AppFlagTransactional)
 	}
 
 	hives, joinChs := startHivesForReplicationTest(t, addrs, registerApp)

@@ -171,6 +171,11 @@ func (s *persistentState) maybeBeginTx(readOnly bool) bool {
 	return true
 }
 
+func (s *persistentState) Tx() []StateOp {
+	glog.Fatal("Tx() is not implemented for persistent state.")
+	return nil
+}
+
 func (s *persistentState) BeginTx() error {
 	if s.maybeBeginTx(false) {
 		return nil

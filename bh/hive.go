@@ -91,7 +91,7 @@ func (h *hive) init() {
 	gob.Register(inMemDict{})
 	gob.Register(inMemoryState{})
 	gob.Register(StateOp{})
-	gob.Register(StateBatch{})
+	gob.Register(Tx{})
 	gob.Register(msg{})
 	gob.Register(BeeID{})
 	gob.Register(HiveID(""))
@@ -99,6 +99,8 @@ func (h *hive) init() {
 	gob.Register(migrateBeeCmdData{})
 	gob.Register(replaceBeeCmdData{})
 	gob.Register(lockMappedCellsData{})
+	gob.Register(GobError{})
+	gob.Register(TxSeq(0))
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -215,10 +217,7 @@ func (h *hive) closeChannels() {
 	}
 
 	for m, _ := range qs {
-		m.ctrlCh <- LocalCmd{
-			CmdType: stopCmd,
-			ResCh:   stopCh,
-		}
+		m.ctrlCh <- NewLocalCmd(stopCmd, nil, BeeID{}, stopCh)
 		glog.V(3).Infof("Waiting on a qee: %p", m)
 		select {
 		case res := <-stopCh:

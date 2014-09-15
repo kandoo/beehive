@@ -1,12 +1,13 @@
 package bh
 
-// State is the storage for a collection of dictionaries. State support
-// transactions. However, note that since the state is modified by a single
-// thread, transactions are there mostly for programming convenience. For the
-// same reason, each thread can only have one active transaction.
+// State is the storage for a collection of dictionaries.
 type State interface {
 	// Returns a dictionary for this state. Creates one if it does not exist.
 	Dict(name DictName) Dict
+}
+
+type TxState interface {
+	State
 	// Starts a transaction for this state. Transactions span multiple
 	// dictionaries.
 	BeginTx() error
@@ -14,6 +15,8 @@ type State interface {
 	CommitTx() error
 	// Aborts the transaction.
 	AbortTx() error
+	// Tx returns all the operations in the transaction.
+	Tx() []StateOp
 }
 
 type IterFn func(k Key, v Value)
@@ -47,7 +50,7 @@ func (dk *CellKey) String() string {
 	return string(dk.Dict) + "/" + string(dk.Key)
 }
 
-func newState(a *app) State {
+func newState(a *app) TxState {
 	if a.Persistent() {
 		return a.hive.stateMan.newState(a)
 	}
@@ -71,8 +74,4 @@ type StateOp struct {
 	D DictName
 	K Key
 	V Value
-}
-
-type StateBatch struct {
-	Ops []StateOp
 }

@@ -186,10 +186,7 @@ func (a *app) handler(t MsgType) Handler {
 }
 
 func (a *app) Detached(h DetachedHandler) {
-	a.qee.ctrlCh <- LocalCmd{
-		CmdType: startDetachedCmd,
-		CmdData: h,
-	}
+	a.qee.ctrlCh <- NewLocalCmd(startDetachedCmd, h, BeeID{}, nil)
 }
 
 func (a *app) State() State {

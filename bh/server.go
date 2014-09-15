@@ -104,16 +104,12 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.qee.ctrlCh <- LocalCmd{
-		CmdType: cmd.CmdType,
-		CmdData: cmd.CmdData,
-		ResCh:   resCh,
-	}
+	a.qee.ctrlCh <- NewLocalCmd(cmd.CmdType, cmd.CmdData, cmd.CmdTo, resCh)
 
 	res := <-resCh
-
 	if res.Err != nil {
 		glog.Errorf("Error in running the remote command: %v", res.Err)
+		res.Err = GobError{res.Err.Error()}
 	}
 
 	if err := gob.NewEncoder(w).Encode(res); err != nil {

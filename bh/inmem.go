@@ -25,6 +25,25 @@ func (s *inMemoryState) newTransaction() *inMemoryTx {
 	}
 }
 
+func (s *inMemoryState) Tx() []StateOp {
+	if s.tx == nil {
+		return nil
+	}
+
+	l := 0
+	for _, dict := range s.tx.stage {
+		l += len(dict.ops)
+	}
+
+	ops := make([]StateOp, l)
+	for _, dict := range s.tx.stage {
+		for _, op := range dict.ops {
+			ops = append(ops, op)
+		}
+	}
+	return ops
+}
+
 func (s *inMemoryState) CommitTx() error {
 	if s.tx == nil {
 		return errors.New("No active transaction")

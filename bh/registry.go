@@ -79,10 +79,7 @@ func (g *registry) disconnect() {
 	}
 
 	watchStopCh := make(chan CmdResult)
-	g.watchCmdCh <- LocalCmd{
-		CmdType: stopCmd,
-		ResCh:   watchStopCh,
-	}
+	g.watchCmdCh <- NewLocalCmd(stopCmd, nil, BeeID{}, watchStopCh)
 	<-watchStopCh
 
 	cancelRes := make(chan bool)

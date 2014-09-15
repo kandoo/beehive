@@ -161,11 +161,7 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 		}
 
 		resCh := make(chan CmdResult)
-		a.qee.ctrlCh <- LocalCmd{
-			CmdType: migrateBeeCmd,
-			CmdData: m,
-			ResCh:   resCh,
-		}
+		a.qee.ctrlCh <- NewLocalCmd(migrateBeeCmd, m, BeeID{}, resCh)
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}

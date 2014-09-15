@@ -7,9 +7,25 @@ type RemoteCmd struct {
 }
 
 type LocalCmd struct {
-	CmdType CmdType
-	CmdData interface{}
-	ResCh   chan CmdResult
+	RemoteCmd
+	ResCh chan CmdResult
+}
+
+func NewRemoteCmd(t CmdType, d interface{}, to BeeID) RemoteCmd {
+	return RemoteCmd{
+		CmdType: t,
+		CmdData: d,
+		CmdTo:   to,
+	}
+}
+
+func NewLocalCmd(t CmdType, d interface{}, to BeeID,
+	ch chan CmdResult) LocalCmd {
+
+	return LocalCmd{
+		RemoteCmd: NewRemoteCmd(t, d, to),
+		ResCh:     ch,
+	}
 }
 
 type CmdResult struct {
@@ -35,6 +51,8 @@ const (
 	addSlaveCmd                = iota
 	delSlaveCmd                = iota
 	listSlavesCmd              = iota
+	bufferTxCmd                = iota
+	commitTxCmd                = iota
 )
 
 type migrateBeeCmdData struct {
