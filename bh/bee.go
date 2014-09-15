@@ -139,6 +139,7 @@ func BeeColonyFromBytes(b []byte) (BeeColony, error) {
 type bee interface {
 	id() BeeID
 	slaves() []BeeID
+	colony() BeeColony
 	colonyUnsafe() BeeColony
 
 	start()
@@ -158,13 +159,13 @@ type bee interface {
 }
 
 type localBee struct {
-	dataCh chan msgAndHandler
-	ctrlCh chan LocalCmd
-	ctx    rcvContext
-	beeID  BeeID
-	colony BeeColony
-	qee    *qee
-	txBuf  []Tx
+	dataCh    chan msgAndHandler
+	ctrlCh    chan LocalCmd
+	ctx       rcvContext
+	beeID     BeeID
+	beeColony BeeColony
+	qee       *qee
+	txBuf     []Tx
 }
 
 func (bee *localBee) id() BeeID {
@@ -172,19 +173,23 @@ func (bee *localBee) id() BeeID {
 }
 
 func (bee *localBee) colonyUnsafe() BeeColony {
-	return bee.colony
+	return bee.beeColony
+}
+
+func (bee *localBee) colony() BeeColony {
+	resCh := make(chan CmdResult)
+	bee.enqueCmd(NewLocalCmd(getColonyCmd{}, BeeID{}, resCh))
+	d, err := (<-resCh).get()
+	if err != nil {
+		glog.Errorf("Error in getting the bee colony: %v", err)
+		return BeeColony{}
+	}
+
+	return d.(BeeColony)
 }
 
 func (bee *localBee) slaves() []BeeID {
-	resCh := make(chan CmdResult)
-	bee.enqueCmd(NewLocalCmd(listSlavesCmd{}, BeeID{}, resCh))
-	d, err := (<-resCh).get()
-	if err != nil {
-		glog.Errorf("Error in list slaves: %v", err)
-		return nil
-	}
-
-	return d.([]BeeID)
+	return bee.colony().Slaves
 }
 
 func (bee *localBee) state() TxState {
@@ -232,7 +237,7 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 		}
 	}()
 
-	glog.V(2).Infof("Bee handles a message: %+v", mh.msg)
+	glog.V(2).Infof("Bee handles a message: %#v", mh.msg)
 
 	if bee.ctx.app.Transactional() {
 		bee.ctx.BeginTx()
@@ -256,25 +261,25 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 
 	case joinColonyCmd:
 		if cmd.Colony.Contains(bee.id()) {
-			bee.colony = cmd.Colony
+			bee.beeColony = cmd.Colony
 			lcmd.ResCh <- CmdResult{}
 			return true
 		}
 
 		lcmd.ResCh <- CmdResult{
-			Err: fmt.Errorf("Bee %+v is not in this colony %+v", bee.id(),
+			Err: fmt.Errorf("Bee %#v is not in this colony %#v", bee.id(),
 				cmd.Colony),
 		}
 		return true
 
-	case listSlavesCmd:
-		lcmd.ResCh <- CmdResult{Data: bee.colony.Slaves}
+	case getColonyCmd:
+		lcmd.ResCh <- CmdResult{Data: bee.beeColony}
 		return true
 
 	case addSlaveCmd:
 		var err error
 		slaveID := cmd.BeeID
-		if ok := bee.colony.AddSlave(slaveID); !ok {
+		if ok := bee.beeColony.AddSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
@@ -283,7 +288,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 	case delSlaveCmd:
 		var err error
 		slaveID := cmd.BeeID
-		if ok := bee.colony.DelSlave(slaveID); !ok {
+		if ok := bee.beeColony.DelSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
@@ -292,7 +297,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 	case bufferTxCmd:
 		tx := cmd.Tx
 		bee.txBuf = append(bee.txBuf, tx)
-		glog.V(2).Infof("Buffered transaction #%d in %+v", tx.Seq, bee.id())
+		glog.V(2).Infof("Buffered transaction #%d in %#v", tx.Seq, bee.id())
 		lcmd.ResCh <- CmdResult{}
 		return true
 
@@ -301,7 +306,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 		for _, tx := range bee.txBuf {
 			if seq == tx.Seq {
 				tx.Status = TxCommitted
-				glog.V(2).Infof("Committed buffered transaction #%d in %+v", tx.Seq,
+				glog.V(2).Infof("Committed buffered transaction #%d in %#v", tx.Seq,
 					bee.id())
 				lcmd.ResCh <- CmdResult{}
 				return true
@@ -323,31 +328,31 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
-	glog.V(2).Infof("Enqueue message %+v in bee %+v", mh.msg, bee)
+	glog.V(2).Infof("Enqueue message %#v in bee %#v", mh.msg, bee)
 	bee.dataCh <- mh
 }
 
 func (bee *localBee) enqueCmd(cmd LocalCmd) {
-	glog.V(2).Infof("Enqueue a command %+v in bee %+v", cmd, bee)
+	glog.V(2).Infof("Enqueue a command %#v in bee %#v", cmd, bee)
 	bee.ctrlCh <- cmd
 }
 
 func (bee *localBee) isMaster() bool {
-	return bee.colony.IsMaster(bee.id())
+	return bee.beeColony.IsMaster(bee.id())
 }
 
 func (bee *localBee) replicateTx(tx *Tx) error {
 	// TODO(soheil): Add a commit threshold.
 	if !bee.isMaster() {
-		return fmt.Errorf("Bee %+v is not a master of %+v", bee.id(), bee.colony)
+		return fmt.Errorf("Bee %#v is not a master of %#v", bee.id(), bee.beeColony)
 	}
 
-	for i, s := range bee.colony.Slaves {
+	for i, s := range bee.beeColony.Slaves {
 		prx := NewProxy(s.HiveID)
 		cmd := NewRemoteCmd(bufferTxCmd{*tx}, s)
 		_, err := prx.SendCmd(&cmd)
 		if err != nil {
-			glog.Errorf("Cannot replicate tx %+v on bee %+v", tx, s)
+			glog.Errorf("Cannot replicate tx %#v on bee %#v", tx, s)
 		}
 
 		if err != nil && i == 0 {
@@ -360,7 +365,7 @@ func (bee *localBee) replicateTx(tx *Tx) error {
 
 func (bee *localBee) notifyCommitTx(tx TxSeq) error {
 	var ret error
-	for _, s := range bee.colony.Slaves {
+	for _, s := range bee.beeColony.Slaves {
 		prx := NewProxy(s.HiveID)
 		cmd := NewRemoteCmd(commitTxCmd{tx}, s)
 		_, err := prx.SendCmd(&cmd)

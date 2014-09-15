@@ -5,29 +5,29 @@ type detachedBee struct {
 	h DetachedHandler
 }
 
-func (r *detachedBee) start() {
-	go r.h.Start(&r.ctx)
-	defer r.h.Stop(&r.ctx)
+func (b *detachedBee) start() {
+	go b.h.Start(&b.ctx)
+	defer b.h.Stop(&b.ctx)
 
 	for {
 		select {
-		case d, ok := <-r.dataCh:
+		case d, ok := <-b.dataCh:
 			if !ok {
 				return
 			}
-			r.handleMsg(d)
+			b.handleMsg(d)
 
-		case c, ok := <-r.ctrlCh:
+		case c, ok := <-b.ctrlCh:
 			if !ok {
 				return
 			}
-			if ok = r.handleCmd(c); !ok {
+			if ok = b.handleCmd(c); !ok {
 				return
 			}
 		}
 	}
 }
 
-func (r *detachedBee) handleMsg(mh msgAndHandler) {
-	r.h.Rcv(mh.msg, &r.ctx)
+func (b *detachedBee) handleMsg(mh msgAndHandler) {
+	b.h.Rcv(mh.msg, &b.ctx)
 }

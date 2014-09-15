@@ -342,15 +342,15 @@ func (q *qee) proxyFromLocal(id BeeID, lBee *localBee) (*proxyBee,
 		return nil, fmt.Errorf("Bee already exists: %+v", r)
 	}
 
-	r := &proxyBee{
+	b := &proxyBee{
 		localBee: *lBee,
 	}
-	r.beeID = id
-	r.colony = BeeColony{}
-	r.ctx.bee = r
-	q.idToBees[id] = r
-	q.idToBees[lBee.id()] = r
-	return r, nil
+	b.beeID = id
+	b.beeColony = BeeColony{}
+	b.ctx.bee = b
+	q.idToBees[id] = b
+	q.idToBees[lBee.id()] = b
+	return b, nil
 }
 
 func (q *qee) localFromProxy(id BeeID, pBee *proxyBee) (*localBee,
@@ -364,13 +364,13 @@ func (q *qee) localFromProxy(id BeeID, pBee *proxyBee) (*localBee,
 		return nil, fmt.Errorf("Bee already exists: %+v", r)
 	}
 
-	r := pBee.localBee
-	r.beeID = id
-	r.colony = BeeColony{}
-	r.ctx.bee = &r
-	q.idToBees[id] = &r
-	q.idToBees[pBee.id()] = &r
-	return &r, nil
+	b := pBee.localBee
+	b.beeID = id
+	b.beeColony = BeeColony{}
+	b.ctx.bee = &b
+	q.idToBees[id] = &b
+	q.idToBees[pBee.id()] = &b
+	return &b, nil
 }
 
 func (q *qee) newLocalBee() bee {

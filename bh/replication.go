@@ -49,8 +49,11 @@ type rndRepl struct {
 func (h *rndRepl) Rcv(msg Msg, ctx RcvContext) error {
 	switch d := msg.Data().(type) {
 	case ReplicationQuery:
-		nSlaves := d.RepFactor - 1
 		hives := h.Hives(ctx)
+		nSlaves := d.RepFactor - 1
+		if len(hives) < nSlaves {
+			nSlaves = len(hives)
+		}
 		rndHives := make([]HiveID, 0, nSlaves)
 		for _, i := range rand.Perm(nSlaves) {
 			rndHives = append(rndHives, hives[i])

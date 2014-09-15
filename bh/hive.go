@@ -113,7 +113,7 @@ func (h *hive) init() {
 	gob.Register(migrateBeeCmd{})
 	gob.Register(replaceBeeCmd{})
 	gob.Register(lockMappedCellsCmd{})
-	gob.Register(listSlavesCmd{})
+	gob.Register(getColonyCmd{})
 	gob.Register(addSlaveCmd{})
 	gob.Register(delSlaveCmd{})
 

@@ -76,7 +76,7 @@ type lockMappedCellsCmd struct {
 	MappedCells MappedCells
 }
 
-type listSlavesCmd struct{}
+type getColonyCmd struct{}
 
 type addSlaveCmd struct {
 	BeeID

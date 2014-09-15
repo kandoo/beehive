@@ -2,15 +2,15 @@ package bh
 
 import "testing"
 
-type joinedHandler struct {
+type hiveJoinedHandler struct {
 	joined chan bool
 }
 
-func (h *joinedHandler) Rcv(msg Msg, ctx RcvContext) error {
+func (h *hiveJoinedHandler) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-func (h *joinedHandler) Map(msg Msg, ctx MapContext) MappedCells {
+func (h *hiveJoinedHandler) Map(msg Msg, ctx MapContext) MappedCells {
 	h.joined <- true
 	return nil
 }
@@ -25,7 +25,7 @@ func startHivesForReplicationTest(t *testing.T, addrs []string,
 		hives[i] = hiveWithAddressForRegistryTests(a, t)
 		maybeSkipRegistryTest(hives[i].(*hive), t)
 		chans[i] = make(chan bool)
-		hives[i].NewApp("joined").Handle(HiveJoined{}, &joinedHandler{
+		hives[i].NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
 			joined: hiveJoinedCh,
 		})
 		preStart(hives[i])

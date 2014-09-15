@@ -149,14 +149,15 @@ func (g *registry) watchHives() {
 	}
 
 	for _, n := range res.Node.Nodes {
-		g.hive.Emit(HiveJoined{g.hiveIDFromPath(n.Key)})
+		hiveID := g.hiveIDFromPath(n.Key)
+		g.AddHive(hiveID)
 	}
 
 	resCh := make(chan *etcd.Response)
 	joinCh := make(chan bool)
 	stopCh := make(chan bool)
 	go func() {
-		g.Watch(g.hivePath(), 0, true, resCh, stopCh)
+		g.Watch(g.hivePath(), res.EtcdIndex, true, resCh, stopCh)
 		joinCh <- true
 	}()
 
@@ -180,12 +181,10 @@ func (g *registry) watchHives() {
 			case "create":
 				if res.PrevNode == nil {
 					g.AddHive(id)
-					g.hive.Emit(HiveJoined{id})
 				}
 			case "delete":
 				if res.PrevNode != nil {
 					g.DelHive(id)
-					g.hive.Emit(HiveLeft{id})
 				}
 			default:
 				glog.V(2).Infof("Received an update from registry: %+v", *res)
@@ -194,16 +193,29 @@ func (g *registry) watchHives() {
 	}
 }
 
-func (g *registry) AddHive(id HiveID) {
+func (g *registry) AddHive(id HiveID) bool {
 	g.watchMutex.Lock()
 	defer g.watchMutex.Unlock()
+	if g.liveHives[id] {
+		return false
+	}
+
 	g.liveHives[id] = true
+	g.hive.Emit(HiveJoined{id})
+	return true
 }
 
-func (g *registry) DelHive(id HiveID) {
+func (g *registry) DelHive(id HiveID) bool {
 	g.watchMutex.Lock()
 	defer g.watchMutex.Unlock()
+	if !g.liveHives[id] {
+		return false
+	}
+
 	delete(g.liveHives, id)
+
+	g.hive.Emit(HiveLeft{id})
+	return true
 }
 
 func (g *registry) ListHives() []HiveID {
