@@ -107,6 +107,7 @@ func (h *hive) init() {
 	gob.Register(startCmd{})
 	gob.Register(findBeeCmd{})
 	gob.Register(createBeeCmd{})
+	gob.Register(joinColonyCmd{})
 	gob.Register(bufferTxCmd{})
 	gob.Register(commitTxCmd{})
 	gob.Register(migrateBeeCmd{})

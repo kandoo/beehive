@@ -54,12 +54,32 @@ type BeeColony struct {
 	Generation TxGeneration `json:"generation"`
 }
 
-func (c *BeeColony) AddSlave(id BeeID) bool {
+func (c BeeColony) IsNil() bool {
+	return c.Master.IsNil()
+}
+
+func (c BeeColony) IsMaster(id BeeID) bool {
+	return c.Master == id
+}
+
+func (c BeeColony) IsSlave(id BeeID) bool {
 	for _, s := range c.Slaves {
 		if s == id {
-			return false
+			return true
 		}
 	}
+	return false
+}
+
+func (c BeeColony) Contains(id BeeID) bool {
+	return c.IsMaster(id) || c.IsSlave(id)
+}
+
+func (c *BeeColony) AddSlave(id BeeID) bool {
+	if c.IsSlave(id) {
+		return false
+	}
+
 	c.Slaves = append(c.Slaves, id)
 	return true
 }
@@ -138,20 +158,21 @@ type bee interface {
 }
 
 type localBee struct {
-	dataCh    chan msgAndHandler
-	ctrlCh    chan LocalCmd
-	ctx       rcvContext
-	beeColony BeeColony
-	qee       *qee
-	txBuf     []Tx
+	dataCh chan msgAndHandler
+	ctrlCh chan LocalCmd
+	ctx    rcvContext
+	beeID  BeeID
+	colony BeeColony
+	qee    *qee
+	txBuf  []Tx
 }
 
 func (bee *localBee) id() BeeID {
-	return bee.beeColony.Master
+	return bee.beeID
 }
 
 func (bee *localBee) colonyUnsafe() BeeColony {
-	return bee.beeColony
+	return bee.colony
 }
 
 func (bee *localBee) slaves() []BeeID {
@@ -233,30 +254,47 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 		lcmd.ResCh <- CmdResult{}
 		return false
 
+	case joinColonyCmd:
+		if cmd.Colony.Contains(bee.id()) {
+			bee.colony = cmd.Colony
+			lcmd.ResCh <- CmdResult{}
+			return true
+		}
+
+		lcmd.ResCh <- CmdResult{
+			Err: fmt.Errorf("Bee %+v is not in this colony %+v", bee.id(),
+				cmd.Colony),
+		}
+		return true
+
 	case listSlavesCmd:
-		lcmd.ResCh <- CmdResult{Data: bee.beeColony.Slaves}
+		lcmd.ResCh <- CmdResult{Data: bee.colony.Slaves}
+		return true
 
 	case addSlaveCmd:
 		var err error
 		slaveID := cmd.BeeID
-		if ok := bee.beeColony.AddSlave(slaveID); !ok {
+		if ok := bee.colony.AddSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
+		return true
 
 	case delSlaveCmd:
 		var err error
 		slaveID := cmd.BeeID
-		if ok := bee.beeColony.DelSlave(slaveID); !ok {
+		if ok := bee.colony.DelSlave(slaveID); !ok {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
+		return true
 
 	case bufferTxCmd:
 		tx := cmd.Tx
 		bee.txBuf = append(bee.txBuf, tx)
 		glog.V(2).Infof("Buffered transaction #%d in %+v", tx.Seq, bee.id())
 		lcmd.ResCh <- CmdResult{}
+		return true
 
 	case commitTxCmd:
 		seq := cmd.Seq
@@ -266,22 +304,22 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 				glog.V(2).Infof("Committed buffered transaction #%d in %+v", tx.Seq,
 					bee.id())
 				lcmd.ResCh <- CmdResult{}
-				goto ret
+				return true
 			}
 		}
 		lcmd.ResCh <- CmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
+		return true
 
 	default:
 		if lcmd.ResCh != nil {
-			glog.Errorf("Unknown bee command %#v", cmd)
+			err := fmt.Errorf("Unknown bee command %#v", cmd)
+			glog.Error(err.Error())
 			lcmd.ResCh <- CmdResult{
-				Err: fmt.Errorf("Unknown bee command %#v", cmd),
+				Err: err,
 			}
 		}
+		return true
 	}
-
-ret:
-	return true
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
@@ -294,9 +332,17 @@ func (bee *localBee) enqueCmd(cmd LocalCmd) {
 	bee.ctrlCh <- cmd
 }
 
-func (bee localBee) replicateTx(tx *Tx) error {
+func (bee *localBee) isMaster() bool {
+	return bee.colony.IsMaster(bee.id())
+}
+
+func (bee *localBee) replicateTx(tx *Tx) error {
 	// TODO(soheil): Add a commit threshold.
-	for i, s := range bee.beeColony.Slaves {
+	if !bee.isMaster() {
+		return fmt.Errorf("Bee %+v is not a master of %+v", bee.id(), bee.colony)
+	}
+
+	for i, s := range bee.colony.Slaves {
 		prx := NewProxy(s.HiveID)
 		cmd := NewRemoteCmd(bufferTxCmd{*tx}, s)
 		_, err := prx.SendCmd(&cmd)
@@ -312,9 +358,9 @@ func (bee localBee) replicateTx(tx *Tx) error {
 	return nil
 }
 
-func (bee localBee) notifyCommitTx(tx TxSeq) error {
+func (bee *localBee) notifyCommitTx(tx TxSeq) error {
 	var ret error
-	for _, s := range bee.beeColony.Slaves {
+	for _, s := range bee.colony.Slaves {
 		prx := NewProxy(s.HiveID)
 		cmd := NewRemoteCmd(commitTxCmd{tx}, s)
 		_, err := prx.SendCmd(&cmd)

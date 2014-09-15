@@ -37,7 +37,6 @@ func (l *testLockHandler) Rcv(msg Msg, ctx RcvContext) error {
 	}
 
 	if err != nil && data == 2 {
-		println(v)
 		testLockCh <- errors.New("Received 2 in a wrong bee")
 		return nil
 	}
@@ -51,8 +50,7 @@ func (l *testLockHandler) Rcv(msg Msg, ctx RcvContext) error {
 	switch data {
 	case 1:
 		data++
-		ctx.Lock(MappedCells{{testLockDict, Key(data.String())}})
-		testLockCh <- nil
+		testLockCh <- ctx.Lock(MappedCells{{testLockDict, Key(data.String())}})
 	case 2:
 		testLockCh <- nil
 	}

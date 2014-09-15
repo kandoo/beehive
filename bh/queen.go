@@ -135,9 +135,17 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 		q.replaceBee(cmd, lcmd.ResCh)
 
 	case lockMappedCellsCmd:
+		if cmd.Colony.IsNil() {
+			lcmd.ResCh <- CmdResult{nil, errors.New("Colony is nil")}
+			return
+		}
+
 		id := q.lock(cmd.MappedCells, cmd.Colony, true)
-		if id != cmd.Colony.Master {
-			lcmd.ResCh <- CmdResult{nil, errors.New("Cannot lock mapset")}
+		if id.IsNil() || !cmd.Colony.IsMaster(id) {
+			lcmd.ResCh <- CmdResult{
+				Err: fmt.Errorf("Cannot lock mapset for %+v (locked by %+v)",
+					cmd.Colony, id),
+			}
 			return
 		}
 
@@ -319,9 +327,7 @@ func (q *qee) defaultLocalBee(id BeeID) localBee {
 		ctrlCh: make(chan LocalCmd, cap(q.ctrlCh)),
 		ctx:    q.ctx.newRcvContext(),
 		qee:    q,
-		beeColony: BeeColony{
-			Master: id,
-		},
+		beeID:  id,
 	}
 }
 
@@ -339,9 +345,8 @@ func (q *qee) proxyFromLocal(id BeeID, lBee *localBee) (*proxyBee,
 	r := &proxyBee{
 		localBee: *lBee,
 	}
-	r.beeColony = BeeColony{
-		Master: id,
-	}
+	r.beeID = id
+	r.colony = BeeColony{}
 	r.ctx.bee = r
 	q.idToBees[id] = r
 	q.idToBees[lBee.id()] = r
@@ -360,9 +365,8 @@ func (q *qee) localFromProxy(id BeeID, pBee *proxyBee) (*localBee,
 	}
 
 	r := pBee.localBee
-	r.beeColony = BeeColony{
-		Master: id,
-	}
+	r.beeID = id
+	r.colony = BeeColony{}
 	r.ctx.bee = &r
 	q.idToBees[id] = &r
 	q.idToBees[pBee.id()] = &r
@@ -444,15 +448,28 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		newColony.AddSlave(slaveID)
 	}
 
+	newColony.Generation++
+	beeID = q.lock(mc, newColony, true)
+
+	if newColony.Master != beeID {
+		q.lastBeeID--
+		bee := q.findOrCreateBee(beeID)
+		q.lockLocally(bee, mc...)
+		// FIXME(soheil): Stop all the started slaves.
+		return bee
+	}
+
 	bee := q.findOrCreateBee(beeID)
 
+	resCh := make(chan CmdResult)
+	bee.enqueCmd(NewLocalCmd(joinColonyCmd{newColony}, beeID, resCh))
+	<-resCh
+
 	for _, s := range newColony.Slaves {
-		resCh := make(chan CmdResult)
-		bee.enqueCmd(NewLocalCmd(addSlaveCmd{s}, BeeID{}, resCh))
+		bee.enqueCmd(NewLocalCmd(joinColonyCmd{newColony}, s, resCh))
 		<-resCh
 	}
 
-	q.lock(mc, newColony, true)
 	q.lockLocally(bee, mc...)
 	return bee
 }

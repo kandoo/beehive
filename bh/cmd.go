@@ -41,7 +41,9 @@ type findBeeCmd struct {
 	BeeID BeeID
 }
 
-type createBeeCmd struct {
+type createBeeCmd struct{}
+
+type joinColonyCmd struct {
 	Colony BeeColony
 }
 
