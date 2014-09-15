@@ -88,21 +88,33 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 }
 
 func (h *hive) init() {
-	gob.Register(BeeID{})
 	gob.Register(HiveID(""))
+	gob.Register(BeeID{})
+	gob.Register(BeeColony{})
 
+	gob.Register(Tx{})
+	gob.Register(TxSeq(0))
+	gob.Register(TxGeneration(0))
+
+	gob.Register(StateOp{})
 	gob.Register(inMemDict{})
 	gob.Register(inMemoryState{})
 
-	gob.Register(StateOp{})
-	gob.Register(Tx{})
-	gob.Register(TxSeq(0))
-
 	gob.Register(msg{})
+
 	gob.Register(CmdResult{})
-	gob.Register(migrateBeeCmdData{})
-	gob.Register(replaceBeeCmdData{})
-	gob.Register(lockMappedCellsData{})
+	gob.Register(stopCmd{})
+	gob.Register(startCmd{})
+	gob.Register(findBeeCmd{})
+	gob.Register(createBeeCmd{})
+	gob.Register(bufferTxCmd{})
+	gob.Register(commitTxCmd{})
+	gob.Register(migrateBeeCmd{})
+	gob.Register(replaceBeeCmd{})
+	gob.Register(lockMappedCellsCmd{})
+	gob.Register(listSlavesCmd{})
+	gob.Register(addSlaveCmd{})
+	gob.Register(delSlaveCmd{})
 
 	gob.Register(GobError{})
 
@@ -221,7 +233,7 @@ func (h *hive) closeChannels() {
 	}
 
 	for m, _ := range qs {
-		m.ctrlCh <- NewLocalCmd(stopCmd, nil, BeeID{}, stopCh)
+		m.ctrlCh <- NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
 		glog.V(3).Infof("Waiting on a qee: %p", m)
 		select {
 		case res := <-stopCh:

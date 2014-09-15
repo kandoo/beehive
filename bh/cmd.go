@@ -1,9 +1,8 @@
 package bh
 
 type RemoteCmd struct {
-	CmdType CmdType
-	CmdData interface{}
-	CmdTo   BeeID
+	Cmd   interface{}
+	CmdTo BeeID
 }
 
 type LocalCmd struct {
@@ -11,19 +10,16 @@ type LocalCmd struct {
 	ResCh chan CmdResult
 }
 
-func NewRemoteCmd(t CmdType, d interface{}, to BeeID) RemoteCmd {
+func NewRemoteCmd(cmd interface{}, to BeeID) RemoteCmd {
 	return RemoteCmd{
-		CmdType: t,
-		CmdData: d,
-		CmdTo:   to,
+		Cmd:   cmd,
+		CmdTo: to,
 	}
 }
 
-func NewLocalCmd(t CmdType, d interface{}, to BeeID,
-	ch chan CmdResult) LocalCmd {
-
+func NewLocalCmd(cmd interface{}, to BeeID, ch chan CmdResult) LocalCmd {
 	return LocalCmd{
-		RemoteCmd: NewRemoteCmd(t, d, to),
+		RemoteCmd: NewRemoteCmd(cmd, to),
 		ResCh:     ch,
 	}
 }
@@ -37,45 +33,53 @@ func (r CmdResult) get() (interface{}, error) {
 	return r.Data, r.Err
 }
 
-type CmdType int
+type stopCmd struct{}
 
-const (
-	stopCmd            CmdType = iota
-	startCmd                   = iota
-	findBeeCmd                 = iota
-	createBeeCmd               = iota
-	migrateBeeCmd              = iota
-	replaceBeeCmd              = iota
-	lockMappedCellsCmd         = iota
-	startDetachedCmd           = iota
-	addSlaveCmd                = iota
-	delSlaveCmd                = iota
-	listSlavesCmd              = iota
-	bufferTxCmd                = iota
-	commitTxCmd                = iota
-)
+type startCmd struct{}
 
-type migrateBeeCmdData struct {
+type findBeeCmd struct {
+	BeeID BeeID
+}
+
+type createBeeCmd struct {
+	Colony BeeColony
+}
+
+type startDetachedCmd struct {
+	Handler DetachedHandler
+}
+
+type bufferTxCmd struct {
+	Tx Tx
+}
+
+type commitTxCmd struct {
+	Seq TxSeq
+}
+
+type migrateBeeCmd struct {
 	From BeeID
 	To   HiveID
 }
 
-type replaceBeeCmdData struct {
+type replaceBeeCmd struct {
 	OldBees     BeeColony
 	NewBees     BeeColony
 	State       *inMemoryState
 	MappedCells MappedCells
 }
 
-type lockMappedCellsData struct {
+type lockMappedCellsCmd struct {
 	Colony      BeeColony
 	MappedCells MappedCells
 }
 
-type addSlaveCmdData struct {
+type listSlavesCmd struct{}
+
+type addSlaveCmd struct {
 	BeeID
 }
 
-type delSlaveCmdData struct {
+type delSlaveCmd struct {
 	BeeID
 }

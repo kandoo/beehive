@@ -104,7 +104,7 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.qee.ctrlCh <- NewLocalCmd(cmd.CmdType, cmd.CmdData, cmd.CmdTo, resCh)
+	a.qee.ctrlCh <- NewLocalCmd(cmd.Cmd, cmd.CmdTo, resCh)
 
 	res := <-resCh
 	if res.Err != nil {

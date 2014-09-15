@@ -71,7 +71,7 @@ func (q *qee) closeChannels() {
 
 func (q *qee) stopBees() {
 	stopCh := make(chan CmdResult)
-	stopCmd := NewLocalCmd(stopCmd, nil, BeeID{}, stopCh)
+	stopCmd := NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
 	for _, b := range q.idToBees {
 		b.enqueCmd(stopCmd)
 
@@ -82,85 +82,81 @@ func (q *qee) stopBees() {
 	}
 }
 
-func (q *qee) handleCmd(cmd LocalCmd) {
-	if cmd.CmdTo.ID != 0 {
-		if bee, ok := q.idToBees[cmd.CmdTo]; ok {
-			cmdResCh := cmd.ResCh
+func (q *qee) handleCmd(lcmd LocalCmd) {
+	if lcmd.CmdTo.ID != 0 {
+		if bee, ok := q.idToBees[lcmd.CmdTo]; ok {
+			cmdResCh := lcmd.ResCh
 			if cmdResCh != nil {
-				cmd.ResCh = make(chan CmdResult)
+				lcmd.ResCh = make(chan CmdResult)
 			}
-			bee.enqueCmd(cmd)
-			res := <-cmd.ResCh
+			bee.enqueCmd(lcmd)
+			res := <-lcmd.ResCh
 			if cmdResCh != nil {
 				cmdResCh <- res
 			}
 			return
 		}
 
-		if cmd.ResCh != nil {
-			cmd.ResCh <- CmdResult{
-				Err: fmt.Errorf("Cannot find bee for the command %+v", cmd),
+		if lcmd.ResCh != nil {
+			lcmd.ResCh <- CmdResult{
+				Err: fmt.Errorf("Cannot find bee for the command %#v", lcmd),
 			}
 		}
 		return
 	}
 
-	switch cmd.CmdType {
+	switch cmd := lcmd.Cmd.(type) {
 	case stopCmd:
 		glog.V(3).Infof("Stopping bees of %p", q)
 		q.stopBees()
 		q.closeChannels()
-		cmd.ResCh <- CmdResult{}
+		lcmd.ResCh <- CmdResult{}
 
 	case findBeeCmd:
-		id := cmd.CmdData.(BeeID)
+		id := cmd.BeeID
 		r, ok := q.idToBees[id]
 		if ok {
-			cmd.ResCh <- CmdResult{r, nil}
+			lcmd.ResCh <- CmdResult{r, nil}
 			return
 		}
 
 		err := fmt.Errorf("No bee found: %+v", id)
-		cmd.ResCh <- CmdResult{nil, err}
+		lcmd.ResCh <- CmdResult{nil, err}
 
 	case createBeeCmd:
 		r := q.newLocalBee()
 		glog.V(2).Infof("Created a new local bee: %+v", r.id())
-		cmd.ResCh <- CmdResult{r.id(), nil}
+		lcmd.ResCh <- CmdResult{r.id(), nil}
 
 	case migrateBeeCmd:
-		m := cmd.CmdData.(migrateBeeCmdData)
-		q.migrate(m.From, m.To, cmd.ResCh)
+		q.migrate(cmd.From, cmd.To, lcmd.ResCh)
 
 	case replaceBeeCmd:
-		d := cmd.CmdData.(replaceBeeCmdData)
-		q.replaceBee(d, cmd.ResCh)
+		q.replaceBee(cmd, lcmd.ResCh)
 
 	case lockMappedCellsCmd:
-		d := cmd.CmdData.(lockMappedCellsData)
-		id := q.lock(d.MappedCells, d.Colony, true)
-		if id != d.Colony.Master {
-			cmd.ResCh <- CmdResult{nil, errors.New("Cannot lock mapset")}
+		id := q.lock(cmd.MappedCells, cmd.Colony, true)
+		if id != cmd.Colony.Master {
+			lcmd.ResCh <- CmdResult{nil, errors.New("Cannot lock mapset")}
 			return
 		}
 
-		q.lockLocally(q.findOrCreateBee(id), d.MappedCells...)
-		cmd.ResCh <- CmdResult{id, nil}
+		q.lockLocally(q.findOrCreateBee(id), cmd.MappedCells...)
+		lcmd.ResCh <- CmdResult{id, nil}
 
 	case startDetachedCmd:
-		h := cmd.CmdData.(DetachedHandler)
-		b := q.newDetachedBee(h)
+		b := q.newDetachedBee(cmd.Handler)
 		q.idToBees[b.id()] = b
 		go b.start()
 
-		if cmd.ResCh != nil {
-			cmd.ResCh <- CmdResult{Data: b.id()}
+		if lcmd.ResCh != nil {
+			lcmd.ResCh <- CmdResult{Data: b.id()}
 		}
 
 	default:
-		if cmd.ResCh != nil {
+		if lcmd.ResCh != nil {
 			glog.Errorf("Unknown bee command %v", cmd)
-			cmd.ResCh <- CmdResult{
+			lcmd.ResCh <- CmdResult{
 				Err: fmt.Errorf("Unknown bee command %v", cmd),
 			}
 		}
@@ -433,13 +429,11 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		mc, q.ctx.app.ReplicationFactor())
 	for _, h := range slaveHives {
 		prx := NewProxy(h)
-		cmd := RemoteCmd{
-			CmdType: createBeeCmd,
-			CmdTo: BeeID{
-				HiveID:  h,
-				AppName: q.ctx.app.Name(),
-			},
+		to := BeeID{
+			HiveID:  h,
+			AppName: q.ctx.app.Name(),
 		}
+		cmd := NewRemoteCmd(createBeeCmd{}, to)
 		d, err := prx.SendCmd(&cmd)
 		if err != nil {
 			glog.Fatalf("Failed to create the new bee on %s", h)
@@ -454,7 +448,7 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 
 	for _, s := range newColony.Slaves {
 		resCh := make(chan CmdResult)
-		bee.enqueCmd(NewLocalCmd(addSlaveCmd, addSlaveCmdData{s}, BeeID{}, resCh))
+		bee.enqueCmd(NewLocalCmd(addSlaveCmd{s}, BeeID{}, resCh))
 		<-resCh
 	}
 
@@ -490,7 +484,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	slaves := oldBee.slaves()
 
 	stopCh := make(chan CmdResult)
-	oldBee.enqueCmd(NewLocalCmd(stopCmd, nil, BeeID{}, stopCh))
+	oldBee.enqueCmd(NewLocalCmd(stopCmd{}, BeeID{}, stopCh))
 	_, err := (<-stopCh).get()
 	if err != nil {
 		resCh <- CmdResult{nil, err}
@@ -522,11 +516,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	if newColony.Master.IsNil() {
 		newColony.Master = BeeID{HiveID: to, AppName: beeID.AppName}
 
-		cmd := RemoteCmd{
-			CmdType: createBeeCmd,
-			CmdTo:   newColony.Master,
-		}
-
+		cmd := NewRemoteCmd(createBeeCmd{}, newColony.Master)
 		data, err := prx.SendCmd(&cmd)
 		if err != nil {
 			glog.Errorf("Error in creating a new bee: %s", err)
@@ -553,9 +543,8 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 
 	mappedCells := q.mappedCellsOfBee(oldBee.id())
 	cmd := RemoteCmd{
-		CmdType: replaceBeeCmd,
-		CmdTo:   newColony.Master,
-		CmdData: replaceBeeCmdData{
+		CmdTo: newColony.Master,
+		Cmd: replaceBeeCmd{
 			OldBees:     oldColony,
 			NewBees:     newColony,
 			State:       oldBee.state().(*inMemoryState),
@@ -575,35 +564,35 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	resCh <- CmdResult{newBee, nil}
 }
 
-func (q *qee) replaceBee(d replaceBeeCmdData, resCh chan CmdResult) {
-	if !q.isLocalBee(d.NewBees.Master) {
+func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
+	if !q.isLocalBee(cmd.NewBees.Master) {
 		err := fmt.Errorf("Cannot replace with a non-local bee: %+v",
-			d.NewBees.Master)
+			cmd.NewBees.Master)
 		resCh <- CmdResult{nil, err}
 		return
 	}
 
-	b, ok := q.beeByID(d.NewBees.Master)
+	b, ok := q.beeByID(cmd.NewBees.Master)
 	if !ok {
-		err := fmt.Errorf("Cannot find bee: %+v", d.NewBees.Master)
+		err := fmt.Errorf("Cannot find bee: %+v", cmd.NewBees.Master)
 		resCh <- CmdResult{nil, err}
 		return
 	}
 
 	newState := b.state()
-	for name, oldDict := range d.State.Dicts {
+	for name, oldDict := range cmd.State.Dicts {
 		newDict := newState.Dict(DictName(name))
 		oldDict.ForEach(func(k Key, v Value) {
 			newDict.Put(k, v)
 		})
 	}
-	glog.V(2).Infof("Replicated the state of %+v on %+v", d.OldBees.Master,
-		d.NewBees.Master)
+	glog.V(2).Infof("Replicated the state of %+v on %+v", cmd.OldBees.Master,
+		cmd.NewBees.Master)
 
-	q.ctx.hive.registry.set(d.NewBees, d.MappedCells)
-	glog.V(2).Infof("Locked the mapset %+v for %+v", d.MappedCells, d.NewBees)
+	q.ctx.hive.registry.set(cmd.NewBees, cmd.MappedCells)
+	glog.V(2).Infof("Locked the mapset %+v for %+v", cmd.MappedCells, cmd.NewBees)
 
-	q.lockLocally(b, d.MappedCells...)
+	q.lockLocally(b, cmd.MappedCells...)
 
 	resCh <- CmdResult{b.id(), nil}
 }

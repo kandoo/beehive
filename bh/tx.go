@@ -1,6 +1,7 @@
 package bh
 
 type TxSeq uint64
+type TxGeneration uint64
 
 type TxStatus uint8
 
@@ -12,10 +13,11 @@ const (
 // Tx represents the side effects of an operation: messages emitted during the
 // transaction as well as state operations.
 type Tx struct {
-	Seq    TxSeq
-	Msgs   []Msg
-	Ops    []StateOp
-	Status TxStatus
+	Seq        TxSeq
+	Generation TxGeneration
+	Msgs       []Msg
+	Ops        []StateOp
+	Status     TxStatus
 }
 
 func (t *Tx) AddMsg(msg Msg) {

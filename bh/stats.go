@@ -26,7 +26,7 @@ func newAppStatCollector(h Hive) statCollector {
 	c := &appStatCollector{hive: h}
 	a := h.NewApp("StatCollector")
 	a.Handle(localStatUpdate{}, &localStatCollector{})
-	a.Handle(migrateBeeCmdData{}, &localStatCollector{})
+	a.Handle(migrateBeeCmd{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
 	glog.V(1).Infof("App stat collector is registered.")
 	return c
@@ -154,14 +154,14 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 		ctx.Emit(s.toAggrStat())
 		d.Put(k, Value(s.Bytes()))
 
-	case migrateBeeCmdData:
+	case migrateBeeCmd:
 		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
 		if !ok {
 			return fmt.Errorf("Cannot find app for migrate command: %+v", m)
 		}
 
 		resCh := make(chan CmdResult)
-		a.qee.ctrlCh <- NewLocalCmd(migrateBeeCmd, m, BeeID{}, resCh)
+		a.qee.ctrlCh <- NewLocalCmd(m, BeeID{}, resCh)
 		<-resCh
 		// TODO(soheil): Maybe handle errors.
 	}
@@ -264,7 +264,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	}
 
 	glog.Infof("Initiating a migration: %+v", update)
-	ctx.SendToBee(migrateBeeCmdData{update.To, maxHive}, msg.From())
+	ctx.SendToBee(migrateBeeCmd{update.To, maxHive}, msg.From())
 
 	stat.Migrated = true
 	return nil

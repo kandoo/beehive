@@ -79,7 +79,7 @@ func (g *registry) disconnect() {
 	}
 
 	watchStopCh := make(chan CmdResult)
-	g.watchCmdCh <- NewLocalCmd(stopCmd, nil, BeeID{}, watchStopCh)
+	g.watchCmdCh <- NewLocalCmd(stopCmd{}, BeeID{}, watchStopCh)
 	<-watchStopCh
 
 	cancelRes := make(chan bool)
@@ -162,12 +162,12 @@ func (g *registry) watchHives() {
 
 	for {
 		select {
-		case cmd := <-g.watchCmdCh:
-			switch cmd.CmdType {
+		case wcmd := <-g.watchCmdCh:
+			switch wcmd.Cmd.(type) {
 			case stopCmd:
 				stopCh <- true
 				<-joinCh
-				cmd.ResCh <- CmdResult{}
+				wcmd.ResCh <- CmdResult{}
 				return
 			}
 		case res := <-resCh:

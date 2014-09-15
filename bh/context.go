@@ -147,11 +147,11 @@ func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
 
 func (ctx *rcvContext) Lock(ms MappedCells) error {
 	resCh := make(chan CmdResult)
-	d := lockMappedCellsData{
+	cmd := lockMappedCellsCmd{
 		MappedCells: ms,
 		Colony:      ctx.bee.colonyUnsafe(),
 	}
-	ctx.app.qee.ctrlCh <- NewLocalCmd(lockMappedCellsCmd, d, BeeID{}, resCh)
+	ctx.app.qee.ctrlCh <- NewLocalCmd(cmd, BeeID{}, resCh)
 	res := <-resCh
 	return res.Err
 }
@@ -166,7 +166,7 @@ func (ctx *rcvContext) BeeLocal() interface{} {
 
 func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeID {
 	resCh := make(chan CmdResult)
-	cmd := NewLocalCmd(startDetachedCmd, h, BeeID{}, resCh)
+	cmd := NewLocalCmd(startDetachedCmd{Handler: h}, BeeID{}, resCh)
 
 	switch b := ctx.bee.(type) {
 	case *localBee:
