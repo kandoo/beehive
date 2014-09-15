@@ -88,19 +88,23 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 }
 
 func (h *hive) init() {
-	gob.Register(inMemDict{})
-	gob.Register(inMemoryState{})
-	gob.Register(StateOp{})
-	gob.Register(Tx{})
-	gob.Register(msg{})
 	gob.Register(BeeID{})
 	gob.Register(HiveID(""))
+
+	gob.Register(inMemDict{})
+	gob.Register(inMemoryState{})
+
+	gob.Register(StateOp{})
+	gob.Register(Tx{})
+	gob.Register(TxSeq(0))
+
+	gob.Register(msg{})
 	gob.Register(CmdResult{})
 	gob.Register(migrateBeeCmdData{})
 	gob.Register(replaceBeeCmdData{})
 	gob.Register(lockMappedCellsData{})
+
 	gob.Register(GobError{})
-	gob.Register(TxSeq(0))
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)

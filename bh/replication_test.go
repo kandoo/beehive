@@ -101,4 +101,12 @@ func TestReplicatedBee(t *testing.T) {
 			t.Errorf("Incorrect number of slaves for MyApp: %+v", colony)
 		}
 	}
+
+	for i := 1; i < len(addrs); i++ {
+		for _, b := range hives[i].(*hive).apps["MyApp"].qee.idToBees {
+			if len(b.(*localBee).txBuf) != 1 {
+				t.Errorf("Incorrect number of transaction in slave: %+v", b.id())
+			}
+		}
+	}
 }
