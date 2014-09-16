@@ -101,14 +101,14 @@ func (g *registry) hiveRegKeyVal() (string, string) {
 func (g *registry) registerHive() {
 	k, v := g.hiveRegKeyVal()
 	if _, err := g.Create(k, v, g.hiveTTL); err != nil {
-		glog.Fatalf("Error in registering hive entry: %v", err)
+		glog.Fatalf("Error in registering hive entry: %#v", err)
 	}
 }
 
 func (g *registry) unregisterHive() {
 	k, _ := g.hiveRegKeyVal()
 	if _, err := g.Delete(k, false); err != nil {
-		glog.Fatalf("Error in unregistering hive entry: %v", err)
+		glog.Fatalf("Error in unregistering hive entry: %#v", err)
 	}
 }
 
@@ -135,7 +135,7 @@ func (g *registry) updateTTL() {
 		case <-time.After(time.Duration(waitTimeout) * time.Second):
 			k, v := g.hiveRegKeyVal()
 			if _, err := g.Update(k, v, g.hiveTTL); err != nil {
-				glog.Fatalf("Error in updating hive entry in the registry: %v", err)
+				glog.Fatalf("Error in updating hive entry in the registry: %#v", err)
 			}
 			glog.V(1).Infof("Hive %s's TTL updated in registry", g.hive.ID())
 		}
@@ -145,7 +145,7 @@ func (g *registry) updateTTL() {
 func (g *registry) watchHives() {
 	res, err := g.Get(g.hivePath(), false, true)
 	if err != nil {
-		glog.Fatalf("Cannot find the hive directory: %v", err)
+		glog.Fatalf("Cannot find the hive directory: %#v", err)
 	}
 
 	for _, n := range res.Node.Nodes {
@@ -273,7 +273,7 @@ func (g registry) unlockApp(id BeeID) error {
 
 	v := BeeIDFromBytes([]byte(res.Node.Value))
 	if id != v {
-		return fmt.Errorf("Unlocking someone else's lock: %v, %v", id, v)
+		return fmt.Errorf("Unlocking someone else's lock: %#v, %#v", id, v)
 	}
 
 	_, err = g.Delete(k, false)
@@ -284,61 +284,55 @@ func (g registry) unlockApp(id BeeID) error {
 	return nil
 }
 
-func (g registry) set(c BeeColony, ms MappedCells) BeeID {
-	err := g.lockApp(c.Master)
+func (g registry) syncCall(b BeeID, f func()) {
+	err := g.lockApp(b)
 	if err != nil {
-		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)
+		glog.Fatalf("Cannot lock app %#v: %#v", b, err)
 	}
 
 	defer func() {
-		err := g.unlockApp(c.Master)
+		err := g.unlockApp(b)
 		if err != nil {
-			glog.Fatalf("Cannot unlock app %v: %v", c.Master, err)
+			glog.Fatalf("Cannot unlock app %#v: %#v", b, err)
 		}
 	}()
 
-	sort.Sort(ms)
+	f()
+}
 
-	v, err := c.Bytes()
+func (g registry) set(col BeeColony, mc MappedCells) BeeID {
+	sort.Sort(mc)
+
+	v, err := col.Bytes()
 	if err != nil {
 		glog.Fatalf("Cannot serialize BeeColony: %s", err)
 	}
 
-	for _, dk := range ms {
-		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
+	for _, c := range mc {
+		k := g.appPath(string(col.Master.AppName), string(c.Dict), string(c.Key))
 		_, err := g.Set(k, string(v), g.appTTL)
 		if err != nil {
 			glog.Fatalf("Cannot set bee: %+v", k)
 		}
 	}
-	return c.Master
+	return col.Master
 }
 
-func (g registry) storeOrGet(c BeeColony, ms MappedCells) BeeID {
-	err := g.lockApp(c.Master)
-	if err != nil {
-		glog.Fatalf("Cannot lock app %v: %v", c.Master, err)
-	}
+func (g registry) storeOrGet(col BeeColony, mc MappedCells) BeeID {
+	sort.Sort(mc)
 
-	defer func() {
-		err := g.unlockApp(c.Master)
-		if err != nil {
-			glog.Fatalf("Cannot unlock app %v: %v", c.Master, err)
-		}
-	}()
-
-	sort.Sort(ms)
-
-	v, err := c.Bytes()
+	v, err := col.Bytes()
 	if err != nil {
 		glog.Fatalf("Cannot serialize BeeColony: %s", err)
 	}
 
+	unsetCells := make(MappedCells, 0, len(mc))
 	validate := false
-	for _, dk := range ms {
-		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
+	for _, c := range mc {
+		k := g.appPath(string(col.Master.AppName), string(c.Dict), string(c.Key))
 		res, err := g.Get(k, false, false)
 		if err != nil {
+			unsetCells = append(unsetCells, c)
 			continue
 		}
 
@@ -347,28 +341,61 @@ func (g registry) storeOrGet(c BeeColony, ms MappedCells) BeeID {
 			glog.Fatalf("Cannot decode a BeeColony: %s", err)
 		}
 
-		if entry.Eq(c) {
+		if entry.Eq(col) {
 			continue
 		}
 
 		if validate {
-			glog.Fatalf("Incosistencies for bee %v: %v != %v", c.Master, c, entry)
+			glog.Fatalf("Incosistencies for bee %#v: %#v != %#v", col.Master, col,
+				entry)
 		}
 
-		c = entry
+		col = entry
 		v = []byte(res.Node.Value)
 		validate = true
 	}
 
-	for _, dk := range ms {
-		k := g.appPath(string(c.Master.AppName), string(dk.Dict), string(dk.Key))
+	for _, c := range unsetCells {
+		k := g.appPath(string(col.Master.AppName), string(c.Dict), string(c.Key))
 		g.Create(k, string(v), g.appTTL)
 	}
 
-	return c.Master
+	return col.Master
 }
 
 func (g registry) compareAndSet(oldC BeeColony, newC BeeColony,
-	ms MappedCells) (BeeColony, error) {
+	mc MappedCells) (BeeColony, error) {
+	if newC.Generation < oldC.Generation {
+		return BeeColony{}, fmt.Errorf("Stale colony generation %#v < %#v",
+			newC.Generation, oldC.Generation)
+	}
 
+	for _, c := range mc {
+		k := g.appPath(string(oldC.Master.AppName), string(c.Dict), string(c.Key))
+		res, err := g.Get(k, false, false)
+		if err != nil {
+			return BeeColony{}, fmt.Errorf("The mapped cells are stale: %v", err)
+		}
+
+		entry, err := BeeColonyFromBytes([]byte(res.Node.Value))
+		if err != nil {
+			glog.Fatalf("Cannot decode a BeeColony: %s", err)
+		}
+
+		if entry.Generation != oldC.Generation {
+			return entry, fmt.Errorf("Colony generation is stale: %v != %v",
+				entry.Generation, oldC.Generation)
+		}
+	}
+
+	v, err := newC.Bytes()
+	// TODO(soheil): We can use etcd creation and modification indices here.
+	for _, c := range mc {
+		k := g.appPath(string(oldC.Master.AppName), string(c.Dict), string(c.Key))
+		if _, err = g.Update(k, string(v), g.appTTL); err != nil {
+			glog.Fatalf("Error in updating the key: %#v", err)
+		}
+	}
+
+	return newC, nil
 }

@@ -52,7 +52,7 @@ func TestReplicationStrategy(t *testing.T) {
 	hives, joinChs := startHivesForReplicationTest(t,
 		[]string{"127.0.0.1:32771", "127.0.0.1:32772"}, func(h Hive) {})
 
-	slaves := hives[1].ReplicationStrategy().SelectSlaveHives(MappedCells{}, 2)
+	slaves := hives[1].ReplicationStrategy().SelectSlaveHives(nil, 2)
 	if len(slaves) != 1 {
 		t.Errorf("Returned more slaves that asked: %+v", slaves)
 	}
@@ -104,7 +104,7 @@ func TestReplicatedBee(t *testing.T) {
 
 	for i := 1; i < len(addrs); i++ {
 		for _, b := range hives[i].(*hive).apps["MyApp"].qee.idToBees {
-			if len(b.(*localBee).txBuf) != 1 {
+			if localB, ok := b.(*localBee); ok && len(localB.txBuf) != 1 {
 				t.Errorf("Incorrect number of transaction in slave: %+v", b.id())
 			}
 		}

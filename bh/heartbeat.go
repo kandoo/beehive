@@ -66,6 +66,7 @@ func (p *pulseTaker) Start(ctx RcvContext) {
 				close(p.dataCh)
 				close(p.ctrlCh)
 				cmd.resCh <- true
+				glog.V(2).Infof("Heartbeat stopped")
 				return
 			}
 		case m := <-p.dataCh:

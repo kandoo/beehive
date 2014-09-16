@@ -72,7 +72,8 @@ func (q *qee) closeChannels() {
 func (q *qee) stopBees() {
 	stopCh := make(chan CmdResult)
 	stopCmd := NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
-	for _, b := range q.idToBees {
+	for id, b := range q.idToBees {
+		glog.V(2).Infof("Stopping bee: %#v", id)
 		b.enqueCmd(stopCmd)
 
 		_, err := (<-stopCh).get()
@@ -305,11 +306,16 @@ func (q *qee) lock(mappedCells MappedCells, c BeeColony, force bool) BeeID {
 	}
 
 	var prevBee BeeID
+	reg := &q.ctx.hive.registry
 	if force {
 		// FIXME(soheil): We should migrate the previous owner first.
-		prevBee = q.ctx.hive.registry.set(c, mappedCells)
+		reg.syncCall(c.Master, func() {
+			prevBee = reg.set(c, mappedCells)
+		})
 	} else {
-		prevBee = q.ctx.hive.registry.storeOrGet(c, mappedCells)
+		reg.syncCall(c.Master, func() {
+			prevBee = reg.storeOrGet(c, mappedCells)
+		})
 	}
 
 	return prevBee
@@ -321,7 +327,10 @@ func (q *qee) lockKey(dk CellKey, b bee, c BeeColony) bool {
 		return true
 	}
 
-	q.ctx.hive.registry.storeOrGet(c, []CellKey{dk})
+	reg := &q.ctx.hive.registry
+	reg.syncCall(c.Master, func() {
+		reg.storeOrGet(c, []CellKey{dk})
+	})
 	return true
 }
 
@@ -610,9 +619,12 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 	glog.V(2).Infof("Replicated the state of %+v on %+v", cmd.OldBees.Master,
 		cmd.NewBees.Master)
 
-	q.ctx.hive.registry.set(cmd.NewBees, cmd.MappedCells)
-	glog.V(2).Infof("Locked the mapset %+v for %+v", cmd.MappedCells, cmd.NewBees)
+	reg := &q.ctx.hive.registry
+	reg.syncCall(cmd.NewBees.Master, func() {
+		reg.set(cmd.NewBees, cmd.MappedCells)
+	})
 
+	glog.V(2).Infof("Locked the mapset %+v for %+v", cmd.MappedCells, cmd.NewBees)
 	q.lockLocally(b, cmd.MappedCells...)
 
 	resCh <- CmdResult{b.id(), nil}

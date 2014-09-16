@@ -1,6 +1,10 @@
 package bh
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/coreos/go-etcd/etcd"
+)
 
 func maybeSkipRegistryTest(h *hive, t *testing.T) {
 	if len(h.config.RegAddrs) != 0 {
@@ -96,4 +100,51 @@ func TestRegistryWatchHives(t *testing.T) {
 
 	h1.Stop()
 	<-joinCh1
+}
+
+func TestCompareAndSet(t *testing.T) {
+	if len(DefaultCfg.RegAddrs) == 0 {
+		t.Skip("Skipping the registery test: No registery address")
+	}
+
+	reg := registry{
+		Client:  etcd.NewClient(DefaultCfg.RegAddrs),
+		hive:    nil,
+		prefix:  regPrefix,
+		hiveDir: regHiveDir,
+		hiveTTL: regHiveTTL,
+		appDir:  regAppDir,
+		appTTL:  regAppTTL,
+	}
+
+	if ok := reg.SyncCluster(); !ok {
+		t.Error("Cannot sync registry")
+	}
+
+	h := HiveID("127.0.0.1:12345")
+	a := AppName("TestA1")
+	col1 := BeeColony{
+		Master: BeeID{
+			HiveID:  h,
+			AppName: a,
+			ID:      1,
+		},
+		Slaves:     nil,
+		Generation: 1,
+	}
+
+	col2 := col1
+	col2.Generation++
+
+	cells := MappedCells{{"D", "K"}}
+
+	reg.syncCall(col1.Master, func() {
+		if b := reg.set(col1, cells); b != col1.Master {
+			t.Errorf("Cannot set in registery %#v != %#v", b, col1.Master)
+		}
+
+		if _, err := reg.compareAndSet(col1, col2, cells); err != nil {
+			t.Errorf("Error in compare and swap: %v", err)
+		}
+	})
 }
