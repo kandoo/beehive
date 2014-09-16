@@ -71,184 +71,185 @@ type mapContext struct {
 	app   *app
 }
 
-type rcvContext struct {
-	mapContext
-	bee   bee
-	local interface{}
-	tx    Tx
-}
-
-// Creates a new receiver context.
-func (ctx mapContext) newRcvContext() rcvContext {
-	rc := rcvContext{mapContext: ctx}
-	// We need to reset the state for the new bees.
-	rc.state = nil
-	return rc
-}
-
-func (ctx *mapContext) State() State {
-	if ctx.state == nil {
-		ctx.state = newState(ctx.app)
+func (q *qee) State() State {
+	if q.state == nil {
+		q.state = newState(q.app)
 	}
 
-	return ctx.state
+	return q.state
 }
 
-func (ctx *mapContext) Dict(n DictName) Dict {
-	return ctx.State().Dict(n)
+func (q *qee) Dict(n DictName) Dict {
+	return q.State().Dict(n)
 }
 
-func (ctx *mapContext) Hive() Hive {
-	return ctx.hive
+func (q *qee) Hive() Hive {
+	return q.hive
+}
+
+func (b *localBee) Hive() Hive {
+	return b.hive
+}
+
+func (b *localBee) State() State {
+	return b.txState()
+}
+
+func (b *localBee) Dict(n DictName) Dict {
+	return b.State().Dict(n)
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.
-func (ctx *rcvContext) Emit(msgData interface{}) {
-	ctx.bufferOrEmit(newMsgFromData(msgData, ctx.bee.id(), BeeID{}))
+func (b *localBee) Emit(msgData interface{}) {
+	b.bufferOrEmit(newMsgFromData(msgData, b.id(), BeeID{}))
 }
 
-func (ctx *rcvContext) doEmit(msg *msg) {
-	ctx.hive.emitMsg(msg)
+func (b *localBee) doEmit(msg *msg) {
+	b.hive.emitMsg(msg)
 }
 
-func (ctx *rcvContext) bufferOrEmit(msg *msg) {
-	if !ctx.tx.IsOpen() {
-		ctx.doEmit(msg)
+func (b *localBee) bufferOrEmit(msg *msg) {
+	if !b.tx.IsOpen() {
+		b.doEmit(msg)
 		return
 	}
 
-	glog.V(2).Infof("Buffers msg %+v in tx %d", msg, ctx.tx.Seq)
-	ctx.tx.AddMsg(msg)
+	glog.V(2).Infof("Buffers msg %+v in tx %d", msg, b.tx.Seq)
+	b.tx.AddMsg(msg)
 }
 
-func (ctx *rcvContext) SendToCellKey(msgData interface{}, to AppName,
+func (b *localBee) SendToCellKey(msgData interface{}, to AppName,
 	dk CellKey) {
 	// TODO(soheil): Implement send to.
 	glog.Fatal("Sendto is not implemented.")
 
-	msg := newMsgFromData(msgData, ctx.bee.id(), BeeID{})
-	ctx.bufferOrEmit(msg)
+	msg := newMsgFromData(msgData, b.id(), BeeID{})
+	b.bufferOrEmit(msg)
 }
 
-func (ctx *rcvContext) SendToBee(msgData interface{}, to BeeID) {
-	ctx.bufferOrEmit(newMsgFromData(msgData, ctx.bee.id(), to))
+func (b *localBee) SendToBee(msgData interface{}, to BeeID) {
+	b.bufferOrEmit(newMsgFromData(msgData, b.id(), to))
 }
 
 // Reply to thatMsg with the provided replyData.
-func (ctx *rcvContext) ReplyTo(thatMsg Msg, replyData interface{}) error {
+func (b *localBee) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
 	if m.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
 
-	ctx.SendToBee(replyData, m.From())
+	b.SendToBee(replyData, m.From())
 	return nil
 }
 
-func (ctx *rcvContext) Lock(ms MappedCells) error {
+func (b *localBee) Lock(ms MappedCells) error {
 	resCh := make(chan CmdResult)
 	cmd := lockMappedCellsCmd{
 		MappedCells: ms,
-		Colony:      ctx.bee.colonyUnsafe(),
+		Colony:      b.colonyUnsafe(),
 	}
-	ctx.app.qee.ctrlCh <- NewLocalCmd(cmd, BeeID{}, resCh)
+	b.qee.ctrlCh <- NewLocalCmd(cmd, BeeID{}, resCh)
 	res := <-resCh
 	return res.Err
 }
 
-func (ctx *rcvContext) SetBeeLocal(d interface{}) {
-	ctx.local = d
+func (b *localBee) SetBeeLocal(d interface{}) {
+	b.local = d
 }
 
-func (ctx *rcvContext) BeeLocal() interface{} {
-	return ctx.local
+func (b *localBee) BeeLocal() interface{} {
+	return b.local
 }
 
-func (ctx *rcvContext) StartDetached(h DetachedHandler) BeeID {
+func (b *localBee) StartDetached(h DetachedHandler) BeeID {
 	resCh := make(chan CmdResult)
 	cmd := NewLocalCmd(startDetachedCmd{Handler: h}, BeeID{}, resCh)
-
-	switch b := ctx.bee.(type) {
-	case *localBee:
-		b.qee.ctrlCh <- cmd
-	case *detachedBee:
-		b.qee.ctrlCh <- cmd
-	}
-
+	b.qee.ctrlCh <- cmd
 	return (<-resCh).Data.(BeeID)
 }
 
-func (ctx *rcvContext) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID {
-	return ctx.StartDetached(&funcDetached{start, stop, rcv})
+func (b *localBee) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID {
+	return b.StartDetached(&funcDetached{start, stop, rcv})
 }
 
-func (ctx *rcvContext) BeeID() BeeID {
-	return ctx.bee.id()
+func (b *localBee) BeeID() BeeID {
+	return b.id()
 }
 
-func (ctx *rcvContext) BeginTx() error {
-	if ctx.tx.IsOpen() {
+func (b *localBee) txState() TxState {
+	if b.state == nil {
+		b.state = newState(b.app)
+	}
+
+	return b.state
+}
+
+func (b *localBee) BeginTx() error {
+	if b.tx.IsOpen() {
 		return errors.New("Another tx is open.")
 	}
 
-	if err := ctx.bee.state().BeginTx(); err != nil {
+	if err := b.txState().BeginTx(); err != nil {
 		return err
 	}
 
-	ctx.tx.Status = TxOpen
-	ctx.tx.Seq++
+	b.tx.Status = TxOpen
+	b.tx.Generation = b.beeColony.Generation
+	b.tx.Seq++
 	return nil
 }
 
-func (ctx *rcvContext) emitTxMsgs() {
-	if ctx.tx.Msgs == nil {
+func (b *localBee) emitTxMsgs() {
+	if b.tx.Msgs == nil {
 		return
 	}
 
-	for _, m := range ctx.tx.Msgs {
-		ctx.doEmit(m.(*msg))
+	for _, m := range b.tx.Msgs {
+		b.doEmit(m.(*msg))
 	}
 }
 
-func (ctx *rcvContext) doCommitTx() error {
-	defer ctx.tx.Reset()
-	ctx.emitTxMsgs()
-	return ctx.bee.state().CommitTx()
+func (b *localBee) doCommitTx() error {
+	defer b.tx.Reset()
+	b.emitTxMsgs()
+	return b.txState().CommitTx()
 }
 
-func (ctx *rcvContext) CommitTx() error {
-	if !ctx.tx.IsOpen() {
+func (b *localBee) CommitTx() error {
+	if !b.tx.IsOpen() {
 		return nil
 	}
 
-	if ctx.app.ReplicationFactor() < 2 {
-		ctx.doCommitTx()
+	b.tx.Generation = b.colonyUnsafe().Generation
+
+	if b.app.ReplicationFactor() < 2 {
+		b.doCommitTx()
 	}
 
-	ctx.tx.Ops = ctx.state.Tx()
+	b.tx.Ops = b.txState().Tx()
 
-	if err := ctx.bee.replicateTx(&ctx.tx); err != nil {
+	if err := b.replicateTx(&b.tx); err != nil {
 		glog.Errorf("Error in replicating the transaction: %v", err)
-		ctx.AbortTx()
+		b.AbortTx()
 		return err
 	}
 
-	if err := ctx.doCommitTx(); err != nil {
+	if err := b.doCommitTx(); err != nil {
 		glog.Fatalf("Error in committing the transaction: %v", err)
 	}
 
-	if err := ctx.bee.notifyCommitTx(ctx.tx.Seq); err != nil {
+	if err := b.notifyCommitTx(b.tx.Seq); err != nil {
 		glog.Errorf("Cannot notify all salves about transaction: %v", err)
 	}
 
 	return nil
 }
 
-func (ctx *rcvContext) AbortTx() error {
-	if !ctx.tx.IsOpen() {
+func (b *localBee) AbortTx() error {
+	if !b.tx.IsOpen() {
 		return nil
 	}
 
-	ctx.tx.Reset()
-	return ctx.bee.state().AbortTx()
+	b.tx.Reset()
+	return b.txState().AbortTx()
 }

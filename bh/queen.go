@@ -15,19 +15,17 @@ type QeeID struct {
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
-	dataCh    chan msgAndHandler
-	ctrlCh    chan LocalCmd
-	ctx       mapContext
+	hive *hive
+	app  *app
+
+	dataCh chan msgAndHandler
+	ctrlCh chan LocalCmd
+
+	state TxState
+
 	lastBeeID uint64
 	idToBees  map[BeeID]bee
 	keyToBees map[CellKey]bee
-}
-
-func (q *qee) state() State {
-	if q.ctx.state == nil {
-		q.ctx.state = newState(q.ctx.app)
-	}
-	return q.ctx.state
 }
 
 func (q *qee) setDetached(d *detachedBee) error {
@@ -232,12 +230,12 @@ func (q *qee) anyBee(ms MappedCells) bee {
 func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 	defer func() {
 		if r := recover(); r != nil {
-			glog.Errorf("Error in map of %s: %v", q.ctx.app.Name(), r)
+			glog.Errorf("Error in map of %s: %v", q.app.Name(), r)
 			ms = nil
 		}
 	}()
 
-	return mh.handler.Map(mh.msg, &q.ctx)
+	return mh.handler.Map(mh.msg, q)
 }
 
 func (q *qee) handleMsg(mh msgAndHandler) {
@@ -290,8 +288,8 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 func (q *qee) nextBeeID(detached bool) BeeID {
 	q.lastBeeID++
 	return BeeID{
-		AppName:  q.ctx.app.Name(),
-		HiveID:   q.ctx.hive.ID(),
+		AppName:  q.app.Name(),
+		HiveID:   q.hive.ID(),
 		ID:       q.lastBeeID,
 		Detached: detached,
 	}
@@ -301,12 +299,12 @@ func (q *qee) nextBeeID(detached bool) BeeID {
 // it will return the ID of the owner. If force forced it will force the local
 // bee to lock the map set.
 func (q *qee) lock(mappedCells MappedCells, c BeeColony, force bool) BeeID {
-	if q.ctx.hive.isolated() {
+	if q.hive.isolated() {
 		return c.Master
 	}
 
 	var prevBee BeeID
-	reg := &q.ctx.hive.registry
+	reg := &q.hive.registry
 	if force {
 		// FIXME(soheil): We should migrate the previous owner first.
 		reg.syncCall(c.Master, func() {
@@ -323,11 +321,11 @@ func (q *qee) lock(mappedCells MappedCells, c BeeColony, force bool) BeeID {
 
 func (q *qee) lockKey(dk CellKey, b bee, c BeeColony) bool {
 	q.lockLocally(b, dk)
-	if q.ctx.hive.isolated() {
+	if q.hive.isolated() {
 		return true
 	}
 
-	reg := &q.ctx.hive.registry
+	reg := &q.hive.registry
 	reg.syncCall(c.Master, func() {
 		reg.storeOrGet(c, []CellKey{dk})
 	})
@@ -335,16 +333,18 @@ func (q *qee) lockKey(dk CellKey, b bee, c BeeColony) bool {
 }
 
 func (q *qee) isLocalBee(id BeeID) bool {
-	return q.ctx.hive.ID() == id.HiveID
+	return q.hive.ID() == id.HiveID
 }
 
 func (q *qee) defaultLocalBee(id BeeID) localBee {
 	return localBee{
-		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
-		ctrlCh: make(chan LocalCmd, cap(q.ctrlCh)),
-		ctx:    q.ctx.newRcvContext(),
 		qee:    q,
 		beeID:  id,
+		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
+		ctrlCh: make(chan LocalCmd, cap(q.ctrlCh)),
+		hive:   q.hive,
+		app:    q.app,
+		state:  nil,
 	}
 }
 
@@ -364,7 +364,6 @@ func (q *qee) proxyFromLocal(id BeeID, lBee *localBee) (*proxyBee,
 	}
 	b.beeID = id
 	b.beeColony = BeeColony{}
-	b.ctx.bee = b
 	q.idToBees[id] = b
 	q.idToBees[lBee.id()] = b
 	return b, nil
@@ -384,7 +383,6 @@ func (q *qee) localFromProxy(id BeeID, pBee *proxyBee) (*localBee,
 	b := pBee.localBee
 	b.beeID = id
 	b.beeColony = BeeColony{}
-	b.ctx.bee = &b
 	q.idToBees[id] = &b
 	q.idToBees[pBee.id()] = &b
 	return &b, nil
@@ -403,17 +401,12 @@ func (q *qee) findOrCreateBee(id BeeID) bee {
 
 	var bee bee
 	if q.isLocalBee(id) {
-		b := &l
-		b.ctx.bee = b
-		bee = b
+		bee = &l
 	} else {
-		b := &proxyBee{
+		bee = &proxyBee{
 			localBee: l,
 		}
-		b.ctx.bee = b
-		bee = b
-
-		startHeartbeatBee(id, q.ctx.hive)
+		startHeartbeatBee(id, q.hive)
 	}
 
 	q.idToBees[id] = bee
@@ -428,7 +421,6 @@ func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
 		localBee: q.defaultLocalBee(id),
 		h:        h,
 	}
-	d.ctx.bee = d
 	return d
 }
 
@@ -446,10 +438,10 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		return bee
 	}
 
-	slaveHives := q.ctx.hive.ReplicationStrategy().SelectSlaveHives(
-		nil, q.ctx.app.ReplicationFactor())
+	slaveHives := q.hive.ReplicationStrategy().SelectSlaveHives(
+		nil, q.app.ReplicationFactor())
 	for _, h := range slaveHives {
-		slaveID, err := CreateBee(h, q.ctx.app.Name())
+		slaveID, err := CreateBee(h, q.app.Name())
 		if err != nil {
 			glog.Fatalf("Failed to create the new bee on %s", h)
 		}
@@ -557,7 +549,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		newColony.Master = data.(BeeID)
 	} else {
 		newSlave := q.newLocalBee()
-		newSlave.setState(oldBee.state())
+		newSlave.setState(oldBee.txState())
 		newColony.AddSlave(newSlave.id())
 	}
 
@@ -577,7 +569,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		Cmd: replaceBeeCmd{
 			OldBees:     oldColony,
 			NewBees:     newColony,
-			State:       oldBee.state().(*inMemoryState),
+			State:       oldBee.txState().(*inMemoryState),
 			MappedCells: mappedCells,
 		},
 	}
@@ -609,7 +601,7 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 		return
 	}
 
-	newState := b.state()
+	newState := b.txState()
 	for name, oldDict := range cmd.State.Dicts {
 		newDict := newState.Dict(DictName(name))
 		oldDict.ForEach(func(k Key, v Value) {
@@ -619,7 +611,7 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 	glog.V(2).Infof("Replicated the state of %+v on %+v", cmd.OldBees.Master,
 		cmd.NewBees.Master)
 
-	reg := &q.ctx.hive.registry
+	reg := &q.hive.registry
 	reg.syncCall(cmd.NewBees.Master, func() {
 		reg.set(cmd.NewBees, cmd.MappedCells)
 	})

@@ -155,7 +155,7 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 		d.Put(k, Value(s.Bytes()))
 
 	case migrateBeeCmd:
-		a, ok := ctx.(*rcvContext).hive.app(m.From.AppName)
+		a, ok := ctx.(*localBee).hive.app(m.From.AppName)
 		if !ok {
 			return fmt.Errorf("Cannot find app for migrate command: %+v", m)
 		}

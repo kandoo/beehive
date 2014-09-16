@@ -6,8 +6,8 @@ type detachedBee struct {
 }
 
 func (b *detachedBee) start() {
-	go b.h.Start(&b.ctx)
-	defer b.h.Stop(&b.ctx)
+	go b.h.Start(b)
+	defer b.h.Stop(b)
 
 	for !b.stopped {
 		select {
@@ -27,5 +27,5 @@ func (b *detachedBee) start() {
 }
 
 func (b *detachedBee) handleMsg(mh msgAndHandler) {
-	b.h.Rcv(mh.msg, &b.ctx)
+	b.h.Rcv(mh.msg, b)
 }

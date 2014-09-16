@@ -144,7 +144,8 @@ type bee interface {
 
 	start()
 
-	state() TxState
+	State() State
+	txState() TxState
 	setState(s TxState)
 
 	enqueMsg(mh msgAndHandler)
@@ -158,15 +159,22 @@ type bee interface {
 }
 
 type localBee struct {
-	dataCh    chan msgAndHandler
-	ctrlCh    chan LocalCmd
-	stopped   bool
-	cells     map[CellKey]bool
-	ctx       rcvContext
 	beeID     BeeID
 	beeColony BeeColony
+	stopped   bool
 	qee       *qee
-	txBuf     []Tx
+	app       *app
+	hive      *hive
+
+	dataCh chan msgAndHandler
+	ctrlCh chan LocalCmd
+
+	state TxState
+	cells map[CellKey]bool
+	txBuf []Tx
+	tx    Tx
+
+	local interface{}
 }
 
 func (bee *localBee) id() BeeID {
@@ -193,12 +201,8 @@ func (bee *localBee) slaves() []BeeID {
 	return bee.colony().Slaves
 }
 
-func (bee *localBee) state() TxState {
-	return bee.ctx.State().(TxState)
-}
-
 func (bee *localBee) setState(s TxState) {
-	bee.ctx.state = s
+	bee.state = s
 }
 
 func (bee *localBee) start() {
@@ -226,7 +230,7 @@ func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
 		glog.Errorf("%s", debug.Stack())
 	}
 
-	bee.ctx.AbortTx()
+	bee.AbortTx()
 }
 
 func (bee *localBee) handleMsg(mh msgAndHandler) {
@@ -238,18 +242,18 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("Bee handles a message: %#v", mh.msg)
 
-	if bee.ctx.app.Transactional() {
-		bee.ctx.BeginTx()
+	if bee.app.Transactional() {
+		bee.BeginTx()
 	}
 
-	if err := mh.handler.Rcv(mh.msg, &bee.ctx); err != nil {
+	if err := mh.handler.Rcv(mh.msg, bee); err != nil {
 		bee.recoverFromError(mh, err, false)
 		return
 	}
 
-	bee.ctx.CommitTx()
+	bee.CommitTx()
 
-	bee.ctx.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
+	bee.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
 }
 
 func (bee *localBee) handleCmd(lcmd LocalCmd) {
@@ -276,11 +280,11 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 
 			switch {
 			case bee.beeColony.IsSlave(bee.id()):
-				startHeartbeatBee(bee.beeColony.Master, bee.ctx.hive)
+				startHeartbeatBee(bee.beeColony.Master, bee.hive)
 
 			case bee.beeColony.IsMaster(bee.id()):
 				for _, s := range bee.beeColony.Slaves {
-					startHeartbeatBee(s, bee.ctx.hive)
+					startHeartbeatBee(s, bee.hive)
 				}
 			}
 
