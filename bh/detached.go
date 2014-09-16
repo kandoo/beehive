@@ -9,7 +9,7 @@ func (b *detachedBee) start() {
 	go b.h.Start(&b.ctx)
 	defer b.h.Stop(&b.ctx)
 
-	for b.stopped {
+	for !b.stopped {
 		select {
 		case d, ok := <-b.dataCh:
 			if !ok {
