@@ -253,6 +253,8 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 }
 
 func (bee *localBee) handleCmd(lcmd LocalCmd) {
+	glog.V(2).Infof("Bee %#v handles a command %#v", bee, lcmd.Cmd)
+
 	switch cmd := lcmd.Cmd.(type) {
 	case stopCmd:
 		bee.stop()
@@ -282,6 +284,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 				}
 			}
 
+			return
 		}
 
 		lcmd.ResCh <- CmdResult{
@@ -338,12 +341,12 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
-	glog.V(2).Infof("Enqueue message %#v in bee %#v", mh.msg, bee)
+	glog.V(2).Infof("Enqueue message %#v in bee %#v", mh.msg, bee.id())
 	bee.dataCh <- mh
 }
 
 func (bee *localBee) enqueCmd(cmd LocalCmd) {
-	glog.V(2).Infof("Enqueue a command %#v in bee %#v", cmd, bee)
+	glog.V(2).Infof("Enqueue a command %#v in bee %#v", cmd, bee.id())
 	bee.ctrlCh <- cmd
 }
 
