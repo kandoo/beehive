@@ -193,10 +193,12 @@ func (q *qee) syncBees(ms MappedCells, bee bee) {
 		Slaves: bee.slaves(),
 	}
 
+	newCell := false
 	for _, dictKey := range ms {
 		dkRcvr, ok := q.beeByKey(dictKey)
 		if !ok {
 			q.lockKey(dictKey, bee, colony)
+			newCell = true
 			continue
 		}
 
@@ -206,6 +208,12 @@ func (q *qee) syncBees(ms MappedCells, bee bee) {
 
 		glog.Fatalf("Incosistent shards for keys %v in MappedCells %v", dictKey,
 			ms)
+	}
+
+	if newCell {
+		resCh := make(chan CmdResult)
+		bee.enqueCmd(NewLocalCmd(addMappedCell{ms}, bee.id(), resCh))
+		<-resCh
 	}
 }
 
@@ -430,20 +438,13 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 	}
 
 	slaveHives := q.ctx.hive.ReplicationStrategy().SelectSlaveHives(
-		mc, q.ctx.app.ReplicationFactor())
+		nil, q.ctx.app.ReplicationFactor())
 	for _, h := range slaveHives {
-		prx := NewProxy(h)
-		to := BeeID{
-			HiveID:  h,
-			AppName: q.ctx.app.Name(),
-		}
-		cmd := NewRemoteCmd(createBeeCmd{}, to)
-		d, err := prx.SendCmd(&cmd)
+		slaveID, err := CreateBee(h, q.ctx.app.Name())
 		if err != nil {
 			glog.Fatalf("Failed to create the new bee on %s", h)
 		}
 
-		slaveID := d.(BeeID)
 		glog.V(2).Infof("Adding slave %v to %v", slaveID, newColony.Master)
 		newColony.AddSlave(slaveID)
 	}
@@ -466,8 +467,11 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 	<-resCh
 
 	for _, s := range newColony.Slaves {
-		bee.enqueCmd(NewLocalCmd(joinColonyCmd{newColony}, s, resCh))
-		<-resCh
+		cmd := NewRemoteCmd(joinColonyCmd{newColony}, s)
+		if _, err := NewProxy(s.HiveID).SendCmd(&cmd); err != nil {
+			// FIXME(soheil): We should fix this problem.
+			glog.Fatalf("New slave cannot join the colony.")
+		}
 	}
 
 	q.lockLocally(bee, mc...)

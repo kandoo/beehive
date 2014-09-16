@@ -367,3 +367,8 @@ func (g registry) storeOrGet(c BeeColony, ms MappedCells) BeeID {
 
 	return c.Master
 }
+
+func (g registry) compareAndSet(oldC BeeColony, newC BeeColony,
+	ms MappedCells) (BeeColony, error) {
+
+}

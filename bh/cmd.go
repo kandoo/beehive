@@ -85,3 +85,22 @@ type addSlaveCmd struct {
 type delSlaveCmd struct {
 	BeeID
 }
+
+type addMappedCell struct {
+	Cells MappedCells
+}
+
+func CreateBee(h HiveID, app AppName) (BeeID, error) {
+	prx := NewProxy(h)
+	to := BeeID{
+		HiveID:  h,
+		AppName: app,
+	}
+	cmd := NewRemoteCmd(createBeeCmd{}, to)
+	d, err := prx.SendCmd(&cmd)
+	if err != nil {
+		return BeeID{}, err
+	}
+
+	return d.(BeeID), nil
+}

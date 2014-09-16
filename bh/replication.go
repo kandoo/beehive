@@ -3,7 +3,9 @@ package bh
 import "math/rand"
 
 type ReplicationStrategy interface {
-	SelectSlaveHives(mc MappedCells, repFactor int) []HiveID
+	// SelectSlaveHives selects nSlaves slave hives that are not in the blackList
+	// slice.
+	SelectSlaveHives(blackList []HiveID, nSlaves int) []HiveID
 }
 
 type BaseReplHandler struct {
@@ -36,26 +38,40 @@ func (h *BaseReplHandler) Hives(ctx RcvContext) []HiveID {
 }
 
 type ReplicationQuery struct {
-	RepFactor int
-	Cells     MappedCells
+	NSlaves   int
+	BlackList []HiveID
 	Res       chan []HiveID
 }
 
-type rndRepl struct {
+type rndRepliction struct {
 	BaseReplHandler
 	hive Hive
 }
 
-func (h *rndRepl) Rcv(msg Msg, ctx RcvContext) error {
+func (h *rndRepliction) Rcv(msg Msg, ctx RcvContext) error {
 	switch d := msg.Data().(type) {
 	case ReplicationQuery:
-		hives := h.Hives(ctx)
-		nSlaves := d.RepFactor - 1
-		if len(hives) < nSlaves {
-			nSlaves = len(hives)
+		var hives []HiveID
+		for _, h := range h.Hives(ctx) {
+			found := false
+			for _, blk := range d.BlackList {
+				if h == blk {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				hives = append(hives, h)
+			}
 		}
-		rndHives := make([]HiveID, 0, nSlaves)
-		for _, i := range rand.Perm(nSlaves) {
+
+		if len(hives) < d.NSlaves {
+			d.NSlaves = len(hives)
+		}
+
+		rndHives := make([]HiveID, 0, d.NSlaves)
+		for _, i := range rand.Perm(d.NSlaves) {
 			rndHives = append(rndHives, hives[i])
 		}
 		d.Res <- rndHives
@@ -65,22 +81,28 @@ func (h *rndRepl) Rcv(msg Msg, ctx RcvContext) error {
 	}
 }
 
-func (h *rndRepl) SelectSlaveHives(mc MappedCells, repFactor int) []HiveID {
-	if repFactor < 2 {
+func (h *rndRepliction) SelectSlaveHives(blackList []HiveID,
+	nSlaves int) []HiveID {
+
+	if nSlaves == 0 {
 		return nil
+	}
+
+	if blackList == nil {
+		blackList = []HiveID{}
 	}
 
 	resCh := make(chan []HiveID)
 	h.hive.Emit(ReplicationQuery{
-		RepFactor: repFactor,
-		Cells:     mc,
+		NSlaves:   nSlaves,
+		BlackList: blackList,
 		Res:       resCh,
 	})
 	return <-resCh
 }
 
-func newRndRepl(h Hive) *rndRepl {
-	r := &rndRepl{
+func newRndReplication(h Hive) *rndRepliction {
+	r := &rndRepliction{
 		BaseReplHandler: BaseReplHandler{
 			LiveHives: make(map[HiveID]bool),
 		},

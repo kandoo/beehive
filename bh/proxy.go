@@ -88,7 +88,7 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 func (b *proxyBee) start() {
 	b.proxy = NewProxy(b.id().HiveID)
 
-	for {
+	for b.stopped {
 		select {
 		case d, ok := <-b.dataCh:
 			if !ok {
@@ -100,9 +100,7 @@ func (b *proxyBee) start() {
 			if !ok {
 				return
 			}
-			if ok = b.handleCmd(c); !ok {
-				return
-			}
+			b.handleCmd(c)
 		}
 	}
 }

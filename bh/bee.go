@@ -151,8 +151,7 @@ type bee interface {
 	enqueCmd(cmd LocalCmd)
 
 	handleMsg(mh msgAndHandler)
-	// Handles a command and returns false if the bee should stop.
-	handleCmd(cmd LocalCmd) bool
+	handleCmd(cmd LocalCmd)
 
 	replicateTx(tx *Tx) error
 	notifyCommitTx(tx TxSeq) error
@@ -161,6 +160,8 @@ type bee interface {
 type localBee struct {
 	dataCh    chan msgAndHandler
 	ctrlCh    chan LocalCmd
+	stopped   bool
+	cells     map[CellKey]bool
 	ctx       rcvContext
 	beeID     BeeID
 	beeColony BeeColony
@@ -201,7 +202,7 @@ func (bee *localBee) setState(s TxState) {
 }
 
 func (bee *localBee) start() {
-	for {
+	for !bee.stopped {
 		select {
 		case d, ok := <-bee.dataCh:
 			if !ok {
@@ -213,9 +214,7 @@ func (bee *localBee) start() {
 			if !ok {
 				return
 			}
-			if ok = bee.handleCmd(c); !ok {
-				return
-			}
+			bee.handleCmd(c)
 		}
 	}
 }
@@ -253,28 +252,45 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 	bee.ctx.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
 }
 
-func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
+func (bee *localBee) handleCmd(lcmd LocalCmd) {
 	switch cmd := lcmd.Cmd.(type) {
 	case stopCmd:
+		bee.stop()
 		lcmd.ResCh <- CmdResult{}
-		return false
+
+	case addMappedCell:
+		if bee.cells == nil {
+			bee.cells = make(map[CellKey]bool)
+		}
+
+		for _, c := range cmd.Cells {
+			bee.cells[c] = true
+		}
 
 	case joinColonyCmd:
 		if cmd.Colony.Contains(bee.id()) {
 			bee.beeColony = cmd.Colony
 			lcmd.ResCh <- CmdResult{}
-			return true
+
+			switch {
+			case bee.beeColony.IsSlave(bee.id()):
+				startHeartbeatBee(bee.beeColony.Master, bee.ctx.hive)
+
+			case bee.beeColony.IsMaster(bee.id()):
+				for _, s := range bee.beeColony.Slaves {
+					startHeartbeatBee(s, bee.ctx.hive)
+				}
+			}
+
 		}
 
 		lcmd.ResCh <- CmdResult{
 			Err: fmt.Errorf("Bee %#v is not in this colony %#v", bee.id(),
 				cmd.Colony),
 		}
-		return true
 
 	case getColonyCmd:
 		lcmd.ResCh <- CmdResult{Data: bee.beeColony}
-		return true
 
 	case addSlaveCmd:
 		var err error
@@ -283,7 +299,6 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
-		return true
 
 	case delSlaveCmd:
 		var err error
@@ -292,14 +307,12 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 			err = fmt.Errorf("Slave %s already exists", cmd.BeeID)
 		}
 		lcmd.ResCh <- CmdResult{Err: err}
-		return true
 
 	case bufferTxCmd:
 		tx := cmd.Tx
 		bee.txBuf = append(bee.txBuf, tx)
 		glog.V(2).Infof("Buffered transaction #%d in %#v", tx.Seq, bee.id())
 		lcmd.ResCh <- CmdResult{}
-		return true
 
 	case commitTxCmd:
 		seq := cmd.Seq
@@ -309,11 +322,9 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 				glog.V(2).Infof("Committed buffered transaction #%d in %#v", tx.Seq,
 					bee.id())
 				lcmd.ResCh <- CmdResult{}
-				return true
 			}
 		}
 		lcmd.ResCh <- CmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
-		return true
 
 	default:
 		if lcmd.ResCh != nil {
@@ -323,7 +334,6 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) bool {
 				Err: err,
 			}
 		}
-		return true
 	}
 }
 
@@ -374,4 +384,27 @@ func (bee *localBee) notifyCommitTx(tx TxSeq) error {
 		}
 	}
 	return ret
+}
+
+func (bee *localBee) stop() {
+	glog.Infof("Bee %#v stopped", bee.id())
+	bee.stopped = true
+}
+
+func (bee *localBee) mappedCells() MappedCells {
+	mc := make(MappedCells, 0, len(bee.cells))
+	for c := range bee.cells {
+		mc = append(mc, c)
+	}
+	return mc
+}
+
+func (bee *localBee) lastCommittedTx() *Tx {
+	for i := len(bee.txBuf) - 1; i >= 0; i-- {
+		if bee.txBuf[i].Status == TxCommitted {
+			return &bee.txBuf[i]
+		}
+	}
+
+	return nil
 }

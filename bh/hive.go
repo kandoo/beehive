@@ -128,7 +128,7 @@ func (h *hive) init() {
 	startHeartbeatHandler(h)
 	h.stateMan = newPersistentStateManager(h)
 
-	h.replStrategy = newRndRepl(h)
+	h.replStrategy = newRndReplication(h)
 }
 
 var (
@@ -366,6 +366,7 @@ func (h *hive) NewApp(name AppName) App {
 	a.initQee()
 	h.registerApp(a)
 	a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
+	a.Handle(beeFailed{}, &failureHandler{})
 	return a
 }
 
