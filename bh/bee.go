@@ -333,6 +333,16 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		}
 		lcmd.ResCh <- CmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
 
+	case getTxInfoCmd:
+		info := TxInfo{
+			Generation:    bee.beeColony.Generation,
+			LastBuffered:  bee.txBuf[len(bee.txBuf)-1].Seq,
+			LastCommitted: bee.lastCommittedTx().Seq,
+		}
+		lcmd.ResCh <- CmdResult{
+			Data: info,
+		}
+
 	default:
 		if lcmd.ResCh != nil {
 			err := fmt.Errorf("Unknown bee command %#v", cmd)

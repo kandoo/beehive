@@ -37,3 +37,9 @@ func (t *Tx) Reset() {
 	t.Ops = nil
 	t.Status = TxCommitted
 }
+
+type TxInfo struct {
+	Generation    TxGeneration
+	LastCommitted TxSeq
+	LastBuffered  TxSeq
+}

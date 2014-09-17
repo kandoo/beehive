@@ -1,6 +1,10 @@
 package bh
 
-import "math/rand"
+import (
+	"math/rand"
+
+	"github.com/golang/glog"
+)
 
 type ReplicationStrategy interface {
 	// SelectSlaveHives selects nSlaves slave hives that are not in the blackList
@@ -113,4 +117,30 @@ func newRndReplication(h Hive) *rndRepliction {
 	app.Handle(HiveJoined{}, r)
 	app.Handle(HiveLeft{}, r)
 	return r
+}
+
+func (bee *localBee) replicateTxToSlave(slave BeeID) error {
+	// FIXME(soheil): Once tx compaction is implemented, we have to replicate the
+	// state as well.
+	glog.Infof("Replicating the state of %#v on a new slave %#v", bee.id(), slave)
+
+	prx := NewProxy(slave.HiveID)
+	for _, tx := range bee.txBuf {
+		glog.V(2).Infof("Replicating transaction %#v on %#v", tx.Seq, slave)
+		cmd := NewRemoteCmd(bufferTxCmd{tx}, slave)
+		if _, err := prx.SendCmd(&cmd); err != nil {
+			return err
+		}
+	}
+
+	lastTx := bee.lastCommittedTx()
+	if lastTx == nil {
+		glog.V(2).Infof("No transaction to commit on %#v", slave)
+		return nil
+	}
+
+	glog.V(2).Infof("Committing transaction %#v on %#v", lastTx.Seq, slave)
+	cmd := NewRemoteCmd(commitTxCmd{lastTx.Seq}, slave)
+	_, err := prx.SendCmd(&cmd)
+	return err
 }

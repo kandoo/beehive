@@ -52,11 +52,18 @@ type startDetachedCmd struct {
 }
 
 type bufferTxCmd struct {
-	Tx Tx
+	Tx []Tx
 }
 
 type commitTxCmd struct {
 	Seq TxSeq
+}
+
+type getTxInfoCmd struct{}
+
+type getTx struct {
+	From TxSeq
+	To   TxSeq
 }
 
 type migrateBeeCmd struct {
