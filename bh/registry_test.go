@@ -6,12 +6,24 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 )
 
-func maybeSkipRegistryTest(h *hive, t *testing.T) {
-	if len(h.config.RegAddrs) != 0 {
+func maybeSkipRegistryTest(t *testing.T) {
+	if len(DefaultCfg.RegAddrs) != 0 {
 		return
 	}
 
 	t.Skip("Registry tests run only when the hive is connected to registry.")
+}
+
+func newRegistryForTest() registry {
+	return registry{
+		Client:  etcd.NewClient(DefaultCfg.RegAddrs),
+		hive:    nil,
+		prefix:  regPrefix,
+		hiveDir: regHiveDir,
+		hiveTTL: regHiveTTL,
+		appDir:  regAppDir,
+		appTTL:  regAppTTL,
+	}
 }
 
 func hiveWithAddressForRegistryTests(addr string, t *testing.T) *hive {
@@ -21,8 +33,8 @@ func hiveWithAddressForRegistryTests(addr string, t *testing.T) *hive {
 }
 
 func TestRegistryUnregisterHive(t *testing.T) {
+	maybeSkipRegistryTest(t)
 	h := hiveWithAddressForRegistryTests("127.0.0.1:32771", t)
-	maybeSkipRegistryTest(h, t)
 
 	go h.Start()
 	h.waitUntilStarted()
@@ -54,9 +66,10 @@ func (h *testRegistryWatchHandler) Map(msg Msg, ctx MapContext) MappedCells {
 }
 
 func TestRegistryWatchHives(t *testing.T) {
+	maybeSkipRegistryTest(t)
+
 	h1Id := "127.0.0.1:32771"
 	h1 := hiveWithAddressForRegistryTests(h1Id, t)
-	maybeSkipRegistryTest(h1, t)
 
 	watchCh := make(chan HiveID, 3)
 
@@ -69,7 +82,7 @@ func TestRegistryWatchHives(t *testing.T) {
 
 	h2Id := "127.0.0.1:32772"
 	h2 := hiveWithAddressForRegistryTests(h2Id, t)
-	maybeSkipRegistryTest(h2, t)
+	maybeSkipRegistryTest(t)
 
 	go h1.Start()
 	h1.waitUntilStarted()
@@ -101,16 +114,7 @@ func TestCompareAndSet(t *testing.T) {
 		t.Skip("Skipping the registery test: No registery address")
 	}
 
-	reg := registry{
-		Client:  etcd.NewClient(DefaultCfg.RegAddrs),
-		hive:    nil,
-		prefix:  regPrefix,
-		hiveDir: regHiveDir,
-		hiveTTL: regHiveTTL,
-		appDir:  regAppDir,
-		appTTL:  regAppTTL,
-	}
-
+	reg := newRegistryForTest()
 	if ok := reg.SyncCluster(); !ok {
 		t.Error("Cannot sync registry")
 	}
@@ -141,4 +145,49 @@ func TestCompareAndSet(t *testing.T) {
 			t.Errorf("Error in compare and swap: %v", err)
 		}
 	})
+}
+
+func TestTryLock(t *testing.T) {
+	maybeSkipRegistryTest(t)
+
+	reg := newRegistryForTest()
+	if ok := reg.SyncCluster(); !ok {
+		t.Error("Cannot sync registry")
+	}
+
+	h := HiveID("127.0.0.1:12345")
+	a := AppName("TestA1")
+	b1 := BeeID{
+		HiveID:  h,
+		AppName: a,
+		ID:      1,
+	}
+
+	ch := make(chan bool)
+	go func() {
+		if err := reg.lockApp(b1); err != nil {
+			t.Error("Cannot lock the app")
+		}
+		ch <- true
+		<-ch
+		if err := reg.unlockApp(b1); err != nil {
+			t.Error("Cannot unlock the app")
+		}
+		ch <- true
+	}()
+
+	<-ch
+	b2 := b1
+	b2.ID = 2
+	if err := reg.tryLockApp(b2); err == nil {
+		t.Error("Locked the app while it has been locked")
+	}
+	ch <- true
+	<-ch
+	if err := reg.tryLockApp(b2); err != nil {
+		t.Error("Locked the app while it has been locked")
+	}
+	if err := reg.unlockApp(b2); err != nil {
+		t.Error("Cannot unlock the app")
+	}
 }

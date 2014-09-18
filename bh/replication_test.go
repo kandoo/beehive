@@ -18,11 +18,12 @@ func (h *hiveJoinedHandler) Map(msg Msg, ctx MapContext) MappedCells {
 func startHivesForReplicationTest(t *testing.T, addrs []string,
 	preStart func(h Hive)) []Hive {
 
+	maybeSkipRegistryTest(t)
+
 	hiveJoinedCh := make(chan bool)
 	hives := make([]Hive, len(addrs))
 	for i, a := range addrs {
 		hives[i] = hiveWithAddressForRegistryTests(a, t)
-		maybeSkipRegistryTest(hives[i].(*hive), t)
 		hives[i].NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
 			joined: hiveJoinedCh,
 		})

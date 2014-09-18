@@ -245,6 +245,14 @@ func (g registry) hiveIDFromPath(path string) HiveID {
 	return HiveID(path[prefixLen:])
 }
 
+func (g registry) tryLockApp(id BeeID) error {
+	k := g.appPath(string(id.AppName), lockFileName)
+
+	// FIXME(soheil): This is very dangerous when the bee dies before unlock.
+	_, err := g.Create(k, string(id.Bytes()), g.appTTL)
+	return err
+}
+
 func (g registry) lockApp(id BeeID) error {
 	// TODO(soheil): For lock and unlock we can use etcd indices but
 	// v.Temp might be changed by the app. Check this and fix it if possible.
@@ -281,6 +289,23 @@ func (g registry) unlockApp(id BeeID) error {
 		return err
 	}
 
+	return nil
+}
+
+func (g registry) trySyncCall(b BeeID, f func()) error {
+	err := g.tryLockApp(b)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		err := g.unlockApp(b)
+		if err != nil {
+			glog.Fatalf("Cannot unlock app %#v: %#v", b, err)
+		}
+	}()
+
+	f()
 	return nil
 }
 
