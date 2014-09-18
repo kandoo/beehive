@@ -15,25 +15,15 @@ import (
 // automatically assigned using the distributed configuration service.
 type HiveID string
 
-// HiveStatus represents the status of a hive.
-type HiveStatus int
-
-// Valid values for HiveStatus.
-const (
-	HiveStopped HiveStatus = iota
-	HiveStarted            = iota
-)
-
 type Hive interface {
 	// ID of the hive. Valid only if the hive is started.
 	ID() HiveID
 
-	// Starts the hive and will close the waitCh once the hive stops.
-	Start(joinCh chan bool) error
-	// Stops the hive and all its apps.
+	// Start starts the hive. This function blocks.
+	Start() error
+	// Stop stops the hive and all its apps. It blocks until the hive is actually
+	// stopped.
 	Stop() error
-	// Returns the hive status.
-	Status() HiveStatus
 
 	// Creates an app with the given name. Note that apps are not active until
 	// the hive is started.
@@ -74,7 +64,7 @@ type HiveConfig struct {
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h := &hive{
 		id:     HiveID(cfg.HiveAddr),
-		status: HiveStopped,
+		status: hiveStopped,
 		config: cfg,
 		dataCh: make(chan *msg, cfg.DataChBufSize),
 		ctrlCh: make(chan HiveCmd),
@@ -87,53 +77,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	return h
 }
 
-func (h *hive) init() {
-	gob.Register(HiveID(""))
-	gob.Register(BeeID{})
-	gob.Register(BeeColony{})
-
-	gob.Register(Tx{})
-	gob.Register(TxSeq(0))
-	gob.Register(TxGeneration(0))
-
-	gob.Register(StateOp{})
-	gob.Register(inMemDict{})
-	gob.Register(inMemoryState{})
-
-	gob.Register(msg{})
-
-	gob.Register(CmdResult{})
-	gob.Register(stopCmd{})
-	gob.Register(startCmd{})
-	gob.Register(findBeeCmd{})
-	gob.Register(createBeeCmd{})
-	gob.Register(joinColonyCmd{})
-	gob.Register(bufferTxCmd{})
-	gob.Register(commitTxCmd{})
-	gob.Register(migrateBeeCmd{})
-	gob.Register(replaceBeeCmd{})
-	gob.Register(lockMappedCellsCmd{})
-	gob.Register(getColonyCmd{})
-	gob.Register(addSlaveCmd{})
-	gob.Register(delSlaveCmd{})
-
-	gob.Register(GobError{})
-
-	if h.config.Instrument {
-		h.collector = newAppStatCollector(h)
-	} else {
-		h.collector = &dummyStatCollector{}
-	}
-
-	startHeartbeatHandler(h)
-	h.stateMan = newPersistentStateManager(h)
-
-	h.replStrategy = newRndReplication(h)
-}
-
-var (
-	DefaultCfg = HiveConfig{}
-)
+var DefaultCfg = HiveConfig{}
 
 // Create a new hive and load its configuration from command line flags.
 func NewHive() Hive {
@@ -181,11 +125,21 @@ type qeeAndHandler struct {
 	handler Handler
 }
 
+// hiveStatus represents the status of a hive.
+type hiveStatus int
+
+// Valid values for HiveStatus.
+const (
+	hiveStopped hiveStatus = iota
+	hiveStarted            = iota
+)
+
 // The internal implementation of Hive.
 type hive struct {
 	id     HiveID
-	status HiveStatus
 	config HiveConfig
+
+	status hiveStatus
 
 	dataCh chan *msg
 	ctrlCh chan HiveCmd
@@ -251,30 +205,65 @@ func (h *hive) closeChannels() {
 	close(h.sigCh)
 }
 
-type step int
+func (h *hive) init() {
+	gob.Register(HiveID(""))
+	gob.Register(BeeID{})
+	gob.Register(BeeColony{})
 
-const (
-	stop step = iota
-	next      = iota
-)
+	gob.Register(Tx{})
+	gob.Register(TxSeq(0))
+	gob.Register(TxGeneration(0))
 
-func (h *hive) handleCmd(cmd HiveCmd) step {
+	gob.Register(StateOp{})
+	gob.Register(inMemDict{})
+	gob.Register(inMemoryState{})
+
+	gob.Register(msg{})
+
+	gob.Register(CmdResult{})
+	gob.Register(stopCmd{})
+	gob.Register(startCmd{})
+	gob.Register(findBeeCmd{})
+	gob.Register(createBeeCmd{})
+	gob.Register(joinColonyCmd{})
+	gob.Register(bufferTxCmd{})
+	gob.Register(commitTxCmd{})
+	gob.Register(migrateBeeCmd{})
+	gob.Register(replaceBeeCmd{})
+	gob.Register(lockMappedCellsCmd{})
+	gob.Register(getColonyCmd{})
+	gob.Register(addSlaveCmd{})
+	gob.Register(delSlaveCmd{})
+
+	gob.Register(GobError{})
+
+	if h.config.Instrument {
+		h.collector = newAppStatCollector(h)
+	} else {
+		h.collector = &dummyStatCollector{}
+	}
+
+	startHeartbeatHandler(h)
+	h.stateMan = newPersistentStateManager(h)
+
+	h.replStrategy = newRndReplication(h)
+}
+
+func (h *hive) handleCmd(cmd HiveCmd) {
 	switch cmd.Type {
 	case StopHive:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
-		h.status = HiveStopped
+		h.status = hiveStopped
 		h.registry.disconnect()
 		h.closeChannels()
 		h.stateMan.closeDBs()
-		return stop
+		cmd.ResCh <- true
 	case DrainHive:
 		// TODO(soheil): Implement drain.
 		glog.Fatalf("Drain Hive is not implemented.")
 	case PingHive:
 		cmd.ResCh <- true
 	}
-
-	return next
 }
 
 func (h *hive) registerApp(a *app) {
@@ -301,16 +290,14 @@ func (h *hive) startListener() {
 	h.listen()
 }
 
-func (h *hive) Start(joinCh chan bool) error {
-	defer close(joinCh)
-
-	h.status = HiveStarted
+func (h *hive) Start() error {
+	h.status = hiveStarted
 	h.startListener()
 	h.registerSignals()
 	h.connectToRegistry()
 	h.startQees()
 
-	for {
+	for h.status == hiveStarted {
 		select {
 		case msg, ok := <-h.dataCh:
 			if !ok {
@@ -322,13 +309,11 @@ func (h *hive) Start(joinCh chan bool) error {
 				return errors.New("Control channel is closed.")
 			}
 
-			if h.handleCmd(cmd) == stop {
-				return nil
-			}
-		case <-joinCh:
-			glog.Fatalf("Hive'h join channel should not be used nor closed.")
+			h.handleCmd(cmd)
 		}
 	}
+
+	return nil
 }
 
 func (h *hive) Stop() error {
@@ -336,16 +321,17 @@ func (h *hive) Stop() error {
 		return errors.New("Control channel is closed.")
 	}
 
-	if h.Status() == HiveStopped {
+	if h.status == hiveStopped {
 		return errors.New("Hive is already stopped.")
 	}
 
-	h.ctrlCh <- HiveCmd{Type: StopHive}
+	resCh := make(chan interface{})
+	h.ctrlCh <- HiveCmd{
+		Type:  StopHive,
+		ResCh: resCh,
+	}
+	<-resCh
 	return nil
-}
-
-func (h *hive) Status() HiveStatus {
-	return h.status
 }
 
 func (h *hive) waitUntilStarted() {

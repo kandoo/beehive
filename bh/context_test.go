@@ -69,13 +69,8 @@ func TestLock(t *testing.T) {
 	app := h.NewApp("TestLockHandler")
 	app.Handle(testLockMsg(0), &testLockHandler{})
 
-	joinCh := make(chan bool)
-	go h.Start(joinCh)
-
-	defer func() {
-		h.Stop()
-		<-joinCh
-	}()
+	go h.Start()
+	defer h.Stop()
 
 	h.Emit(testLockMsg(1))
 

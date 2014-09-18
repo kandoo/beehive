@@ -39,7 +39,7 @@ type RcvContext interface {
 	// StartDetached spawns a detached handler.
 	StartDetached(h DetachedHandler) BeeID
 	// StartDetachedFunc spawns a detached handler using the provide function.
-	StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID
+	StartDetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) BeeID
 
 	Lock(ms MappedCells) error
 
@@ -146,7 +146,7 @@ func (b *localBee) Lock(ms MappedCells) error {
 	resCh := make(chan CmdResult)
 	cmd := lockMappedCellsCmd{
 		MappedCells: ms,
-		Colony:      b.colonyUnsafe(),
+		Colony:      b.colony(),
 	}
 	b.qee.ctrlCh <- NewLocalCmd(cmd, BeeID{}, resCh)
 	res := <-resCh
@@ -168,7 +168,9 @@ func (b *localBee) StartDetached(h DetachedHandler) BeeID {
 	return (<-resCh).Data.(BeeID)
 }
 
-func (b *localBee) StartDetachedFunc(start Start, stop Stop, rcv Rcv) BeeID {
+func (b *localBee) StartDetachedFunc(start StartFunc, stop StopFunc,
+	rcv RcvFunc) BeeID {
+
 	return b.StartDetached(&funcDetached{start, stop, rcv})
 }
 
@@ -194,7 +196,7 @@ func (b *localBee) BeginTx() error {
 	}
 
 	b.tx.Status = TxOpen
-	b.tx.Generation = b.beeColony.Generation
+	b.tx.Generation = b.colony().Generation
 	b.tx.Seq++
 	return nil
 }
@@ -220,7 +222,7 @@ func (b *localBee) CommitTx() error {
 		return nil
 	}
 
-	b.tx.Generation = b.colonyUnsafe().Generation
+	b.tx.Generation = b.colony().Generation
 
 	if b.app.ReplicationFactor() < 2 {
 		b.doCommitTx()

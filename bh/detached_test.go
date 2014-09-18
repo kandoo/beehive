@@ -49,8 +49,7 @@ func TestDetached(t *testing.T) {
 		})
 	}
 
-	joinCh := make(chan bool)
-	go h.Start(joinCh)
+	go h.Start()
 
 	for i := 0; i < nDetached*2; i++ {
 		select {

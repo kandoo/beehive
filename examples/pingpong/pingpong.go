@@ -56,7 +56,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	data := msg.Data()
 	switch data := data.(type) {
 	case ping:
-		fmt.Printf("Rx Ping %d\n", data.Seq)
+		fmt.Printf("Rx Ping %d @ %v\n", data.Seq, ctx.BeeID())
 		time.Sleep(100 * time.Millisecond)
 
 		v, err := dict.Get("ping")
@@ -66,17 +66,20 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		if data != p {
-			return fmt.Errorf("Invalid ping: %d != %d", data, p.Seq)
+			return fmt.Errorf("Invalid ping: %d != %d", data.Seq, p.Seq)
 		}
 
 		p.Seq += 1
 		dict.Put("ping", p.encode())
 
-		fmt.Printf("Tx Pong %d\n", data.Seq)
+		fmt.Printf("Ping stored to %v\n", p.Seq)
+		fmt.Printf("Tx Pong %d @ %v\n", data.pong().Seq, ctx.BeeID())
+
 		ctx.Emit(data.pong())
 
 	case pong:
-		fmt.Printf("Rx Pong %d\n", data.Seq)
+		fmt.Printf("Rx Pong %d @ %v\n", data.Seq, ctx.BeeID())
+
 		time.Sleep(100 * time.Millisecond)
 
 		dict := ctx.Dict(PingPongDict)
@@ -87,13 +90,15 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		if data != p {
-			return fmt.Errorf("Invalid pong: %d != %d", data, p)
+			return fmt.Errorf("Invalid pong: %d != %d", data.Seq, p.Seq)
 		}
 
 		p.Seq += 1
 		dict.Put("pong", p.encode())
+		fmt.Printf("Pong stored to %v\n", p.Seq)
 
-		fmt.Printf("Tx Ping %d\n", data.Seq)
+		fmt.Printf("Tx Ping %d @ %v\n", data.ping().Seq, ctx.BeeID())
+
 		ctx.Emit(data.ping())
 	}
 	return nil
@@ -107,23 +112,19 @@ func main() {
 	shouldPing := flag.Bool("ping", false, "Whether to ping.")
 	shouldPong := flag.Bool("pong", false, "Whether to pong.")
 
-	h := bh.NewHive()
-
-	pingAtor := h.NewApp("Ping")
+	pingAtor := bh.NewApp("Ping")
 	pingAtor.Handle(pong{}, &pinger{})
 
-	pongAtor := h.NewApp("Pong")
+	pongAtor := bh.NewApp("Pong")
 	pongAtor.Handle(ping{}, &ponger{})
 
 	if *shouldPing {
-		h.Emit(ping{})
+		bh.Emit(ping{})
 	}
 
 	if *shouldPong {
-		h.Emit(pong{})
+		bh.Emit(pong{})
 	}
 
-	join := make(chan bool)
-	go h.Start(join)
-	<-join
+	bh.Start()
 }

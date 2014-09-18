@@ -1,11 +1,16 @@
 package bh
 
+import "github.com/golang/glog"
+
 type detachedBee struct {
 	localBee
 	h DetachedHandler
 }
 
 func (b *detachedBee) start() {
+	b.stopped = false
+	glog.V(2).Infof("Detached %v started.", b.id())
+
 	go b.h.Start(b)
 	defer b.h.Stop(b)
 

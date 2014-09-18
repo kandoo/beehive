@@ -16,20 +16,18 @@ func (h *hiveJoinedHandler) Map(msg Msg, ctx MapContext) MappedCells {
 }
 
 func startHivesForReplicationTest(t *testing.T, addrs []string,
-	preStart func(h Hive)) ([]Hive, []chan bool) {
+	preStart func(h Hive)) []Hive {
 
 	hiveJoinedCh := make(chan bool)
 	hives := make([]Hive, len(addrs))
-	chans := make([]chan bool, len(addrs))
 	for i, a := range addrs {
 		hives[i] = hiveWithAddressForRegistryTests(a, t)
 		maybeSkipRegistryTest(hives[i].(*hive), t)
-		chans[i] = make(chan bool)
 		hives[i].NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
 			joined: hiveJoinedCh,
 		})
 		preStart(hives[i])
-		go hives[i].Start(chans[i])
+		go hives[i].Start()
 	}
 
 	for _ = range addrs {
@@ -38,18 +36,17 @@ func startHivesForReplicationTest(t *testing.T, addrs []string,
 		}
 	}
 
-	return hives, chans
+	return hives
 }
 
-func stopHivesForReplicationTest(hives []Hive, joinChs []chan bool) {
+func stopHivesForReplicationTest(hives []Hive) {
 	for i := range hives {
 		hives[i].Stop()
-		<-joinChs[i]
 	}
 }
 
 func TestReplicationStrategy(t *testing.T) {
-	hives, joinChs := startHivesForReplicationTest(t,
+	hives := startHivesForReplicationTest(t,
 		[]string{"127.0.0.1:32771", "127.0.0.1:32772"}, func(h Hive) {})
 
 	slaves := hives[1].ReplicationStrategy().SelectSlaveHives(nil, 2)
@@ -61,7 +58,7 @@ func TestReplicationStrategy(t *testing.T) {
 		t.Errorf("Wrong slave selected %+v", hives[0].ID())
 	}
 
-	stopHivesForReplicationTest(hives, joinChs)
+	stopHivesForReplicationTest(hives)
 }
 
 type replicatedTestAppMsg int
@@ -89,14 +86,14 @@ func TestReplicatedBee(t *testing.T) {
 		app.SetFlags(AppFlagTransactional)
 	}
 
-	hives, joinChs := startHivesForReplicationTest(t, addrs, registerApp)
+	hives := startHivesForReplicationTest(t, addrs, registerApp)
 
 	hives[0].Emit(replicatedTestAppMsg(0))
 	<-rcvCh
 
-	stopHivesForReplicationTest(hives, joinChs)
+	stopHivesForReplicationTest(hives)
 	for _, b := range hives[0].(*hive).apps["MyApp"].qee.idToBees {
-		colony := b.colonyUnsafe()
+		colony := b.colony()
 		if len(colony.Slaves) != len(addrs)-1 {
 			t.Errorf("Incorrect number of slaves for MyApp: %+v", colony)
 		}

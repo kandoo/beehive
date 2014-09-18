@@ -22,13 +22,11 @@ func hiveWithAddressForRegistryTests(addr string, t *testing.T) *hive {
 
 func TestRegistryUnregisterHive(t *testing.T) {
 	h := hiveWithAddressForRegistryTests("127.0.0.1:32771", t)
-	joinCh := make(chan bool)
 	maybeSkipRegistryTest(h, t)
 
-	go h.Start(joinCh)
+	go h.Start()
 	h.waitUntilStarted()
 	h.Stop()
-	<-joinCh
 
 	k, _ := h.registry.hiveRegKeyVal()
 	_, err := h.registry.Get(k, false, false)
@@ -73,8 +71,7 @@ func TestRegistryWatchHives(t *testing.T) {
 	h2 := hiveWithAddressForRegistryTests(h2Id, t)
 	maybeSkipRegistryTest(h2, t)
 
-	joinCh1 := make(chan bool)
-	go h1.Start(joinCh1)
+	go h1.Start()
 	h1.waitUntilStarted()
 
 	id := <-watchCh
@@ -82,12 +79,10 @@ func TestRegistryWatchHives(t *testing.T) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}
 
-	joinCh2 := make(chan bool)
-	go h2.Start(joinCh2)
+	go h2.Start()
 	h2.waitUntilStarted()
 
 	h2.Stop()
-	<-joinCh2
 
 	id = <-watchCh
 	if id != HiveID(h2Id) {
@@ -99,7 +94,6 @@ func TestRegistryWatchHives(t *testing.T) {
 	}
 
 	h1.Stop()
-	<-joinCh1
 }
 
 func TestCompareAndSet(t *testing.T) {

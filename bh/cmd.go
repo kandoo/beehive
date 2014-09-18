@@ -1,8 +1,14 @@
 package bh
 
+import "fmt"
+
 type RemoteCmd struct {
 	Cmd   interface{}
 	CmdTo BeeID
+}
+
+func (c RemoteCmd) String() string {
+	return fmt.Sprintf("CMD -> %v\t%#v", c.CmdTo, c.Cmd)
 }
 
 type LocalCmd struct {
@@ -52,7 +58,7 @@ type startDetachedCmd struct {
 }
 
 type bufferTxCmd struct {
-	Tx []Tx
+	Txs []Tx
 }
 
 type commitTxCmd struct {

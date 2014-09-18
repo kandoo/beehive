@@ -71,7 +71,7 @@ func (q *qee) stopBees() {
 	stopCh := make(chan CmdResult)
 	stopCmd := NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
 	for id, b := range q.idToBees {
-		glog.V(2).Infof("Stopping bee: %#v", id)
+		glog.V(2).Infof("Stopping bee: %v", id)
 		b.enqueCmd(stopCmd)
 
 		_, err := (<-stopCh).get()
@@ -119,12 +119,12 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 			return
 		}
 
-		err := fmt.Errorf("No bee found: %+v", id)
+		err := fmt.Errorf("No bee found: %#v", id)
 		lcmd.ResCh <- CmdResult{nil, err}
 
 	case createBeeCmd:
 		r := q.newLocalBee()
-		glog.V(2).Infof("Created a new local bee: %+v", r.id())
+		glog.V(2).Infof("Created a new local bee: %#v", r.id())
 		lcmd.ResCh <- CmdResult{r.id(), nil}
 
 	case migrateBeeCmd:
@@ -142,7 +142,7 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 		id := q.lock(cmd.MappedCells, cmd.Colony, true)
 		if id.IsNil() || !cmd.Colony.IsMaster(id) {
 			lcmd.ResCh <- CmdResult{
-				Err: fmt.Errorf("Cannot lock mapset for %+v (locked by %+v)",
+				Err: fmt.Errorf("Cannot lock mapset for %#v (locked by %#v)",
 					cmd.Colony, id),
 			}
 			return
@@ -181,6 +181,7 @@ func (q *qee) beeByID(id BeeID) (bee, bool) {
 }
 
 func (q *qee) lockLocally(bee bee, dks ...CellKey) {
+	glog.V(2).Infof("Bee %v locally locks %v", bee.id(), MappedCells(dks))
 	for _, dk := range dks {
 		q.keyToBees[dk] = bee
 	}
@@ -240,29 +241,29 @@ func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 
 func (q *qee) handleMsg(mh msgAndHandler) {
 	if mh.msg.isUnicast() {
-		glog.V(2).Infof("Unicast msg: %+v", mh.msg)
+		glog.V(2).Infof("Unicast msg: %v", mh.msg)
 		bee, ok := q.beeByID(mh.msg.To())
 		if !ok {
 			if q.isLocalBee(mh.msg.To()) {
-				glog.Fatalf("Cannot find a local bee: %+v", mh.msg.To())
+				glog.Fatalf("Cannot find a local bee %v", mh.msg.To())
 			}
 
 			bee = q.findOrCreateBee(mh.msg.To())
 		}
 
 		if mh.handler == nil && !mh.msg.To().Detached {
-			glog.Fatalf("Handler cannot be nil for bees: %+v, %+v", mh, mh.msg)
+			glog.Fatalf("Handler cannot be nil for bees %v", mh.msg)
 		}
 
 		bee.enqueMsg(mh)
 		return
 	}
 
-	glog.V(2).Infof("Broadcast msg: %+v", mh.msg)
+	glog.V(2).Infof("Broadcast msg: %v", mh.msg)
 
 	mappedCells := q.invokeMap(mh)
 	if mappedCells == nil {
-		glog.V(2).Infof("Message dropped: %+v", mh.msg)
+		glog.V(2).Infof("Message dropped: %v", mh.msg)
 		return
 	}
 
@@ -281,7 +282,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		q.syncBees(mappedCells, bee)
 	}
 
-	glog.V(2).Infof("Sending %+v to bee %v", mh.msg, bee.id())
+	glog.V(2).Infof("Message sent to bee %v: %v", bee.id(), mh.msg)
 	bee.enqueMsg(mh)
 }
 
@@ -352,15 +353,16 @@ func (q *qee) proxyFromLocal(id BeeID, lBee *localBee) (*proxyBee,
 	error) {
 
 	if q.isLocalBee(id) {
-		return nil, fmt.Errorf("Bee ID is a local ID: %+v", id)
+		return nil, fmt.Errorf("Bee ID is a local ID: %#v", id)
 	}
 
 	if r, ok := q.beeByID(id); ok {
-		return nil, fmt.Errorf("Bee already exists: %+v", r)
+		return nil, fmt.Errorf("Bee already exists: %#v", r)
 	}
 
 	b := &proxyBee{
 		localBee: *lBee,
+		proxy:    NewProxy(id.HiveID),
 	}
 	b.beeID = id
 	b.beeColony = BeeColony{}
@@ -373,11 +375,11 @@ func (q *qee) localFromProxy(id BeeID, pBee *proxyBee) (*localBee,
 	error) {
 
 	if !q.isLocalBee(id) {
-		return nil, fmt.Errorf("Bee ID is a proxy ID: %+v", id)
+		return nil, fmt.Errorf("Bee ID is a proxy ID: %#v", id)
 	}
 
 	if r, ok := q.beeByID(id); ok {
-		return nil, fmt.Errorf("Bee already exists: %+v", r)
+		return nil, fmt.Errorf("Bee already exists: %#v", r)
 	}
 
 	b := pBee.localBee
@@ -405,6 +407,7 @@ func (q *qee) findOrCreateBee(id BeeID) bee {
 	} else {
 		bee = &proxyBee{
 			localBee: l,
+			proxy:    NewProxy(id.HiveID),
 		}
 		startHeartbeatBee(id, q.hive)
 	}
@@ -491,14 +494,14 @@ func (q *qee) mappedCellsOfBee(id BeeID) MappedCells {
 
 func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	if beeID.Detached {
-		err := fmt.Errorf("Cannot migrate a detached: %+v", beeID)
+		err := fmt.Errorf("Cannot migrate a detached: %#v", beeID)
 		resCh <- CmdResult{nil, err}
 		return
 	}
 
 	oldBee, ok := q.beeByID(beeID)
 	if !ok {
-		err := fmt.Errorf("Bee not found: %+v", oldBee)
+		err := fmt.Errorf("Bee not found: %v", beeID)
 		resCh <- CmdResult{nil, err}
 		return
 	}
@@ -513,7 +516,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		return
 	}
 
-	glog.V(2).Infof("Bee stopped: %+v", oldBee)
+	glog.V(2).Infof("Bee %v is stopped for migration", oldBee.id())
 
 	// TODO(soheil): There is a possibility of a deadlock. If the number of
 	// migrrations pass the control channel's buffer size.
@@ -553,19 +556,22 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		newColony.AddSlave(newSlave.id())
 	}
 
-	glog.V(2).Infof("Created a new bee for migration: %+v", newColony)
+	glog.V(2).Infof("Created a new bee for migration: %v", newColony.Master)
 
 	newBee, err := q.proxyFromLocal(newColony.Master, oldBee.(*localBee))
 	if err != nil {
 		resCh <- CmdResult{nil, err}
 		return
 	}
-
-	glog.V(2).Infof("Created a proxy for the new bee: %+v", newBee)
-
 	mappedCells := q.mappedCellsOfBee(oldBee.id())
+	q.lockLocally(newBee, mappedCells...)
+
+	go newBee.start()
+
+	glog.V(2).Infof("Local bee is converted to proxy %v", newBee.id())
+
 	cmd := RemoteCmd{
-		CmdTo: newColony.Master,
+		CmdTo: newColony.Master.queen(),
 		Cmd: replaceBeeCmd{
 			OldBees:     oldColony,
 			NewBees:     newColony,
@@ -580,15 +586,12 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		return
 	}
 
-	q.lockLocally(newBee, mappedCells...)
-
-	go newBee.start()
 	resCh <- CmdResult{newBee, nil}
 }
 
 func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 	if !q.isLocalBee(cmd.NewBees.Master) {
-		err := fmt.Errorf("Cannot replace with a non-local bee: %+v",
+		err := fmt.Errorf("Cannot replace with a non-local bee: %v",
 			cmd.NewBees.Master)
 		resCh <- CmdResult{nil, err}
 		return
@@ -596,10 +599,12 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 
 	b, ok := q.beeByID(cmd.NewBees.Master)
 	if !ok {
-		err := fmt.Errorf("Cannot find bee: %+v", cmd.NewBees.Master)
+		err := fmt.Errorf("Cannot find bee: %v", cmd.NewBees.Master)
 		resCh <- CmdResult{nil, err}
 		return
 	}
+
+	q.idToBees[cmd.OldBees.Master] = b
 
 	newState := b.txState()
 	for name, oldDict := range cmd.State.Dicts {
@@ -608,7 +613,7 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 			newDict.Put(k, v)
 		})
 	}
-	glog.V(2).Infof("Replicated the state of %+v on %+v", cmd.OldBees.Master,
+	glog.V(2).Infof("Replicated the state of %v on %v", cmd.OldBees.Master,
 		cmd.NewBees.Master)
 
 	reg := &q.hive.registry
@@ -616,7 +621,7 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 		reg.set(cmd.NewBees, cmd.MappedCells)
 	})
 
-	glog.V(2).Infof("Locked the mapset %+v for %+v", cmd.MappedCells, cmd.NewBees)
+	glog.V(2).Infof("Bee %v locked %v", cmd.MappedCells, cmd.NewBees)
 	q.lockLocally(b, cmd.MappedCells...)
 
 	resCh <- CmdResult{b.id(), nil}

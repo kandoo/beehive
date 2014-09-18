@@ -127,7 +127,7 @@ func (bee *localBee) replicateTxToSlave(slave BeeID) error {
 	prx := NewProxy(slave.HiveID)
 	for _, tx := range bee.txBuf {
 		glog.V(2).Infof("Replicating transaction %#v on %#v", tx.Seq, slave)
-		cmd := NewRemoteCmd(bufferTxCmd{tx}, slave)
+		cmd := NewRemoteCmd(bufferTxCmd{[]Tx{tx}}, slave)
 		if _, err := prx.SendCmd(&cmd); err != nil {
 			return err
 		}

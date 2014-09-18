@@ -88,7 +88,7 @@ func (p *pulseTaker) handleHeartbeat(msg Msg, ctx RcvContext) {
 				d.BeeID)
 		}
 		hb.TimeStamp = time.Now().Unix()
-		glog.Infof("Heartbeat received from %+v", hb.BeeID)
+		glog.V(2).Infof("Heartbeat received from %+v", hb.BeeID)
 	case startHeartbeat:
 		p.hbMap[BeeID(d)] = heartbeat{BeeID: BeeID(d)}
 	}
@@ -107,7 +107,7 @@ func (p *pulseTaker) heartbeatAll(ctx RcvContext) {
 		// TODO(soheil): There might be a problem here. What if SendToBee blocks
 		// because of an overwhelmed channel. Shouldn't we update "now"?
 		ctx.SendToBee(heartbeatReq(hb), hb.BeeID)
-		glog.Infof("Heartbeat sent to %+v", hb.BeeID)
+		glog.V(2).Infof("Heartbeat sent to %+v", hb.BeeID)
 	}
 }
 

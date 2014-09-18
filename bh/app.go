@@ -2,6 +2,7 @@ package bh
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/golang/glog"
 )
@@ -26,12 +27,12 @@ type App interface {
 	// Hanldes a specific message type using the map and receive functions. If
 	// msgType is an instnace of MsgType, we use it as the type. Otherwise, we use
 	// the qualified name of msgType's reflection type.
-	HandleFunc(msgType interface{}, m Map, r Rcv) error
+	HandleFunc(msgType interface{}, m MapFunc, r RcvFunc) error
 
 	// Regsiters the app's detached handler.
 	Detached(h DetachedHandler)
 	// Registers the detached handler using functions.
-	DetachedFunc(start Start, stop Stop, r Rcv)
+	DetachedFunc(start StartFunc, stop StopFunc, r RcvFunc)
 
 	// Returns the state of this app that is shared among all instances and the
 	// map function. This state is NOT thread-safe and apps must synchronize for
@@ -62,16 +63,20 @@ type App interface {
 // This is the list of dictionary keys returned by the map functions.
 type MappedCells []CellKey
 
-func (ms MappedCells) Len() int      { return len(ms) }
-func (ms MappedCells) Swap(i, j int) { ms[i], ms[j] = ms[j], ms[i] }
-func (ms MappedCells) Less(i, j int) bool {
-	return ms[i].Dict < ms[j].Dict ||
-		(ms[i].Dict == ms[j].Dict && ms[i].Key < ms[j].Key)
+func (mc MappedCells) String() string {
+	return fmt.Sprintf("Cells{%v}", []CellKey(mc))
+}
+
+func (mc MappedCells) Len() int      { return len(mc) }
+func (mc MappedCells) Swap(i, j int) { mc[i], mc[j] = mc[j], mc[i] }
+func (mc MappedCells) Less(i, j int) bool {
+	return mc[i].Dict < mc[j].Dict ||
+		(mc[i].Dict == mc[j].Dict && mc[i].Key < mc[j].Key)
 }
 
 // An empty mapset means a local broadcast of message.
-func (ms MappedCells) LocalBroadcast() bool {
-	return len(ms) == 0
+func (mc MappedCells) LocalBroadcast() bool {
+	return len(mc) == 0
 }
 
 // An applications map function that maps a specific message to the set of keys
@@ -79,11 +84,11 @@ func (ms MappedCells) LocalBroadcast() bool {
 // called sequentially. If the return value is an empty set the message is
 // broadcasted to all local bees. Also, if the return value is nil, the message
 // is drop.
-type Map func(m Msg, c MapContext) MappedCells
+type MapFunc func(m Msg, c MapContext) MappedCells
 
 // An application recv function that handles a message. This method is called in
 // parallel for different map-sets and sequentially within a map-set.
-type Rcv func(m Msg, c RcvContext) error
+type RcvFunc func(m Msg, c RcvContext) error
 
 // The interface msg handlers should implement.
 type Handler interface {
@@ -107,14 +112,14 @@ type DetachedHandler interface {
 }
 
 // Start function of a detached handler.
-type Start func(ctx RcvContext)
+type StartFunc func(ctx RcvContext)
 
 // Stop function of a detached handler.
-type Stop func(ctx RcvContext)
+type StopFunc func(ctx RcvContext)
 
 type funcHandler struct {
-	mapFunc  Map
-	recvFunc Rcv
+	mapFunc  MapFunc
+	recvFunc RcvFunc
 }
 
 func (h *funcHandler) Map(m Msg, c MapContext) MappedCells {
@@ -126,9 +131,9 @@ func (h *funcHandler) Rcv(m Msg, c RcvContext) error {
 }
 
 type funcDetached struct {
-	startFunc Start
-	stopFunc  Stop
-	recvFunc  Rcv
+	startFunc StartFunc
+	stopFunc  StopFunc
+	recvFunc  RcvFunc
 }
 
 func (h *funcDetached) Start(c RcvContext) {
@@ -152,11 +157,11 @@ type app struct {
 	replFactor int
 }
 
-func (a *app) HandleFunc(msgType interface{}, m Map, r Rcv) error {
+func (a *app) HandleFunc(msgType interface{}, m MapFunc, r RcvFunc) error {
 	return a.Handle(msgType, &funcHandler{m, r})
 }
 
-func (a *app) DetachedFunc(start Start, stop Stop, rcv Rcv) {
+func (a *app) DetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) {
 	a.Detached(&funcDetached{start, stop, rcv})
 }
 

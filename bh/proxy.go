@@ -49,7 +49,7 @@ func (p proxy) SendMsg(m *msg) error {
 		return err
 	}
 
-	glog.V(2).Infof("Response %v", res)
+	glog.V(3).Infof("Response %v", res)
 	return nil
 }
 
@@ -64,6 +64,7 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 		return nil, err
 	}
 
+	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
 	cRes := CmdResult{}
 	if err := gob.NewDecoder(pRes.Body).Decode(&cRes); err != nil {
 		return nil, err
@@ -74,19 +75,17 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 // TODO(soheil): We should batch here.
 func (b *proxyBee) handleMsg(mh msgAndHandler) {
 	mh.msg.MsgTo = b.id()
-	var data bytes.Buffer
-	if err := gob.NewEncoder(&data).Encode(mh.msg); err != nil {
-		glog.Errorf("Cannot encode message: %v", err)
-	}
 
+	glog.V(2).Infof("Proxy %v sends msg %v", b.id(), mh.msg)
 	if err := b.proxy.SendMsg(mh.msg); err != nil {
-		glog.Errorf("Cannot send a message: %v", err)
+		glog.Errorf("Cannot send message %v to %v: %v", mh.msg, b.id(), err)
 	}
 }
 
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
-	b.proxy = NewProxy(b.id().HiveID)
+	b.stopped = false
+	glog.V(2).Infof("Proxy started for %v", b, b.id())
 
 	for !b.stopped {
 		select {

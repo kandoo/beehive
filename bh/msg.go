@@ -1,6 +1,9 @@
 package bh
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 // Message is a generic interface for messages emitted in the system. Messages
 // are defined for each type.
@@ -50,6 +53,11 @@ func (m *msg) To() BeeID {
 
 func (m *msg) From() BeeID {
 	return m.MsgFrom
+}
+
+func (m msg) String() string {
+	return fmt.Sprintf("%v -> %v\t%v(%#v)", m.MsgFrom, m.MsgTo, m.MsgType,
+		m.MsgData)
 }
 
 func msgType(d interface{}) MsgType {

@@ -74,8 +74,7 @@ func TestHive(t *testing.T) {
 	app := hive.NewApp("MyApp")
 	app.Handle(MyMsg(0), &MyHandler{})
 
-	joinCh := make(chan bool)
-	go hive.Start(joinCh)
+	go hive.Start()
 
 	for i := 1; i <= msgs; i++ {
 		hive.Emit(MyMsg(i))
@@ -88,5 +87,4 @@ func TestHive(t *testing.T) {
 	if err := hive.Stop(); err != nil {
 		t.Errorf("Cannot stop the hive %v", err)
 	}
-	<-joinCh
 }

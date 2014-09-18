@@ -95,8 +95,11 @@ func main() {
 	a.Detached(&Generator{})
 
 	joinCh := make(chan bool)
-	go h.Start(joinCh)
-	fmt.Println("Stage started.")
+	go func() {
+		fmt.Println("Stage started.")
+		h.Start()
+		joinCh <- true
+	}()
 
 	<-joinCh
 	fmt.Println("Stage stopped.")
