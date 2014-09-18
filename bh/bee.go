@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -183,6 +184,7 @@ type localBee struct {
 	qee       *qee
 	app       *app
 	hive      *hive
+	timers    []*time.Timer
 
 	dataCh chan msgAndHandler
 	ctrlCh chan LocalCmd
@@ -256,12 +258,17 @@ func (bee *localBee) start() {
 
 func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
 	stack bool) {
+	bee.AbortTx()
+
+	if d, ok := err.(time.Duration); ok {
+		bee.snooze(mh, d)
+		return
+	}
+
 	glog.Errorf("Error in %s: %v", bee.id().AppName, err)
 	if stack {
 		glog.Errorf("%s", debug.Stack())
 	}
-
-	bee.AbortTx()
 }
 
 func (bee *localBee) handleMsg(mh msgAndHandler) {
@@ -438,6 +445,7 @@ func (bee *localBee) notifyCommitTx(tx TxSeq) error {
 func (bee *localBee) stop() {
 	glog.Infof("Bee %s stopped", bee.id())
 	bee.stopped = true
+	// TODO(soheil): Do we need to stop timers?
 }
 
 func (bee *localBee) mappedCells() MappedCells {
@@ -456,4 +464,34 @@ func (bee *localBee) lastCommittedTx() *Tx {
 	}
 
 	return nil
+}
+
+func (bee *localBee) addTimer(t *time.Timer) {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
+	bee.timers = append(bee.timers, t)
+}
+
+func (bee *localBee) delTimer(t *time.Timer) {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
+	for i := range bee.timers {
+		if bee.timers[i] == t {
+			bee.timers = append(bee.timers[:i], bee.timers[i+1:]...)
+			return
+		}
+	}
+}
+
+func (bee *localBee) snooze(mh msgAndHandler, d time.Duration) {
+	t := time.NewTimer(d)
+	bee.addTimer(t)
+
+	go func() {
+		<-t.C
+		bee.delTimer(t)
+		bee.enqueMsg(mh)
+	}()
 }

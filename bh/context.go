@@ -2,6 +2,7 @@ package bh
 
 import (
 	"errors"
+	"time"
 
 	"github.com/golang/glog"
 )
@@ -41,7 +42,12 @@ type RcvContext interface {
 	// StartDetachedFunc spawns a detached handler using the provide function.
 	StartDetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) BeeID
 
+	// Lock proactively locks the cells in the given mapped cells.
 	Lock(ms MappedCells) error
+
+	// Snooze exits the Rcv function, and schedules the current message to be
+	// enqued again after at least duration d.
+	Snooze(d time.Duration)
 
 	// BeeLocal returns the bee-local storage. It is an ephemeral memory that is
 	// just visible to the current bee. Very similar to thread-locals in the scope
@@ -254,4 +260,8 @@ func (b *localBee) AbortTx() error {
 
 	b.tx.Reset()
 	return b.txState().AbortTx()
+}
+
+func (bee *localBee) Snooze(d time.Duration) {
+	panic(d)
 }
