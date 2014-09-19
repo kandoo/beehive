@@ -39,19 +39,19 @@ func (m *msg) isUnicast() bool {
 	return !m.MsgTo.IsNil()
 }
 
-func (m *msg) Type() MsgType {
+func (m msg) Type() MsgType {
 	return m.MsgType
 }
 
-func (m *msg) Data() interface{} {
+func (m msg) Data() interface{} {
 	return m.MsgData
 }
 
-func (m *msg) To() BeeID {
+func (m msg) To() BeeID {
 	return m.MsgTo
 }
 
-func (m *msg) From() BeeID {
+func (m msg) From() BeeID {
 	return m.MsgFrom
 }
 
