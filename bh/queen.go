@@ -110,32 +110,37 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 		q.stopBees()
 		q.closeChannels()
 		lcmd.ResCh <- CmdResult{}
+		return
 
 	case findBeeCmd:
 		id := cmd.BeeID
 		r, ok := q.idToBees[id]
 		if ok {
-			lcmd.ResCh <- CmdResult{r, nil}
+			lcmd.ResCh <- CmdResult{Data: r}
 			return
 		}
 
 		err := fmt.Errorf("No bee found: %#v", id)
-		lcmd.ResCh <- CmdResult{nil, err}
+		lcmd.ResCh <- CmdResult{Err: err}
+		return
 
 	case createBeeCmd:
 		r := q.newLocalBee()
+		lcmd.ResCh <- CmdResult{Data: r.id()}
 		glog.V(2).Infof("Created a new local bee: %#v", r.id())
-		lcmd.ResCh <- CmdResult{r.id(), nil}
+		return
 
 	case migrateBeeCmd:
 		q.migrate(cmd.From, cmd.To, lcmd.ResCh)
+		return
 
 	case replaceBeeCmd:
 		q.replaceBee(cmd, lcmd.ResCh)
+		return
 
 	case lockMappedCellsCmd:
 		if cmd.Colony.IsNil() {
-			lcmd.ResCh <- CmdResult{nil, errors.New("Colony is nil")}
+			lcmd.ResCh <- CmdResult{Err: errors.New("Colony is nil")}
 			return
 		}
 

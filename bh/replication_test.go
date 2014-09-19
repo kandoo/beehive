@@ -20,7 +20,7 @@ func startHivesForReplicationTest(t *testing.T, addrs []string,
 
 	maybeSkipRegistryTest(t)
 
-	hiveJoinedCh := make(chan bool)
+	hiveJoinedCh := make(chan bool, len(addrs)*2)
 	hives := make([]Hive, len(addrs))
 	for i, a := range addrs {
 		hives[i] = hiveWithAddressForRegistryTests(a, t)
@@ -40,7 +40,7 @@ func startHivesForReplicationTest(t *testing.T, addrs []string,
 	return hives
 }
 
-func stopHivesForReplicationTest(hives []Hive) {
+func stopHives(hives []Hive) {
 	for i := range hives {
 		hives[i].Stop()
 	}
@@ -59,7 +59,7 @@ func TestReplicationStrategy(t *testing.T) {
 		t.Errorf("Wrong slave selected %+v", hives[0].ID())
 	}
 
-	stopHivesForReplicationTest(hives)
+	stopHives(hives)
 }
 
 type replicatedTestAppMsg int
@@ -92,7 +92,7 @@ func TestReplicatedBee(t *testing.T) {
 	hives[0].Emit(replicatedTestAppMsg(0))
 	<-rcvCh
 
-	stopHivesForReplicationTest(hives)
+	stopHives(hives)
 	for _, b := range hives[0].(*hive).apps["MyApp"].qee.idToBees {
 		colony := b.colony()
 		if len(colony.Slaves) != len(addrs)-1 {

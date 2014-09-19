@@ -7,21 +7,30 @@ import (
 	"github.com/golang/glog"
 )
 
-// MapContext is passed to the map functions of message handlers. It provides
-// all the platform-level functions required to implement the map function.
-type MapContext interface {
+type Context interface {
 	// Hive returns the Hive of this context.
 	Hive() Hive
+	// App returns the name of the application of this context.
+	App() AppName
 	// State returns the state of the bee/queen bee.
 	State() State
 	// Dict is a helper function that returns the specific dict within the state.
 	Dict(n DictName) Dict
 }
 
+// MapContext is passed to the map functions of message handlers. It provides
+// all the platform-level functions required to implement the map function.
+type MapContext interface {
+	Context
+
+	// Local returns a mapped cell unique to the hive of this map context.
+	LocalCells() MappedCells
+}
+
 // RcvContext is passed to the rcv functions of message handlers. It provides
 // all the platform-level functions required to implement the rcv function.
 type RcvContext interface {
-	MapContext
+	Context
 
 	// BeeID returns the BeeID in this context.
 	BeeID() BeeID
@@ -93,6 +102,14 @@ func (q *qee) Hive() Hive {
 	return q.hive
 }
 
+func (q *qee) LocalCells() MappedCells {
+	return MappedCells{{"__nil_dict__", Key(q.hive.ID())}}
+}
+
+func (q *qee) App() AppName {
+	return q.app.Name()
+}
+
 func (b *localBee) Hive() Hive {
 	return b.hive
 }
@@ -103,6 +120,10 @@ func (b *localBee) State() State {
 
 func (b *localBee) Dict(n DictName) Dict {
 	return b.State().Dict(n)
+}
+
+func (b *localBee) App() AppName {
+	return b.beeID.AppName
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.

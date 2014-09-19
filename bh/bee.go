@@ -311,6 +311,8 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 			bee.cells[c] = true
 		}
 
+		lcmd.ResCh <- CmdResult{}
+
 	case joinColonyCmd:
 		if cmd.Colony.Contains(bee.id()) {
 			bee.setColony(cmd.Colony)
@@ -354,10 +356,8 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		lcmd.ResCh <- CmdResult{Err: err}
 
 	case bufferTxCmd:
-		bee.txBuf = append(bee.txBuf, cmd.Txs...)
-		for _, tx := range cmd.Txs {
-			glog.V(2).Infof("Buffered transaction #%d in %#v", tx.Seq, bee.id())
-		}
+		bee.txBuf = append(bee.txBuf, cmd.Tx)
+		glog.V(2).Infof("Buffered transaction %v in %v", cmd.Tx, bee.id())
 		lcmd.ResCh <- CmdResult{}
 
 	case commitTxCmd:
@@ -368,8 +368,10 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 				glog.V(2).Infof("Committed buffered transaction #%d in %#v", tx.Seq,
 					bee.id())
 				lcmd.ResCh <- CmdResult{}
+				return
 			}
 		}
+
 		lcmd.ResCh <- CmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
 
 	case getTxInfoCmd:
@@ -415,10 +417,10 @@ func (bee *localBee) replicateTx(tx *Tx) error {
 
 	for i, s := range bee.slaves() {
 		prx := NewProxy(s.HiveID)
-		cmd := NewRemoteCmd(bufferTxCmd{[]Tx{*tx}}, s)
+		cmd := NewRemoteCmd(bufferTxCmd{*tx}, s)
 		_, err := prx.SendCmd(&cmd)
 		if err != nil {
-			glog.Errorf("Cannot replicate tx %#v on bee %v", tx, s)
+			glog.Errorf("Cannot replicate tx %v on bee %v: %v", tx, s, err)
 		}
 
 		if err != nil && i == 0 {

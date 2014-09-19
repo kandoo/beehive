@@ -1,5 +1,7 @@
 package bh
 
+import "fmt"
+
 type TxSeq uint64
 type TxGeneration uint64
 
@@ -36,6 +38,11 @@ func (t *Tx) Reset() {
 	t.Msgs = nil
 	t.Ops = nil
 	t.Status = TxCommitted
+}
+
+func (t Tx) String() string {
+	return fmt.Sprintf("Tx %d/%d (msgs: %d, ops: %d, open: %v)",
+		t.Generation, t.Seq, len(t.Msgs), len(t.Ops), t.Status == TxOpen)
 }
 
 type TxInfo struct {

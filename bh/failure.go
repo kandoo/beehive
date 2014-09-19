@@ -1,15 +1,34 @@
 package bh
 
-import "github.com/golang/glog"
+import (
+	"errors"
+	"time"
 
-type failureHandler struct{}
+	"github.com/golang/glog"
+)
+
+type failureHandler struct {
+	lockTimeout time.Duration
+}
 
 func (h *failureHandler) Rcv(msg Msg, ctx RcvContext) error {
+	ctx.AbortTx()
+
 	bFailed := msg.Data().(beeFailed)
 	b, ok := ctx.(*localBee)
 	if !ok {
-		return nil
+		return errors.New("Cannot handle failures of a detached or a proxy.")
 	}
+
+	if err := b.hive.registry.tryLockApp(b.id()); err != nil {
+		ctx.Snooze(h.lockTimeout)
+	}
+
+	defer func() {
+		if err := b.hive.registry.unlockApp(b.id()); err != nil {
+			glog.Fatalf("Cannot unlock the application: %v", err)
+		}
+	}()
 
 	bCol := b.colony()
 	switch {
@@ -24,7 +43,7 @@ func (h *failureHandler) Rcv(msg Msg, ctx RcvContext) error {
 }
 
 func (h *failureHandler) Map(msg Msg, ctx MapContext) MappedCells {
-	return MappedCells{}
+	return ctx.LocalCells()
 }
 
 func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
@@ -71,7 +90,7 @@ register:
 	oldCol, err = bee.hive.registry.compareAndSet(oldCol, newCol,
 		bee.mappedCells())
 	if err != nil {
-		glog.Errorf("Bee %#v has a expired colony %#v", bee.id(), newCol)
+		glog.Errorf("Bee %v has an expired colony %v", bee.id(), newCol)
 		bee.stop()
 		return
 	}
@@ -184,15 +203,17 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 			}
 		}
 
-		cmd := RemoteCmd{
-			Cmd: bufferTxCmd{
-				Txs: bee.txBuf[i:],
-			},
-			CmdTo: s,
-		}
-		_, err := NewProxy(s.HiveID).SendCmd(&cmd)
-		if err != nil {
-			glog.Fatal("This part has not bee implemented yet.")
+		for ; i < len(bee.txBuf); i++ {
+			cmd := RemoteCmd{
+				Cmd: bufferTxCmd{
+					Tx: bee.txBuf[i],
+				},
+				CmdTo: s,
+			}
+			_, err := NewProxy(s.HiveID).SendCmd(&cmd)
+			if err != nil {
+				glog.Fatal("This part has not bee implemented yet.")
+			}
 		}
 	}
 

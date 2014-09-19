@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
@@ -95,7 +96,7 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resCh := make(chan CmdResult)
+	glog.V(2).Infof("Server %v handles command %v", h.srv.hive.ID(), cmd)
 
 	a, ok := h.srv.hive.app(cmd.CmdTo.AppName)
 	if !ok {
@@ -104,16 +105,23 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resCh := make(chan CmdResult)
 	a.qee.ctrlCh <- NewLocalCmd(cmd.Cmd, cmd.CmdTo, resCh)
+	for {
+		select {
+		case res := <-resCh:
+			if res.Err != nil {
+				glog.Errorf("Error in running the remote command: %v", res.Err)
+				res.Err = GobError{res.Err.Error()}
+			}
 
-	res := <-resCh
-	if res.Err != nil {
-		glog.Errorf("Error in running the remote command: %v", res.Err)
-		res.Err = GobError{res.Err.Error()}
-	}
+			if err := gob.NewEncoder(w).Encode(res); err != nil {
+				glog.Errorf("Error in encoding the command results: %s", err)
+			}
 
-	if err := gob.NewEncoder(w).Encode(res); err != nil {
-		glog.Errorf("Error in encoding the command results: %s", err)
-		return
+			return
+		case <-time.After(1 * time.Second):
+			glog.Fatalf("Server is blocked on %v", cmd)
+		}
 	}
 }
