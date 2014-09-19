@@ -58,6 +58,13 @@ type App interface {
 	ReplicationFactor() int
 	// SetReplicationFactor sets the number of backup bees for this application.
 	SetReplicationFactor(f int)
+
+	// CommitThreshold is the minimum number of successful replications before
+	// committing a replicated transaction.
+	CommitThreshold() int
+
+	// SetCommitThreshold sets the commit threshold.
+	SetCommitThreshold(c int) error
 }
 
 // This is the list of dictionary keys returned by the map functions.
@@ -149,12 +156,13 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 }
 
 type app struct {
-	name       AppName
-	hive       *hive
-	qee        *qee
-	handlers   map[MsgType]Handler
-	flags      AppFlag
-	replFactor int
+	name         AppName
+	hive         *hive
+	qee          *qee
+	handlers     map[MsgType]Handler
+	flags        AppFlag
+	replFactor   int
+	commitThresh int
 }
 
 func (a *app) HandleFunc(msgType interface{}, m MapFunc, r RcvFunc) error {
@@ -239,5 +247,23 @@ func (a *app) ReplicationFactor() int {
 }
 
 func (a *app) SetReplicationFactor(f int) {
+	a.SetFlags(AppFlagTransactional)
 	a.replFactor = f
+	if a.commitThresh == 0 {
+		a.commitThresh = f/2 + 1
+	}
+}
+func (a *app) CommitThreshold() int {
+	return a.commitThresh
+}
+
+func (a *app) SetCommitThreshold(c int) error {
+	if c > a.replFactor {
+		a.commitThresh = a.replFactor
+		return fmt.Errorf("Commit threshold %d is lager than replication factor %d",
+			c, a.replFactor)
+	}
+
+	a.commitThresh = c
+	return nil
 }
