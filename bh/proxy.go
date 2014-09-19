@@ -3,6 +3,7 @@ package bh
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -49,7 +50,12 @@ func (p proxy) SendMsg(m *msg) error {
 		return err
 	}
 
-	glog.V(3).Infof("Response %v", res)
+	if res.StatusCode != http.StatusOK {
+		var b bytes.Buffer
+		b.ReadFrom(res.Body)
+		return errors.New(string(b.Bytes()))
+	}
+
 	return nil
 }
 
@@ -59,12 +65,18 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 		return nil, err
 	}
 
+	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
 	pRes, err := client.Post(p.cmdURL, "application/x-gob", &data)
 	if err != nil {
 		return nil, err
 	}
 
-	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
+	if pRes.StatusCode != http.StatusOK {
+		var b bytes.Buffer
+		b.ReadFrom(pRes.Body)
+		return nil, errors.New(string(b.Bytes()))
+	}
+
 	cRes := CmdResult{}
 	if err := gob.NewDecoder(pRes.Body).Decode(&cRes); err != nil {
 		return nil, err
@@ -85,7 +97,7 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
 	b.stopped = false
-	glog.V(2).Infof("Proxy started for %v", b, b.id())
+	glog.V(2).Infof("Proxy started for %v", b.id())
 
 	for !b.stopped {
 		select {
