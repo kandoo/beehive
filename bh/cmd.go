@@ -58,7 +58,7 @@ type startDetachedCmd struct {
 }
 
 type bufferTxCmd struct {
-	Txs []Tx
+	Tx Tx
 }
 
 type commitTxCmd struct {
