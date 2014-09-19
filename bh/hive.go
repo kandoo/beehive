@@ -58,6 +58,7 @@ type HiveConfig struct {
 	DBDir           string        // Directory to persist application state.
 	HBQueryInterval time.Duration // Heartbeating interval.
 	HBDeadTimeout   time.Duration // When to announce a bee dead.
+	RegLockTimeout  time.Duration // When to retry to lock an entry in a registry.
 }
 
 // Creates a new hive based on the given configuration.
@@ -115,9 +116,12 @@ func init() {
 	flag.StringVar(&DefaultCfg.DBDir, "dbdir", "/tmp",
 		"Where to store persistent state data.")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
-		1*time.Second, "Heartbeat interval.")
-	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout", 15*time.Second,
+		100*time.Millisecond, "Heartbeat interval.")
+	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout",
+		300*time.Millisecond,
 		"The timeout after which a non-responsive bee is announced dead.")
+	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
+		10*time.Millisecond, "Timeout to retry locking an entry in the registry")
 }
 
 type qeeAndHandler struct {
@@ -352,7 +356,7 @@ func (h *hive) NewApp(name AppName) App {
 	a.initQee()
 	h.registerApp(a)
 	a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
-	a.Handle(beeFailed{}, &failureHandler{})
+	a.Handle(beeFailed{}, &failureHandler{h.config.RegLockTimeout})
 	return a
 }
 

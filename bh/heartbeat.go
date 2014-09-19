@@ -12,7 +12,7 @@ const (
 )
 
 type heartbeat struct {
-	TimeStamp int64
+	TimeStamp time.Time
 	// If the BeeID.ID is empty, it heartbeat the application. It's an empty ID it
 	// heartbeats the server.
 	BeeID BeeID
@@ -63,10 +63,8 @@ func (p *pulseTaker) Start(ctx RcvContext) {
 		case c := <-p.ctrlCh:
 			switch cmd := c.(type) {
 			case stopHeartbeating:
-				close(p.dataCh)
-				close(p.ctrlCh)
 				cmd.resCh <- true
-				glog.V(2).Infof("Heartbeat stopped")
+				glog.V(2).Infof("Heartbeat is stopped on %v", ctx.Hive().ID())
 				return
 			}
 		case m := <-p.dataCh:
@@ -78,36 +76,45 @@ func (p *pulseTaker) Start(ctx RcvContext) {
 }
 
 func (p *pulseTaker) handleHeartbeat(msg Msg, ctx RcvContext) {
+	// TODO(soheil): No need for channels here. Change to mutex.
 	switch d := msg.Data().(type) {
 	case heartbeatReq:
 		ctx.ReplyTo(msg, heartbeatRes(d))
 	case heartbeatRes:
 		hb, ok := p.hbMap[d.BeeID]
 		if !ok {
-			glog.Errorf("Received heartbeat response that we have not requested: %+v",
+			glog.Errorf("Received heartbeat response that we have not requested: %v",
 				d.BeeID)
+			return
 		}
-		hb.TimeStamp = time.Now().Unix()
-		glog.V(2).Infof("Heartbeat received from %+v", hb.BeeID)
+		hb.TimeStamp = time.Now()
+		p.hbMap[d.BeeID] = hb
+		glog.V(2).Infof("Heartbeat received from %v on %v", hb.BeeID,
+			ctx.Hive().ID())
 	case startHeartbeat:
-		p.hbMap[BeeID(d)] = heartbeat{BeeID: BeeID(d)}
+		p.hbMap[BeeID(d)] = heartbeat{
+			BeeID: BeeID(d),
+		}
 	}
 }
 
 func (p *pulseTaker) heartbeatAll(ctx RcvContext) {
-	now := time.Now().Unix()
-	for _, hb := range p.hbMap {
-		if now-hb.TimeStamp > int64(p.deadInterval*time.Millisecond) {
-			glog.Infof("A bee is found dead: %+v", hb.BeeID)
+	for b, hb := range p.hbMap {
+		if hb.TimeStamp.Equal(time.Time{}) {
+			hb.TimeStamp = time.Now()
+			p.hbMap[b] = hb
+		} else if time.Since(hb.TimeStamp) > p.deadInterval {
+			glog.Errorf("%v announces bee %v dead", ctx.Hive().ID(), hb.BeeID)
 			ctx.Emit(beeFailed{id: hb.BeeID})
+			delete(p.hbMap, b)
 			continue
 		}
 
-		hb.TimeStamp = time.Now().Unix()
+		hb.TimeStamp = time.Now()
 		// TODO(soheil): There might be a problem here. What if SendToBee blocks
 		// because of an overwhelmed channel. Shouldn't we update "now"?
 		ctx.SendToBee(heartbeatReq(hb), hb.BeeID)
-		glog.V(2).Infof("Heartbeat sent to %+v", hb.BeeID)
+		glog.V(2).Infof("Heartbeat sent to %v", hb.BeeID)
 	}
 }
 
@@ -146,6 +153,8 @@ func stopHeartbeatBee(b BeeID, h Hive) {
 type heartbeatReqHandler struct{}
 
 func (h *heartbeatReqHandler) Rcv(msg Msg, ctx RcvContext) error {
+	ctx.AbortTx()
+
 	if hb, ok := msg.Data().(heartbeatReq); ok {
 		ctx.ReplyTo(msg, heartbeatRes(hb))
 		return nil
