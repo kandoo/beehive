@@ -58,13 +58,14 @@ func startHeartbeatHandler(h *hive) *pulseTaker {
 }
 
 func (p *pulseTaker) Start(ctx RcvContext) {
+	glog.V(2).Infof("Heartbeat daemon is started on %v", ctx.Hive().ID())
 	for {
 		select {
 		case c := <-p.ctrlCh:
 			switch cmd := c.(type) {
 			case stopHeartbeating:
 				cmd.resCh <- true
-				glog.V(2).Infof("Heartbeat is stopped on %v", ctx.Hive().ID())
+				glog.V(2).Infof("Heartbeat daemon is stopped on %v", ctx.Hive().ID())
 				return
 			}
 		case m := <-p.dataCh:
@@ -92,6 +93,8 @@ func (p *pulseTaker) handleHeartbeat(msg Msg, ctx RcvContext) {
 		glog.V(2).Infof("Heartbeat received from %v on %v", hb.BeeID,
 			ctx.Hive().ID())
 	case startHeartbeat:
+		glog.V(2).Infof("Starting heartbeat for %v on %v", BeeID(d),
+			ctx.Hive().ID())
 		p.hbMap[BeeID(d)] = heartbeat{
 			BeeID: BeeID(d),
 		}
