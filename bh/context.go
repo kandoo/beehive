@@ -239,15 +239,21 @@ func (b *localBee) emitTxMsgs() {
 }
 
 func (b *localBee) doCommitTx() error {
-	defer b.tx.Reset()
 	b.emitTxMsgs()
-	return b.txState().CommitTx()
+	if err := b.txState().CommitTx(); err != nil {
+		return err
+	}
+
+	b.tx.Status = TxCommitted
+	return nil
 }
 
 func (b *localBee) CommitTx() error {
 	if !b.tx.IsOpen() {
 		return nil
 	}
+
+	defer b.tx.Reset()
 
 	b.tx.Generation = b.colony().Generation
 
@@ -256,7 +262,7 @@ func (b *localBee) CommitTx() error {
 	}
 
 	b.tx.Ops = b.txState().Tx()
-	n, err := b.replicateTxOnAllSlaves(&b.tx)
+	n, err := b.replicateTxOnAllSlaves(b.tx)
 	if err != nil {
 		glog.Errorf("Error in replicating the transaction: %v", err)
 		b.AbortTx()
@@ -270,6 +276,8 @@ func (b *localBee) CommitTx() error {
 	if err := b.doCommitTx(); err != nil {
 		glog.Fatalf("Error in committing the transaction: %v", err)
 	}
+
+	b.txBuf = append(b.txBuf, b.tx)
 
 	if err := b.sendCommitToAllSlaves(b.tx.Seq); err != nil {
 		glog.Errorf("Cannot notify all salves about transaction: %v", err)

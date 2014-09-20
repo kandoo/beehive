@@ -157,7 +157,7 @@ func (bee *localBee) replicateAllTxOnSlave(slave BeeID) error {
 	return bee.sendCommitToSlave(slave, lastTx.Seq)
 }
 
-func (bee *localBee) replicateTxOnAllSlaves(tx *Tx) (int, error) {
+func (bee *localBee) replicateTxOnAllSlaves(tx Tx) (int, error) {
 	// TODO(soheil): Add a commit threshold.
 	if !bee.isMaster() {
 		return 0, fmt.Errorf("Bee %v is not a master of %v", bee.id(), bee.colony())
@@ -165,7 +165,7 @@ func (bee *localBee) replicateTxOnAllSlaves(tx *Tx) (int, error) {
 
 	n := 0
 	for i, s := range bee.slaves() {
-		_, err := bee.replicateTxOnSlave(s, *tx)
+		_, err := bee.replicateTxOnSlave(s, tx)
 		if err != nil {
 			glog.Errorf("Cannot replicate tx %v on bee %v: %v", tx, s, err)
 			continue
