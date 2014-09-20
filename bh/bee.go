@@ -95,6 +95,10 @@ func (c BeeColony) Contains(id BeeID) bool {
 }
 
 func (c *BeeColony) AddSlave(id BeeID) bool {
+	if c.IsMaster(id) {
+		return false
+	}
+
 	if c.IsSlave(id) {
 		return false
 	}
@@ -112,6 +116,13 @@ func (c *BeeColony) DelSlave(id BeeID) bool {
 	}
 
 	return false
+}
+
+func (c BeeColony) DeepCopy() BeeColony {
+	slaves := make([]BeeID, len(c.Slaves))
+	copy(slaves, c.Slaves)
+	c.Slaves = slaves
+	return c
 }
 
 func (c BeeColony) Eq(thatC BeeColony) bool {
@@ -171,9 +182,6 @@ type bee interface {
 
 	handleMsg(mh msgAndHandler)
 	handleCmd(cmd LocalCmd)
-
-	replicateTx(tx *Tx) error
-	notifyCommitTx(tx TxSeq) error
 }
 
 type localBee struct {
@@ -201,11 +209,18 @@ func (bee *localBee) id() BeeID {
 	return bee.beeID
 }
 
+func (bee *localBee) gen() TxGeneration {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
+	return bee.beeColony.Generation
+}
+
 func (bee *localBee) colony() BeeColony {
 	bee.mutex.Lock()
 	defer bee.mutex.Unlock()
 
-	return bee.beeColony
+	return bee.beeColony.DeepCopy()
 }
 
 func (bee *localBee) setColony(c BeeColony) {
@@ -407,41 +422,6 @@ func (bee *localBee) enqueCmd(cmd LocalCmd) {
 
 func (bee *localBee) isMaster() bool {
 	return bee.colony().IsMaster(bee.id())
-}
-
-func (bee *localBee) replicateTx(tx *Tx) error {
-	// TODO(soheil): Add a commit threshold.
-	if !bee.isMaster() {
-		return fmt.Errorf("Bee %v is not a master of %v", bee.id(), bee.colony())
-	}
-
-	for i, s := range bee.slaves() {
-		prx := NewProxy(s.HiveID)
-		cmd := NewRemoteCmd(bufferTxCmd{*tx}, s)
-		_, err := prx.SendCmd(&cmd)
-		if err != nil {
-			glog.Errorf("Cannot replicate tx %v on bee %v: %v", tx, s, err)
-		}
-
-		if err != nil && i == 0 {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (bee *localBee) notifyCommitTx(tx TxSeq) error {
-	var ret error
-	for _, s := range bee.slaves() {
-		prx := NewProxy(s.HiveID)
-		cmd := NewRemoteCmd(commitTxCmd{tx}, s)
-		_, err := prx.SendCmd(&cmd)
-		if err != nil {
-			ret = err
-		}
-	}
-	return ret
 }
 
 func (bee *localBee) stop() {
