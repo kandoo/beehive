@@ -257,13 +257,20 @@ func (b *localBee) CommitTx() error {
 
 	defer b.tx.Reset()
 
-	b.tx.Generation = b.colony().Generation
-
+	// No need to update sequences.
 	if b.app.ReplicationFactor() < 2 {
 		b.doCommitTx()
+		return nil
 	}
 
+	b.tx.Generation = b.colony().Generation
 	b.tx.Ops = b.txState().Tx()
+
+	if b.tx.IsEmpty() {
+		b.tx.Seq--
+		return b.doCommitTx()
+	}
+
 	n, err := b.replicateTxOnAllSlaves(b.tx)
 	if err != nil {
 		glog.Errorf("Error in replicating the transaction: %v", err)
