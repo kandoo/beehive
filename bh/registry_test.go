@@ -20,7 +20,7 @@ func newRegistryForTest() registry {
 
 func TestRegistryUnregisterHive(t *testing.T) {
 	maybeSkipRegistryTest(t)
-	h := hiveWithAddressForTest("127.0.0.1:32771", t)
+	h := hiveWithAddressForTest(hiveAddrsForTest(1)[0], t)
 
 	go h.Start()
 	h.waitUntilStarted()
@@ -54,8 +54,8 @@ func (h *testRegistryWatchHandler) Map(msg Msg, ctx MapContext) MappedCells {
 func TestRegistryWatchHives(t *testing.T) {
 	maybeSkipRegistryTest(t)
 
-	h1Id := "127.0.0.1:32771"
-	h1 := hiveWithAddressForTest(h1Id, t)
+	addrs := hiveAddrsForTest(2)
+	h1 := hiveWithAddressForTest(addrs[0], t)
 
 	watchCh := make(chan HiveID, 3)
 
@@ -66,15 +66,14 @@ func TestRegistryWatchHives(t *testing.T) {
 	app.Handle(HiveJoined{}, hndlr)
 	app.Handle(HiveLeft{}, hndlr)
 
-	h2Id := "127.0.0.1:32772"
-	h2 := hiveWithAddressForTest(h2Id, t)
+	h2 := hiveWithAddressForTest(addrs[1], t)
 	maybeSkipRegistryTest(t)
 
 	go h1.Start()
 	h1.waitUntilStarted()
 
 	id := <-watchCh
-	if id != HiveID(h1Id) {
+	if id != HiveID(addrs[0]) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}
 
@@ -84,11 +83,11 @@ func TestRegistryWatchHives(t *testing.T) {
 	h2.Stop()
 
 	id = <-watchCh
-	if id != HiveID(h2Id) {
+	if id != HiveID(addrs[1]) {
 		t.Errorf("Invalid hive joined: %v", id)
 	}
 	id = <-watchCh
-	if id != HiveID(h2Id) {
+	if id != HiveID(addrs[1]) {
 		t.Errorf("Invalid hive left: %v", id)
 	}
 

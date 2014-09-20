@@ -17,9 +17,9 @@ var testHiveCh = make(chan interface{})
 
 type MyMsg int
 
-type MyHandler struct{}
+type testHiveHandler struct{}
 
-func (h *MyHandler) Map(m Msg, c MapContext) MappedCells {
+func (h *testHiveHandler) Map(m Msg, c MapContext) MappedCells {
 	v := int(m.Data().(MyMsg))
 	return MappedCells{{"D", Key(strconv.Itoa(v % handlers))}}
 }
@@ -34,7 +34,7 @@ func bytesToInt(b []byte) int {
 	return int(binary.LittleEndian.Uint64(b))
 }
 
-func (h *MyHandler) Rcv(m Msg, c RcvContext) error {
+func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	hash := int(m.Data().(MyMsg)) % handlers
 	d := c.State().Dict("D")
 	k := Key(strconv.Itoa(hash))
@@ -71,8 +71,8 @@ func TestHive(t *testing.T) {
 	}()
 
 	hive := NewHive()
-	app := hive.NewApp("MyApp")
-	app.Handle(MyMsg(0), &MyHandler{})
+	app := hive.NewApp("TestHiveApp")
+	app.Handle(MyMsg(0), &testHiveHandler{})
 
 	go hive.Start()
 
