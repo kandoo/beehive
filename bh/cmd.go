@@ -81,6 +81,7 @@ type replaceBeeCmd struct {
 	OldBees     BeeColony
 	NewBees     BeeColony
 	State       *inMemoryState
+	TxBuf       []Tx
 	MappedCells MappedCells
 }
 

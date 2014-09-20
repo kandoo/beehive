@@ -6,6 +6,7 @@ type State interface {
 	Dict(name DictName) Dict
 }
 
+// TxState represents a transactional state.
 type TxState interface {
 	State
 	// Starts a transaction for this state. Transactions span multiple

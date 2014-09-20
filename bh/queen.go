@@ -539,9 +539,11 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		Master: oldBee.id(),
 		Slaves: slaves,
 	}
+
 	newColony := BeeColony{
 		Slaves: slaves,
 	}
+
 	for _, s := range slaves {
 		if s.HiveID == to {
 			newColony.Master = s
@@ -567,6 +569,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	} else {
 		newSlave := q.newLocalBee()
 		newSlave.setState(oldBee.txState())
+		newSlave.setTxBuffer(oldBee.txBuffer())
 		newColony.AddSlave(newSlave.id())
 	}
 
@@ -590,16 +593,15 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 			OldBees:     oldColony,
 			NewBees:     newColony,
 			State:       oldBee.txState().(*inMemoryState),
+			TxBuf:       oldBee.txBuffer(),
 			MappedCells: mappedCells,
 		},
 	}
-
 	_, err = prx.SendCmd(&cmd)
 	if err != nil {
 		glog.Errorf("Error in replacing the bee: %s", err)
 		return
 	}
-
 	resCh <- CmdResult{newBee, nil}
 }
 
@@ -607,28 +609,34 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 	if !q.isLocalBee(cmd.NewBees.Master) {
 		err := fmt.Errorf("Cannot replace with a non-local bee: %v",
 			cmd.NewBees.Master)
-		resCh <- CmdResult{nil, err}
+		resCh <- CmdResult{Err: err}
 		return
 	}
 
 	b, ok := q.beeByID(cmd.NewBees.Master)
 	if !ok {
 		err := fmt.Errorf("Cannot find bee: %v", cmd.NewBees.Master)
-		resCh <- CmdResult{nil, err}
+		resCh <- CmdResult{Err: err}
 		return
 	}
 
 	q.idToBees[cmd.OldBees.Master] = b
 
-	newState := b.txState()
-	for name, oldDict := range cmd.State.Dicts {
-		newDict := newState.Dict(DictName(name))
-		oldDict.ForEach(func(k Key, v Value) {
-			newDict.Put(k, v)
-		})
+	// TODO(soheil): Should we replace a proxy at all?
+	if _, ok := b.(*localBee); ok {
+		glog.V(2).Infof("Replicating the state of %v on %v", cmd.OldBees.Master,
+			cmd.NewBees.Master)
+
+		newState := b.txState()
+		for name, oldDict := range cmd.State.Dicts {
+			newDict := newState.Dict(DictName(name))
+			oldDict.ForEach(func(k Key, v Value) {
+				newDict.Put(k, v)
+			})
+		}
+
+		b.setTxBuffer(cmd.TxBuf)
 	}
-	glog.V(2).Infof("Replicated the state of %v on %v", cmd.OldBees.Master,
-		cmd.NewBees.Master)
 
 	reg := &q.hive.registry
 	reg.syncCall(cmd.NewBees.Master, func() {

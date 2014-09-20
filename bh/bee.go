@@ -176,6 +176,8 @@ type bee interface {
 	State() State
 	txState() TxState
 	setState(s TxState)
+	txBuffer() []Tx
+	setTxBuffer(txs []Tx)
 
 	enqueMsg(mh msgAndHandler)
 	enqueCmd(cmd LocalCmd)
@@ -250,6 +252,14 @@ func (bee *localBee) delSlave(s BeeID) bool {
 
 func (bee *localBee) setState(s TxState) {
 	bee.state = s
+}
+
+func (bee *localBee) setTxBuffer(txs []Tx) {
+	bee.txBuf = txs
+}
+
+func (bee *localBee) txBuffer() []Tx {
+	return bee.txBuf
 }
 
 func (bee *localBee) start() {
