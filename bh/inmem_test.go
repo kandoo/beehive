@@ -10,8 +10,7 @@ func testInMemTx(t *testing.T, abort bool) {
 		Dicts: make(map[DictName]*inMemDict),
 	}
 
-	err := state.BeginTx()
-	if err != nil {
+	if err := state.BeginTx(); err != nil {
 		t.Errorf("Error in tx begin: %v", err)
 	}
 
@@ -39,9 +38,13 @@ func testInMemTx(t *testing.T, abort bool) {
 	}
 
 	if abort {
-		state.AbortTx()
+		if err := state.AbortTx(); err != nil {
+			t.Errorf("Cannot abort the transaction")
+		}
 	} else {
-		state.CommitTx()
+		if err := state.CommitTx(); err != nil {
+			t.Errorf("Cannot commit the transaction")
+		}
 	}
 
 	for i := range keys {
@@ -59,6 +62,10 @@ func testInMemTx(t *testing.T, abort bool) {
 		if bytes.Compare(v, vals[i]) != 0 {
 			t.Errorf("Invalid value for key %s: %s != %s", keys[i], v, vals[i])
 		}
+	}
+
+	if err := state.BeginTx(); err != nil {
+		t.Errorf("Transaction is not correctly closed")
 	}
 }
 

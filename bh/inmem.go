@@ -50,6 +50,7 @@ func (s *inMemoryState) CommitTx() error {
 	}
 
 	s.tx.Commit()
+	s.tx = nil
 	return nil
 }
 
@@ -59,6 +60,7 @@ func (s *inMemoryState) AbortTx() error {
 	}
 
 	s.tx.Abort()
+	s.tx = nil
 	return nil
 }
 
