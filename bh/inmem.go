@@ -35,7 +35,7 @@ func (s *inMemoryState) Tx() []StateOp {
 		l += len(dict.ops)
 	}
 
-	ops := make([]StateOp, l)
+	ops := make([]StateOp, 0, l)
 	for _, dict := range s.tx.stage {
 		for _, op := range dict.ops {
 			ops = append(ops, op)
