@@ -43,35 +43,37 @@ func (h *failureHandler) Rcv(msg Msg, ctx RcvContext) error {
 }
 
 func (h *failureHandler) Map(msg Msg, ctx MapContext) MappedCells {
-	return ctx.LocalCells()
+	return MappedCells{}
 }
 
 func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
-	newCol := bee.beeColony
+	oldCol := bee.colony()
+	newCol := oldCol.DeepCopy()
 	if !newCol.DelSlave(slaveID) {
 		return
 	}
 
-	newCol.Generation++
+	glog.Warningf("Bee %v has a failed slave %v", bee.id(), slaveID)
 
-	slaves := make([]HiveID, 0, len(newCol.Slaves))
-	for _, s := range newCol.Slaves {
-		slaves = append(slaves, s.HiveID)
-	}
+	newCol.Generation++
 
 	var err error
 	var cmd RemoteCmd
 	newSlaveID := BeeID{}
 
+	slaves := make([]HiveID, 0, len(oldCol.Slaves))
+	for _, s := range oldCol.Slaves {
+		slaves = append(slaves, s.HiveID)
+	}
 	newSlaveHive := bee.hive.ReplicationStrategy().SelectSlaveHives(slaves, 1)
 	if len(newSlaveHive) == 0 {
-		glog.Errorf("Cannot find a slave hive to replace %#v", slaveID)
+		glog.Errorf("Cannot find a slave hive to replace %v", slaveID)
 		goto register
 	}
 
 	newSlaveID, err = CreateBee(newSlaveHive[0], bee.app.Name())
 	if err != nil {
-		glog.Errorf("Cannot find a slave hive to replace %#v", slaveID)
+		glog.Errorf("Cannot find a slave hive to replace %v", slaveID)
 		goto register
 	}
 
@@ -83,37 +85,41 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 		goto register
 	}
 
-	glog.V(2).Infof("Adding slave %v to %v", slaveID, newCol.Master)
+	glog.V(2).Infof("Created slave %v for %v", newSlaveID, newCol.Master)
 
 register:
-	oldCol := bee.beeColony
-	oldCol, err = bee.hive.registry.compareAndSet(oldCol, newCol,
-		bee.mappedCells())
+	cells := bee.mappedCells()
+	glog.V(2).Infof("Trying to replace %v with %v in the registry for %v", oldCol,
+		newCol, cells)
+	oldCol, err = bee.hive.registry.compareAndSet(oldCol, newCol, cells)
 	if err != nil {
 		glog.Errorf("Bee %v has an expired colony %v", bee.id(), newCol)
 		bee.stop()
 		return
 	}
 
-	bee.beeColony = newCol
+	bee.setColony(newCol)
 
 	if newSlaveID.IsNil() {
 		return
 	}
 
 	// FIXME(soheil): We are ignoring replication error.
-	bee.replicateTxToSlave(newSlaveID)
+	bee.replicateAllTxOnSlave(newSlaveID)
 }
 
 func (bee *localBee) handleMasterFailure(masterID BeeID) {
-	if bee.beeColony.IsMaster(masterID) {
+	oldCol := bee.colony()
+	newCol := oldCol.DeepCopy()
+	if !newCol.IsMaster(masterID) {
 		return
 	}
 
-	newCol := bee.beeColony
 	if !newCol.DelSlave(bee.beeID) {
 		return
 	}
+
+	glog.Warningf("Bee %v has a failed master", bee.id(), masterID)
 
 	failedSlaves := make([]BeeID, 0, len(newCol.Slaves))
 	slaveTxInfo := make(map[BeeID]TxInfo)
@@ -130,7 +136,7 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 	}
 
 	for s, info := range slaveTxInfo {
-		if info.Generation > bee.beeColony.Generation {
+		if info.Generation > bee.gen() {
 			glog.Errorf("Slave %v has an expired generation", s)
 			bee.stop()
 			return
@@ -141,7 +147,7 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 	newCol.Generation++
 
 	maxInfo := TxInfo{
-		Generation:    bee.beeColony.Generation,
+		Generation:    bee.gen(),
 		LastCommitted: bee.lastCommittedTx().Seq,
 		LastBuffered:  bee.txBuf[len(bee.txBuf)-1].Seq,
 	}
@@ -236,7 +242,6 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 
 	// FIXME(soheil): Handle failed bees.
 
-	oldCol := bee.beeColony
 	oldCol, err := bee.hive.registry.compareAndSet(oldCol, newCol,
 		bee.mappedCells())
 	if err != nil {
@@ -245,7 +250,7 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		return
 	}
 
-	bee.beeColony = newCol
+	bee.setColony(newCol)
 
 	for s, _ := range slaveTxInfo {
 		cmd := RemoteCmd{

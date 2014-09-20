@@ -256,18 +256,22 @@ func (b *localBee) CommitTx() error {
 	}
 
 	b.tx.Ops = b.txState().Tx()
-
-	if err := b.replicateTx(&b.tx); err != nil {
+	n, err := b.replicateTxOnAllSlaves(&b.tx)
+	if err != nil {
 		glog.Errorf("Error in replicating the transaction: %v", err)
 		b.AbortTx()
 		return err
+	}
+
+	if n < b.app.CommitThreshold() {
+		glog.Fatal("Not implemented yet.")
 	}
 
 	if err := b.doCommitTx(); err != nil {
 		glog.Fatalf("Error in committing the transaction: %v", err)
 	}
 
-	if err := b.notifyCommitTx(b.tx.Seq); err != nil {
+	if err := b.sendCommitToAllSlaves(b.tx.Seq); err != nil {
 		glog.Errorf("Cannot notify all salves about transaction: %v", err)
 	}
 

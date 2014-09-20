@@ -1,6 +1,7 @@
 package bh
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/golang/glog"
@@ -116,31 +117,83 @@ func newRndReplication(h Hive) *rndRepliction {
 	app.Handle(ReplicationQuery{}, r)
 	app.Handle(HiveJoined{}, r)
 	app.Handle(HiveLeft{}, r)
+	app.SetFlags(AppFlagSticky)
 	return r
 }
 
-func (bee *localBee) replicateTxToSlave(slave BeeID) error {
-	// FIXME(soheil): Once tx compaction is implemented, we have to replicate the
-	// state as well.
-	glog.Infof("Replicating the state of %#v on a new slave %#v", bee.id(), slave)
-
+func (bee *localBee) replicateTxOnSlave(slave BeeID, txs ...Tx) (int, error) {
 	prx := NewProxy(slave.HiveID)
-	for _, tx := range bee.txBuf {
-		glog.V(2).Infof("Replicating transaction %#v on %#v", tx.Seq, slave)
+	for i, tx := range txs {
+		glog.V(2).Infof("Replicating transaction %v on %v", tx.Seq, slave)
 		cmd := NewRemoteCmd(bufferTxCmd{tx}, slave)
 		if _, err := prx.SendCmd(&cmd); err != nil {
-			return err
+			return i, err
 		}
+	}
+
+	return len(txs), nil
+}
+
+func (bee *localBee) replicateAllTxOnSlave(slave BeeID) error {
+	// FIXME(soheil): Once tx compaction is implemented, we have to replicate the
+	// state as well.
+	glog.Infof("Replicating the state of %v on a new slave %v", bee.id(), slave)
+
+	n, err := bee.replicateTxOnSlave(slave, bee.txBuf...)
+	if err != nil {
+		return err
+	}
+
+	if n != len(bee.txBuf) {
+		return fmt.Errorf("Could only replicate %d transactions", n)
 	}
 
 	lastTx := bee.lastCommittedTx()
 	if lastTx == nil {
-		glog.V(2).Infof("No transaction to commit on %#v", slave)
+		glog.V(2).Infof("No transaction to commit on %v", slave)
 		return nil
 	}
 
-	glog.V(2).Infof("Committing transaction %#v on %#v", lastTx.Seq, slave)
-	cmd := NewRemoteCmd(commitTxCmd{lastTx.Seq}, slave)
-	_, err := prx.SendCmd(&cmd)
+	return bee.sendCommitToSlave(slave, lastTx.Seq)
+}
+
+func (bee *localBee) replicateTxOnAllSlaves(tx *Tx) (int, error) {
+	// TODO(soheil): Add a commit threshold.
+	if !bee.isMaster() {
+		return 0, fmt.Errorf("Bee %v is not a master of %v", bee.id(), bee.colony())
+	}
+
+	n := 0
+	for i, s := range bee.slaves() {
+		_, err := bee.replicateTxOnSlave(s, *tx)
+		if err != nil {
+			glog.Errorf("Cannot replicate tx %v on bee %v: %v", tx, s, err)
+			continue
+		}
+
+		if err != nil && i == 0 {
+			return 0, err
+		}
+
+		n++
+	}
+
+	return n, nil
+}
+
+func (bee *localBee) sendCommitToAllSlaves(tx TxSeq) error {
+	var ret error
+	for _, s := range bee.slaves() {
+		if err := bee.sendCommitToSlave(s, tx); err != nil {
+			ret = err
+		}
+	}
+	return ret
+}
+
+func (bee *localBee) sendCommitToSlave(slave BeeID, tx TxSeq) error {
+	glog.V(2).Infof("Committing transaction %v on %v", tx, slave)
+	cmd := NewRemoteCmd(commitTxCmd{tx}, slave)
+	_, err := NewProxy(slave.HiveID).SendCmd(&cmd)
 	return err
 }
