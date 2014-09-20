@@ -2,7 +2,6 @@ package bh
 
 import (
 	"encoding/binary"
-	"fmt"
 	"testing"
 	"time"
 )
@@ -22,6 +21,8 @@ func (m *TestFailureMessage) Decode(b []byte) {
 func TestSlaveFailure(t *testing.T) {
 	maybeSkipRegistryTest(t)
 
+	const nMsgs = 10
+
 	addrs := []string{
 		"127.0.0.1:32771",
 		"127.0.0.1:32772",
@@ -32,7 +33,7 @@ func TestSlaveFailure(t *testing.T) {
 	ch := make(chan bool, 2)
 	rcvF := func(msg Msg, ctx RcvContext) error {
 		data := msg.Data().(TestFailureMessage)
-		if data%10 == 0 {
+		if data%nMsgs == 0 {
 			ch <- true
 			return nil
 		}
@@ -54,7 +55,6 @@ func TestSlaveFailure(t *testing.T) {
 	})
 
 	hives[0].Emit(TestFailureMessage(1))
-
 	<-ch
 
 	slaveCh := make(chan bool)
@@ -76,15 +76,33 @@ func TestSlaveFailure(t *testing.T) {
 	hives[2].Stop()
 
 	time.Sleep(1 * time.Second)
-
 	hives[0].Emit(TestFailureMessage(1))
-
-	time.Sleep(1 * time.Second)
 	<-ch
+	time.Sleep(1 * time.Second)
+
 	testFailureQee := slave.qees[msgType(TestFailureMessage(0))][0]
-	fmt.Printf("%#v\n", testFailureQee.q)
+
+	if len(testFailureQee.q.idToBees) == 0 {
+		t.Errorf("Did not created the new slave")
+	}
+
 	for _, b := range testFailureQee.q.idToBees {
-		fmt.Printf("%#v\n", b)
+		local, ok := b.(*localBee)
+		if !ok {
+			continue
+		}
+
+		if len(local.txBuf) != 2*(nMsgs-1) {
+			t.Errorf("Slave does not have a correct number of transactions")
+			continue
+		}
+
+		for i := 0; i < 2*(nMsgs-1); i++ {
+			if local.txBuf[i].Seq != TxSeq(i+1) {
+				t.Errorf("Incorrect transaction sequence: %d vs %d", local.txBuf[i].Seq,
+					i+1)
+			}
+		}
 	}
 
 	hives[0].Stop()
