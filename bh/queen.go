@@ -277,6 +277,10 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	if cells.LocalBroadcast() {
 		glog.V(2).Infof("Sending a message to all local bees: %v", mh.msg)
 		for _, bee := range q.idToBees {
+			if _, ok := bee.(*localBee); !ok {
+				return
+			}
+
 			bee.enqueMsg(mh)
 		}
 		return
