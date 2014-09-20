@@ -62,11 +62,6 @@ func (q *qee) start() {
 	}
 }
 
-func (q *qee) closeChannels() {
-	close(q.dataCh)
-	close(q.ctrlCh)
-}
-
 func (q *qee) stopBees() {
 	stopCh := make(chan CmdResult)
 	stopCmd := NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
@@ -108,7 +103,6 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 	case stopCmd:
 		glog.V(3).Infof("Stopping bees of %p", q)
 		q.stopBees()
-		q.closeChannels()
 		lcmd.ResCh <- CmdResult{}
 		return
 
@@ -460,7 +454,7 @@ func (q *qee) newBeeForMappedCells(cells MappedCells) bee {
 	for _, h := range slaveHives {
 		slaveID, err := CreateBee(h, q.app.Name())
 		if err != nil {
-			glog.Fatalf("Failed to create the new bee on %s", h)
+			glog.Fatalf("Failed to create the new bee on %s: %v", h, err)
 		}
 
 		glog.V(2).Infof("Adding slave %v to %v", slaveID, newColony.Master)

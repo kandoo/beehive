@@ -2,53 +2,9 @@ package bh
 
 import "testing"
 
-type hiveJoinedHandler struct {
-	joined chan bool
-}
-
-func (h *hiveJoinedHandler) Rcv(msg Msg, ctx RcvContext) error {
-	return nil
-}
-
-func (h *hiveJoinedHandler) Map(msg Msg, ctx MapContext) MappedCells {
-	h.joined <- true
-	return nil
-}
-
-func startHivesForReplicationTest(t *testing.T, addrs []string,
-	preStart func(h Hive)) []Hive {
-
-	maybeSkipRegistryTest(t)
-
-	hiveJoinedCh := make(chan bool, len(addrs)*2)
-	hives := make([]Hive, len(addrs))
-	for i, a := range addrs {
-		hives[i] = hiveWithAddressForRegistryTests(a, t)
-		hives[i].NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
-			joined: hiveJoinedCh,
-		})
-		preStart(hives[i])
-		go hives[i].Start()
-	}
-
-	for _ = range addrs {
-		for _ = range addrs {
-			<-hiveJoinedCh
-		}
-	}
-
-	return hives
-}
-
-func stopHives(hives []Hive) {
-	for i := range hives {
-		hives[i].Stop()
-	}
-}
-
 func TestReplicationStrategy(t *testing.T) {
-	hives := startHivesForReplicationTest(t,
-		[]string{"127.0.0.1:32771", "127.0.0.1:32772"}, func(h Hive) {})
+	addrs := hiveAddrsForTest(2)
+	hives := startHivesForReplicationTest(t, addrs, func(h Hive) {})
 
 	slaves := hives[1].ReplicationStrategy().SelectSlaveHives(nil, 2)
 	if len(slaves) != 1 {
@@ -59,7 +15,7 @@ func TestReplicationStrategy(t *testing.T) {
 		t.Errorf("Wrong slave selected %+v", hives[0].ID())
 	}
 
-	stopHives(hives)
+	stopHives(hives...)
 }
 
 type replicatedTestAppMsg int
@@ -78,21 +34,19 @@ func (h *replicatedTestApp) Map(msg Msg, ctx MapContext) MappedCells {
 }
 
 func TestReplicatedBee(t *testing.T) {
-	addrs := []string{"127.0.0.1:32771", "127.0.0.1:32772", "127.0.0.1:32773"}
+	addrs := hiveAddrsForTest(3)
 	rcvCh := make(chan bool, len(addrs)*len(addrs))
-	registerApp := func(h Hive) {
+	hives := startHivesForReplicationTest(t, addrs, func(h Hive) {
 		app := h.NewApp("MyApp")
 		app.Handle(replicatedTestAppMsg(0), &replicatedTestApp{rcvCh})
 		app.SetReplicationFactor(len(addrs))
 		app.SetFlags(AppFlagTransactional)
-	}
-
-	hives := startHivesForReplicationTest(t, addrs, registerApp)
+	})
 
 	hives[0].Emit(replicatedTestAppMsg(0))
 	<-rcvCh
 
-	stopHives(hives)
+	stopHives(hives...)
 	for _, b := range hives[0].(*hive).apps["MyApp"].qee.idToBees {
 		colony := b.colony()
 		if len(colony.Slaves) != len(addrs)-1 {

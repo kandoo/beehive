@@ -204,9 +204,6 @@ func (h *hive) closeChannels() {
 			glog.Info("Still waiting for a qee...")
 		}
 	}
-	close(h.dataCh)
-	close(h.ctrlCh)
-	close(h.sigCh)
 }
 
 func (h *hive) init() {

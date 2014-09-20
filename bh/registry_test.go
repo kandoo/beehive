@@ -6,14 +6,6 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 )
 
-func maybeSkipRegistryTest(t *testing.T) {
-	if len(DefaultCfg.RegAddrs) != 0 {
-		return
-	}
-
-	t.Skip("Registry tests run only when the hive is connected to registry.")
-}
-
 func newRegistryForTest() registry {
 	return registry{
 		Client:  etcd.NewClient(DefaultCfg.RegAddrs),
@@ -26,15 +18,9 @@ func newRegistryForTest() registry {
 	}
 }
 
-func hiveWithAddressForRegistryTests(addr string, t *testing.T) *hive {
-	cfg := DefaultCfg
-	cfg.HiveAddr = addr
-	return NewHiveWithConfig(cfg).(*hive)
-}
-
 func TestRegistryUnregisterHive(t *testing.T) {
 	maybeSkipRegistryTest(t)
-	h := hiveWithAddressForRegistryTests("127.0.0.1:32771", t)
+	h := hiveWithAddressForTest("127.0.0.1:32771", t)
 
 	go h.Start()
 	h.waitUntilStarted()
@@ -69,7 +55,7 @@ func TestRegistryWatchHives(t *testing.T) {
 	maybeSkipRegistryTest(t)
 
 	h1Id := "127.0.0.1:32771"
-	h1 := hiveWithAddressForRegistryTests(h1Id, t)
+	h1 := hiveWithAddressForTest(h1Id, t)
 
 	watchCh := make(chan HiveID, 3)
 
@@ -81,7 +67,7 @@ func TestRegistryWatchHives(t *testing.T) {
 	app.Handle(HiveLeft{}, hndlr)
 
 	h2Id := "127.0.0.1:32772"
-	h2 := hiveWithAddressForRegistryTests(h2Id, t)
+	h2 := hiveWithAddressForTest(h2Id, t)
 	maybeSkipRegistryTest(t)
 
 	go h1.Start()

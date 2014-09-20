@@ -38,7 +38,6 @@ func (h *failureHandler) Rcv(msg Msg, ctx RcvContext) error {
 	case bCol.IsSlave(bFailed.id) && b.isMaster():
 		b.handleSlaveFailure(bFailed.id)
 	}
-
 	return nil
 }
 
@@ -117,7 +116,7 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		return
 	}
 
-	glog.Warningf("Bee %v has a failed master", bee.id(), masterID)
+	glog.Warningf("Bee %v has a failed master %v", bee.id(), masterID)
 
 	failedSlaves := make([]BeeID, 0, len(newCol.Slaves))
 	slaveTxInfo := make(map[BeeID]TxInfo)

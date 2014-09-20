@@ -19,11 +19,14 @@ func (h *hive) listen() error {
 		glog.Errorf("Hive cannot listen: %v", e)
 		return e
 	}
-	glog.Infof("Hive listens at: %s", h.config.HiveAddr)
+	glog.Infof("Hive listens at %s", h.config.HiveAddr)
 	h.listener = l
 
 	s := h.newServer(h.config.HiveAddr)
-	go s.Serve(l)
+	go func() {
+		s.Serve(l)
+		glog.Infof("Hive %v listener closed", h.ID())
+	}()
 	return nil
 }
 

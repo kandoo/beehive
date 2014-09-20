@@ -23,12 +23,7 @@ func TestSlaveFailure(t *testing.T) {
 
 	const nMsgs = 10
 
-	addrs := []string{
-		"127.0.0.1:32771",
-		"127.0.0.1:32772",
-		"127.0.0.1:32773",
-		"127.0.0.1:32774",
-	}
+	addrs := hiveAddrsForTest(4)
 
 	ch := make(chan bool, 2)
 	rcvF := func(msg Msg, ctx RcvContext) error {
@@ -58,7 +53,7 @@ func TestSlaveFailure(t *testing.T) {
 	<-ch
 
 	slaveCh := make(chan bool)
-	slave := hiveWithAddressForRegistryTests(addrs[3], t)
+	slave := hiveWithAddressForTest(addrs[3], t)
 	slave.NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
 		joined: slaveCh,
 	})
@@ -73,7 +68,7 @@ func TestSlaveFailure(t *testing.T) {
 		<-slaveCh
 	}
 
-	hives[2].Stop()
+	stopHives(hives[2])
 
 	time.Sleep(1 * time.Second)
 	hives[0].Emit(TestFailureMessage(1))
@@ -105,7 +100,5 @@ func TestSlaveFailure(t *testing.T) {
 		}
 	}
 
-	hives[0].Stop()
-	hives[1].Stop()
-	slave.Stop()
+	stopHives(append(hives[:2], slave)...)
 }
