@@ -480,13 +480,9 @@ func (q *qee) newBeeForMappedCells(cells MappedCells) bee {
 
 	bee := q.findOrCreateBee(beeID)
 
-	resCh := make(chan CmdResult)
-	bee.enqueCmd(NewLocalCmd(joinColonyCmd{newColony}, beeID, resCh))
-	<-resCh
-
+	q.sendJoinColonyCmd(newColony, beeID)
 	for _, s := range newColony.Slaves {
-		cmd := NewRemoteCmd(joinColonyCmd{newColony}, s)
-		if _, err := NewProxy(s.HiveID).SendCmd(&cmd); err != nil {
+		if err := q.sendJoinColonyCmd(newColony, s); err != nil {
 			// FIXME(soheil): We should fix this problem.
 			glog.Fatalf("New slave cannot join the colony.")
 		}
@@ -509,14 +505,14 @@ func (q *qee) mappedCellsOfBee(id BeeID) MappedCells {
 func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	if beeID.Detached {
 		err := fmt.Errorf("Cannot migrate a detached: %#v", beeID)
-		resCh <- CmdResult{nil, err}
+		resCh <- CmdResult{Err: err}
 		return
 	}
 
 	oldBee, ok := q.beeByID(beeID)
 	if !ok {
 		err := fmt.Errorf("Bee not found: %v", beeID)
-		resCh <- CmdResult{nil, err}
+		resCh <- CmdResult{Err: err}
 		return
 	}
 
@@ -526,7 +522,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 	oldBee.enqueCmd(NewLocalCmd(stopCmd{}, BeeID{}, stopCh))
 	_, err := (<-stopCh).get()
 	if err != nil {
-		resCh <- CmdResult{nil, err}
+		resCh <- CmdResult{Err: err}
 		return
 	}
 
@@ -602,6 +598,11 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		glog.Errorf("Error in replacing the bee: %s", err)
 		return
 	}
+
+	for _, s := range newColony.Slaves {
+		q.sendJoinColonyCmd(newColony, s)
+	}
+
 	resCh <- CmdResult{newBee, nil}
 }
 
@@ -620,23 +621,21 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 		return
 	}
 
+	q.sendJoinColonyCmd(cmd.NewBees, b.id())
 	q.idToBees[cmd.OldBees.Master] = b
 
-	// TODO(soheil): Should we replace a proxy at all?
-	if _, ok := b.(*localBee); ok {
-		glog.V(2).Infof("Replicating the state of %v on %v", cmd.OldBees.Master,
-			cmd.NewBees.Master)
+	glog.V(2).Infof("Replicating the state of %v on %v", cmd.OldBees.Master,
+		cmd.NewBees.Master)
 
-		newState := b.txState()
-		for name, oldDict := range cmd.State.Dicts {
-			newDict := newState.Dict(DictName(name))
-			oldDict.ForEach(func(k Key, v Value) {
-				newDict.Put(k, v)
-			})
-		}
-
-		b.setTxBuffer(cmd.TxBuf)
+	newState := b.txState()
+	for name, oldDict := range cmd.State.Dicts {
+		newDict := newState.Dict(DictName(name))
+		oldDict.ForEach(func(k Key, v Value) {
+			newDict.Put(k, v)
+		})
 	}
+
+	b.setTxBuffer(cmd.TxBuf)
 
 	reg := &q.hive.registry
 	reg.syncCall(cmd.NewBees.Master, func() {
@@ -647,4 +646,18 @@ func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan CmdResult) {
 	q.lockLocally(b, cmd.MappedCells...)
 
 	resCh <- CmdResult{b.id(), nil}
+}
+
+func (q *qee) sendJoinColonyCmd(c BeeColony, to BeeID) error {
+	if q.hive.ID() == to.HiveID {
+		jch := make(chan CmdResult)
+		b := q.idToBees[to]
+		b.enqueCmd(NewLocalCmd(joinColonyCmd{c}, b.id(), jch))
+		_, err := (<-jch).get()
+		return err
+	}
+
+	cmd := NewRemoteCmd(joinColonyCmd{c}, to)
+	_, err := NewProxy(to.HiveID).SendCmd(&cmd)
+	return err
 }

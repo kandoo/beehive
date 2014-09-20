@@ -58,7 +58,6 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 	newCol.Generation++
 
 	var err error
-	var cmd RemoteCmd
 	newSlaveID := BeeID{}
 
 	slaves := make([]HiveID, 0, len(oldCol.Slaves))
@@ -78,8 +77,7 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 	}
 
 	newCol.AddSlave(newSlaveID)
-	cmd = NewRemoteCmd(joinColonyCmd{newCol}, newSlaveID)
-	if _, err = NewProxy(newSlaveID.HiveID).SendCmd(&cmd); err != nil {
+	if err = bee.qee.sendJoinColonyCmd(newCol, newSlaveID); err != nil {
 		newCol.DelSlave(newSlaveID)
 		newSlaveID = BeeID{}
 		goto register
