@@ -192,14 +192,14 @@ func (q *qee) lockLocally(bee bee, dks ...CellKey) {
 	}
 }
 
-func (q *qee) syncBees(ms MappedCells, bee bee) {
+func (q *qee) syncBees(cells MappedCells, bee bee) {
 	colony := BeeColony{
 		Master: bee.id(),
 		Slaves: bee.slaves(),
 	}
 
 	newCell := false
-	for _, dictKey := range ms {
+	for _, dictKey := range cells {
 		dkRcvr, ok := q.beeByKey(dictKey)
 		if !ok {
 			q.lockKey(dictKey, bee, colony)
@@ -212,13 +212,15 @@ func (q *qee) syncBees(ms MappedCells, bee bee) {
 		}
 
 		glog.Fatalf("Incosistent shards for keys %v in MappedCells %v", dictKey,
-			ms)
+			cells)
 	}
 
-	if newCell {
-		resCh := make(chan CmdResult)
-		bee.enqueCmd(NewLocalCmd(addMappedCell{ms}, bee.id(), resCh))
-		<-resCh
+	if !newCell {
+		return
+	}
+
+	if lbee, ok := bee.(*localBee); ok {
+		lbee.addMappedCells(cells)
 	}
 }
 
@@ -266,13 +268,13 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("Broadcast msg: %v", mh.msg)
 
-	mappedCells := q.invokeMap(mh)
-	if mappedCells == nil {
+	cells := q.invokeMap(mh)
+	if cells == nil {
 		glog.V(2).Infof("Message dropped: %v", mh.msg)
 		return
 	}
 
-	if mappedCells.LocalBroadcast() {
+	if cells.LocalBroadcast() {
 		glog.V(2).Infof("Sending a message to all local bees: %v", mh.msg)
 		for _, bee := range q.idToBees {
 			bee.enqueMsg(mh)
@@ -280,11 +282,14 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		return
 	}
 
-	bee := q.anyBee(mappedCells)
+	bee := q.anyBee(cells)
 	if bee == nil {
-		bee = q.newBeeForMappedCells(mappedCells)
+		bee = q.newBeeForMappedCells(cells)
+		if lbee, ok := bee.(*localBee); ok {
+			lbee.addMappedCells(cells)
+		}
 	} else {
-		q.syncBees(mappedCells, bee)
+		q.syncBees(cells, bee)
 	}
 
 	glog.V(2).Infof("Message sent to bee %v: %v", bee.id(), mh.msg)
@@ -432,17 +437,17 @@ func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
 	return d
 }
 
-func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
+func (q *qee) newBeeForMappedCells(cells MappedCells) bee {
 	newColony := BeeColony{
 		Master: q.nextBeeID(false),
 	}
 
-	beeID := q.lock(mc, newColony, false)
+	beeID := q.lock(cells, newColony, false)
 
 	if newColony.Master != beeID {
 		q.lastBeeID--
 		bee := q.findOrCreateBee(beeID)
-		q.lockLocally(bee, mc...)
+		q.lockLocally(bee, cells...)
 		return bee
 	}
 
@@ -459,12 +464,12 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 	}
 
 	newColony.Generation++
-	beeID = q.lock(mc, newColony, true)
+	beeID = q.lock(cells, newColony, true)
 
 	if newColony.Master != beeID {
 		q.lastBeeID--
 		bee := q.findOrCreateBee(beeID)
-		q.lockLocally(bee, mc...)
+		q.lockLocally(bee, cells...)
 		// FIXME(soheil): Stop all the started slaves.
 		return bee
 	}
@@ -483,7 +488,7 @@ func (q *qee) newBeeForMappedCells(mc MappedCells) bee {
 		}
 	}
 
-	q.lockLocally(bee, mc...)
+	q.lockLocally(bee, cells...)
 	return bee
 }
 

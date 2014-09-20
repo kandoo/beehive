@@ -317,15 +317,8 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		bee.stop()
 		lcmd.ResCh <- CmdResult{}
 
-	case addMappedCell:
-		if bee.cells == nil {
-			bee.cells = make(map[CellKey]bool)
-		}
-
-		for _, c := range cmd.Cells {
-			bee.cells[c] = true
-		}
-
+	case addMappedCells:
+		bee.addMappedCells(cmd.Cells)
 		lcmd.ResCh <- CmdResult{}
 
 	case joinColonyCmd:
@@ -431,11 +424,28 @@ func (bee *localBee) stop() {
 }
 
 func (bee *localBee) mappedCells() MappedCells {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
 	mc := make(MappedCells, 0, len(bee.cells))
 	for c := range bee.cells {
 		mc = append(mc, c)
 	}
 	return mc
+}
+
+func (bee *localBee) addMappedCells(cells MappedCells) {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
+	if bee.cells == nil {
+		bee.cells = make(map[CellKey]bool)
+	}
+
+	for _, c := range cells {
+		glog.V(2).Infof("Adding cell %v to %v", c, bee.id())
+		bee.cells[c] = true
+	}
 }
 
 func (bee *localBee) lastCommittedTx() *Tx {

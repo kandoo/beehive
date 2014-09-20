@@ -99,7 +99,7 @@ type delSlaveCmd struct {
 	BeeID
 }
 
-type addMappedCell struct {
+type addMappedCells struct {
 	Cells MappedCells
 }
 
