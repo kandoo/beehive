@@ -60,6 +60,7 @@ type HiveConfig struct {
 	HBQueryInterval time.Duration // Heartbeating interval.
 	HBDeadTimeout   time.Duration // When to announce a bee dead.
 	RegLockTimeout  time.Duration // When to retry to lock an entry in a registry.
+	UseBeeHeartbeat bool          // Heartbeat bees instead of the registry.
 }
 
 // Creates a new hive based on the given configuration.
@@ -123,6 +124,9 @@ func init() {
 		"The timeout after which a non-responsive bee is announced dead.")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
 		10*time.Millisecond, "Timeout to retry locking an entry in the registry")
+	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
+		"Whether to use high-granular bee heartbeating in addition to registry"+
+			"events")
 }
 
 type qeeAndHandler struct {
@@ -249,10 +253,10 @@ func (h *hive) init() {
 	} else {
 		h.collector = &dummyStatCollector{}
 	}
-
-	startHeartbeatHandler(h)
+	if h.config.UseBeeHeartbeat {
+		startHeartbeatHandler(h)
+	}
 	h.stateMan = newPersistentStateManager(h)
-
 	h.replStrategy = newRndReplication(h)
 }
 

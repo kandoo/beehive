@@ -141,8 +141,8 @@ func pulseTakerID(h HiveID) BeeID {
 	}
 }
 
-func startHeartbeatBee(b BeeID, h Hive) {
-	if b.AppName == heartbeatAppName {
+func startHeartbeatBee(b BeeID, h *hive) {
+	if !h.config.UseBeeHeartbeat && b.AppName == heartbeatAppName {
 		return
 	}
 
