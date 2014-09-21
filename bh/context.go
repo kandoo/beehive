@@ -271,15 +271,25 @@ func (b *localBee) CommitTx() error {
 		return b.doCommitTx()
 	}
 
-	n, err := b.replicateTxOnAllSlaves(b.tx)
-	if err != nil {
-		glog.Errorf("Error in replicating the transaction: %v", err)
-		b.AbortTx()
-		return err
-	}
+	retries := 3
+	for {
+		lives, deads := b.replicateTxOnAllSlaves(b.tx)
+		if len(lives) >= b.app.CommitThreshold() {
+			break
+		}
 
-	if n < b.app.CommitThreshold() {
-		glog.Fatal("Not implemented yet.")
+		if retries == 0 {
+			// TODO(soheil): Should we fail here?
+			b.Snooze(5 * time.Millisecond)
+		}
+		retries--
+
+		glog.Warningf("Replicated less than commit threshold %v", len(lives))
+		for _, s := range deads {
+			glog.V(2).Infof("Trying to replace slave %v", s)
+			b.handleSlaveFailure(s)
+		}
+		glog.V(2).Infof("Allocated new slaves will retry")
 	}
 
 	if err := b.doCommitTx(); err != nil {

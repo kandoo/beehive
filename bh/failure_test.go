@@ -19,7 +19,7 @@ func (m *TestFailureMessage) Decode(b []byte) {
 	*m = TestFailureMessage(binary.LittleEndian.Uint64(b))
 }
 
-func testFailure(t *testing.T, nMsgs int, failMaster bool) {
+func testFailure(t *testing.T, nMsgs int, failMaster bool, cleanState bool) {
 	maybeSkipRegistryTest(t)
 
 	addrs := hiveAddrsForTest(4)
@@ -31,12 +31,15 @@ func testFailure(t *testing.T, nMsgs int, failMaster bool) {
 			return nil
 		}
 
+		if !cleanState {
+			time.Sleep(10 * time.Millisecond)
+		}
+
 		dict := ctx.Dict("N")
 		dict.Put("I", data.Bytes())
 		ctx.Emit(data + 1)
 		return nil
 	}
-
 	mapF := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"N", "I"}}
 	}
@@ -71,10 +74,14 @@ func testFailure(t *testing.T, nMsgs int, failMaster bool) {
 		hives = hives[:2]
 	}
 
-	time.Sleep(1 * time.Second)
+	if cleanState {
+		time.Sleep(1 * time.Second)
+	}
 	hives[0].Emit(TestFailureMessage(1))
 	<-ch
-	time.Sleep(1 * time.Second)
+	if cleanState {
+		time.Sleep(1 * time.Second)
+	}
 
 	testFailureQee := slave.qees[msgType(TestFailureMessage(0))][0]
 
@@ -105,17 +112,21 @@ func testFailure(t *testing.T, nMsgs int, failMaster bool) {
 }
 
 func TestSlaveFailureWithTx(t *testing.T) {
-	testFailure(t, 10, false)
+	testFailure(t, 10, false, true)
 }
 
 func TestSlaveFailureWithoutTx(t *testing.T) {
-	testFailure(t, 1, false)
+	testFailure(t, 1, false, true)
+}
+
+func TestSlaveFailureWithTxChaos(t *testing.T) {
+	testFailure(t, 10, false, false)
 }
 
 func TestMasterFailureWithTx(t *testing.T) {
-	testFailure(t, 10, true)
+	testFailure(t, 10, true, true)
 }
 
 func TestMasterFailureWithoutTx(t *testing.T) {
-	testFailure(t, 1, true)
+	testFailure(t, 1, true, true)
 }
