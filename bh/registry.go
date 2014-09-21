@@ -343,6 +343,35 @@ func (g registry) set(col BeeColony, mc MappedCells) BeeID {
 	return col.Master
 }
 
+func (g registry) mappedCells(col BeeColony) (MappedCells, error) {
+	p := g.appPath(string(col.Master.AppName))
+	r, err := g.Get(p, false, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var cells MappedCells
+	for _, d := range r.Node.Nodes {
+		for _, k := range d.Nodes {
+			v, err := BeeColonyFromBytes([]byte(k.Value))
+			if err != nil || !col.Equal(v) {
+				continue
+			}
+
+			parts := strings.Split(k.Key, "/")
+			l := len(parts)
+			if l < 2 {
+				continue
+			}
+			cells = append(cells, CellKey{
+				Dict: DictName(parts[l-2]),
+				Key:  Key(parts[l-1]),
+			})
+		}
+	}
+	return cells, nil
+}
+
 func (g registry) storeOrGet(col BeeColony, mc MappedCells) BeeID {
 	sort.Sort(mc)
 
@@ -366,7 +395,7 @@ func (g registry) storeOrGet(col BeeColony, mc MappedCells) BeeID {
 			glog.Fatalf("Cannot decode a BeeColony: %s", err)
 		}
 
-		if entry.Eq(col) {
+		if entry.Equal(col) {
 			continue
 		}
 

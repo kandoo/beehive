@@ -66,3 +66,8 @@ type TxInfo struct {
 	LastCommitted TxSeq
 	LastBuffered  TxSeq
 }
+
+func (i TxInfo) String() string {
+	return fmt.Sprintf("TxInfo (gen=%v, buf=%v, committed=%v)", i.Generation,
+		i.LastBuffered, i.LastCommitted)
+}

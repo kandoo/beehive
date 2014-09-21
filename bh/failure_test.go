@@ -2,6 +2,7 @@ package bh
 
 import (
 	"encoding/binary"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -18,17 +19,14 @@ func (m *TestFailureMessage) Decode(b []byte) {
 	*m = TestFailureMessage(binary.LittleEndian.Uint64(b))
 }
 
-func TestSlaveFailure(t *testing.T) {
+func testFailure(t *testing.T, nMsgs int, failMaster bool) {
 	maybeSkipRegistryTest(t)
 
-	const nMsgs = 10
-
 	addrs := hiveAddrsForTest(4)
-
 	ch := make(chan bool, 2)
 	rcvF := func(msg Msg, ctx RcvContext) error {
 		data := msg.Data().(TestFailureMessage)
-		if data%nMsgs == 0 {
+		if int(data)%nMsgs == 0 {
 			ch <- true
 			return nil
 		}
@@ -42,9 +40,9 @@ func TestSlaveFailure(t *testing.T) {
 	mapF := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"N", "I"}}
 	}
-
+	appName := AppName(fmt.Sprintf("FailingApp%d%v", nMsgs, failMaster))
 	hives := startHivesForReplicationTest(t, addrs[:3], func(h Hive) {
-		app := h.NewApp("FailingApp")
+		app := h.NewApp(appName)
 		app.SetReplicationFactor(len(addrs) - 1)
 		app.HandleFunc(TestFailureMessage(0), mapF, rcvF)
 	})
@@ -57,18 +55,21 @@ func TestSlaveFailure(t *testing.T) {
 	slave.NewApp("joined").Handle(HiveJoined{}, &hiveJoinedHandler{
 		joined: slaveCh,
 	})
-
-	app := slave.NewApp("FailingApp")
+	app := slave.NewApp(appName)
 	app.SetReplicationFactor(len(addrs) - 1)
 	app.HandleFunc(TestFailureMessage(0), mapF, rcvF)
-
 	go slave.Start()
-
 	for _ = range addrs {
 		<-slaveCh
 	}
 
-	stopHives(hives[2])
+	if failMaster {
+		stopHives(hives[0])
+		hives = hives[1:]
+	} else {
+		stopHives(hives[2])
+		hives = hives[:2]
+	}
 
 	time.Sleep(1 * time.Second)
 	hives[0].Emit(TestFailureMessage(1))
@@ -101,4 +102,20 @@ func TestSlaveFailure(t *testing.T) {
 	}
 
 	stopHives(append(hives[:2], slave)...)
+}
+
+func TestSlaveFailureWithTx(t *testing.T) {
+	testFailure(t, 10, false)
+}
+
+func TestSlaveFailureWithoutTx(t *testing.T) {
+	testFailure(t, 1, false)
+}
+
+func TestMasterFailureWithTx(t *testing.T) {
+	testFailure(t, 10, true)
+}
+
+func TestMasterFailureWithoutTx(t *testing.T) {
+	testFailure(t, 1, true)
 }

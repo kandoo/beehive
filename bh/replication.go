@@ -148,7 +148,7 @@ func (bee *localBee) replicateAllTxOnSlave(slave BeeID) error {
 		return fmt.Errorf("Could only replicate %d transactions", n)
 	}
 
-	lastTx := bee.lastCommittedTx()
+	_, lastTx := bee.lastCommittedTx()
 	if lastTx == nil {
 		glog.V(2).Infof("No transaction to commit on %v", slave)
 		return nil

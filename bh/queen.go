@@ -3,6 +3,7 @@ package bh
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/golang/glog"
 )
@@ -15,17 +16,18 @@ type QeeID struct {
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
-	hive *hive
-	app  *app
+	mutex sync.Mutex
+	hive  *hive
+	app   *app
 
 	dataCh chan msgAndHandler
 	ctrlCh chan LocalCmd
 
 	state TxState
 
-	lastBeeID uint64
-	idToBees  map[BeeID]bee
-	keyToBees map[CellKey]bee
+	lastBeeID  uint64
+	idToBees   map[BeeID]bee
+	cellToBees map[CellKey]bee
 }
 
 func (q *qee) setDetached(d *detachedBee) error {
@@ -170,7 +172,10 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 }
 
 func (q *qee) beeByKey(dk CellKey) (bee, bool) {
-	r, ok := q.keyToBees[dk]
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	r, ok := q.cellToBees[dk]
 	return r, ok
 }
 
@@ -180,9 +185,12 @@ func (q *qee) beeByID(id BeeID) (bee, bool) {
 }
 
 func (q *qee) lockLocally(bee bee, dks ...CellKey) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
 	glog.V(2).Infof("Bee %v locally locks %v", bee.id(), MappedCells(dks))
 	for _, dk := range dks {
-		q.keyToBees[dk] = bee
+		q.cellToBees[dk] = bee
 	}
 }
 
@@ -487,13 +495,17 @@ func (q *qee) newBeeForMappedCells(cells MappedCells) bee {
 }
 
 func (q *qee) mappedCellsOfBee(id BeeID) MappedCells {
-	ms := MappedCells{}
-	for k, r := range q.keyToBees {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	fmt.Println(q.cellToBees)
+	mc := MappedCells{}
+	for k, r := range q.cellToBees {
 		if r.id() == id {
-			ms = append(ms, k)
+			mc = append(mc, k)
 		}
 	}
-	return ms
+	return mc
 }
 
 func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {

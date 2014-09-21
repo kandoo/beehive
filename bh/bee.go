@@ -125,7 +125,7 @@ func (c BeeColony) DeepCopy() BeeColony {
 	return c
 }
 
-func (c BeeColony) Eq(thatC BeeColony) bool {
+func (c BeeColony) Equal(thatC BeeColony) bool {
 	if c.Master != thatC.Master {
 		return false
 	}
@@ -150,6 +150,14 @@ func (c BeeColony) Eq(thatC BeeColony) bool {
 	}
 
 	return true
+}
+
+func (c *BeeColony) SlaveHives() []HiveID {
+	slaves := make([]HiveID, 0, len(c.Slaves))
+	for _, s := range c.Slaves {
+		slaves = append(slaves, s.HiveID)
+	}
+	return slaves
 }
 
 func (c *BeeColony) Bytes() ([]byte, error) {
@@ -380,9 +388,9 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 
 	case commitTxCmd:
 		seq := cmd.Seq
-		for _, tx := range bee.txBuf {
+		for i, tx := range bee.txBuf {
 			if seq == tx.Seq {
-				tx.Status = TxCommitted
+				bee.txBuf[i].Status = TxCommitted
 				glog.V(2).Infof("Committed buffered transaction #%d in %#v", tx.Seq,
 					bee.id())
 				lcmd.ResCh <- CmdResult{}
@@ -393,13 +401,8 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		lcmd.ResCh <- CmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
 
 	case getTxInfoCmd:
-		info := TxInfo{
-			Generation:    bee.colony().Generation,
-			LastBuffered:  bee.txBuf[len(bee.txBuf)-1].Seq,
-			LastCommitted: bee.lastCommittedTx().Seq,
-		}
 		lcmd.ResCh <- CmdResult{
-			Data: info,
+			Data: bee.getTxInfo(),
 		}
 
 	default:
@@ -458,14 +461,27 @@ func (bee *localBee) addMappedCells(cells MappedCells) {
 	}
 }
 
-func (bee *localBee) lastCommittedTx() *Tx {
+func (bee *localBee) getTxInfo() TxInfo {
+	info := TxInfo{
+		Generation: bee.gen(),
+	}
+	if len(bee.txBuf) != 0 {
+		info.LastBuffered = bee.txBuf[len(bee.txBuf)-1].Seq
+	}
+	if _, tx := bee.lastCommittedTx(); tx != nil {
+		info.LastCommitted = tx.Seq
+	}
+	return info
+}
+
+func (bee *localBee) lastCommittedTx() (int, *Tx) {
 	for i := len(bee.txBuf) - 1; i >= 0; i-- {
 		if bee.txBuf[i].Status == TxCommitted {
-			return &bee.txBuf[i]
+			return i, &bee.txBuf[i]
 		}
 	}
 
-	return nil
+	return -1, nil
 }
 
 func (bee *localBee) addTimer(t *time.Timer) {
@@ -496,4 +512,32 @@ func (bee *localBee) snooze(mh msgAndHandler, d time.Duration) {
 		bee.delTimer(t)
 		bee.enqueMsg(mh)
 	}()
+}
+
+func (bee *localBee) commitAllBufferedTxs() {
+	if !bee.isMaster() {
+		return
+	}
+
+	if len(bee.txBuf) == 0 {
+		return
+	}
+
+	commitIndex, _ := bee.lastCommittedTx()
+	if commitIndex == len(bee.txBuf) {
+		return
+	}
+
+	txs := append([]Tx{}, bee.txBuf[commitIndex+1:]...)
+	if commitIndex < 0 {
+		bee.txBuf = make([]Tx, 0, len(txs))
+	} else {
+		bee.txBuf = bee.txBuf[:commitIndex]
+	}
+
+	for _, tx := range txs {
+		fmt.Println(tx.Seq)
+		bee.tx = tx
+		bee.CommitTx()
+	}
 }

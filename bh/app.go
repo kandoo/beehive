@@ -233,12 +233,12 @@ func (a *app) Transactional() bool {
 func (a *app) initQee() {
 	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
-		dataCh:    make(chan msgAndHandler, a.hive.config.DataChBufSize),
-		ctrlCh:    make(chan LocalCmd, a.hive.config.CmdChBufSize),
-		hive:      a.hive,
-		app:       a,
-		keyToBees: make(map[CellKey]bee),
-		idToBees:  make(map[BeeID]bee),
+		dataCh:     make(chan msgAndHandler, a.hive.config.DataChBufSize),
+		ctrlCh:     make(chan LocalCmd, a.hive.config.CmdChBufSize),
+		hive:       a.hive,
+		app:        a,
+		cellToBees: make(map[CellKey]bee),
+		idToBees:   make(map[BeeID]bee),
 	}
 }
 

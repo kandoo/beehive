@@ -211,9 +211,10 @@ func (h *hive) init() {
 	gob.Register(BeeID{})
 	gob.Register(BeeColony{})
 
-	gob.Register(Tx{})
 	gob.Register(TxSeq(0))
 	gob.Register(TxGeneration(0))
+	gob.Register(Tx{})
+	gob.Register(TxInfo{})
 
 	gob.Register(StateOp{})
 	gob.Register(inMemDict{})
@@ -229,12 +230,15 @@ func (h *hive) init() {
 	gob.Register(joinColonyCmd{})
 	gob.Register(bufferTxCmd{})
 	gob.Register(commitTxCmd{})
+	gob.Register(getTxInfoCmd{})
+	gob.Register(getTx{})
 	gob.Register(migrateBeeCmd{})
 	gob.Register(replaceBeeCmd{})
 	gob.Register(lockMappedCellsCmd{})
 	gob.Register(getColonyCmd{})
 	gob.Register(addSlaveCmd{})
 	gob.Register(delSlaveCmd{})
+	gob.Register(addMappedCells{})
 
 	gob.Register(GobError{})
 
