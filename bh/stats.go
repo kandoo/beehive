@@ -34,7 +34,7 @@ func newAppStatCollector(h Hive) statCollector {
 
 func (c *appStatCollector) collect(from, to BeeID, msg Msg) {
 	switch msg.Data().(type) {
-	case localStatUpdate, aggrStatUpdate:
+	case localStatUpdate, aggrStatUpdate, heartbeatReq, heartbeatRes:
 		return
 	}
 

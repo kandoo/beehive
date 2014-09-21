@@ -458,7 +458,12 @@ func (q *qee) newBeeForMappedCells(cells MappedCells) bee {
 	}
 
 	slaveHives := q.hive.ReplicationStrategy().SelectSlaveHives(
-		nil, q.app.ReplicationFactor())
+		nil, q.app.ReplicationFactor()-1)
+	if len(slaveHives) < q.app.CommitThreshold() {
+		glog.Warningf("Could find only %v slaves less than commit threshold of %v",
+			len(slaveHives), q.app.CommitThreshold())
+	}
+
 	for _, h := range slaveHives {
 		slaveID, err := CreateBee(h, q.app.Name())
 		if err != nil {
@@ -498,7 +503,6 @@ func (q *qee) mappedCellsOfBee(id BeeID) MappedCells {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	fmt.Println(q.cellToBees)
 	mc := MappedCells{}
 	for k, r := range q.cellToBees {
 		if r.id() == id {
@@ -515,6 +519,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		return
 	}
 
+	glog.V(2).Infof("Migrating %v to %v", beeID, to)
 	oldBee, ok := q.beeByID(beeID)
 	if !ok {
 		err := fmt.Errorf("Bee not found: %v", beeID)

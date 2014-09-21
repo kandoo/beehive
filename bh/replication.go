@@ -28,7 +28,7 @@ func (h *BaseReplHandler) Rcv(msg Msg, ctx RcvContext) error {
 }
 
 func (h *BaseReplHandler) Map(msg Msg, ctx MapContext) MappedCells {
-	return MappedCells{{"D", Key(ctx.Hive().ID())}}
+	return ctx.LocalCells()
 }
 
 func (h *BaseReplHandler) Hives(ctx RcvContext) []HiveID {
@@ -89,7 +89,7 @@ func (h *rndRepliction) Rcv(msg Msg, ctx RcvContext) error {
 func (h *rndRepliction) SelectSlaveHives(blackList []HiveID,
 	nSlaves int) []HiveID {
 
-	if nSlaves == 0 {
+	if nSlaves <= 0 {
 		return nil
 	}
 
@@ -103,6 +103,7 @@ func (h *rndRepliction) SelectSlaveHives(blackList []HiveID,
 		BlackList: blackList,
 		Res:       resCh,
 	})
+
 	return <-resCh
 }
 

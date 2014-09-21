@@ -6,6 +6,7 @@ import (
 	"flag"
 	"net"
 	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/golang/glog"
@@ -200,8 +201,9 @@ func (h *hive) closeChannels() {
 			if err != nil {
 				glog.Errorf("Error in stopping a qee: %v", err)
 			}
-		case <-time.After(time.Second * 1):
+		case <-time.After(1 * time.Second):
 			glog.Info("Still waiting for a qee...")
+			pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 		}
 	}
 }

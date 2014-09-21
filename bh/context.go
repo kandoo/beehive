@@ -2,6 +2,7 @@ package bh
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -263,28 +264,39 @@ func (b *localBee) CommitTx() error {
 		return nil
 	}
 
-	b.tx.Generation = b.colony().Generation
 	b.tx.Ops = b.txState().Tx()
-
 	if b.tx.IsEmpty() {
 		b.tx.Seq--
 		return b.doCommitTx()
 	}
 
-	retries := 3
+	colony := b.colony()
+	if len(colony.Slaves) < b.app.CommitThreshold() {
+		if err := b.tryToRecruitSlaves(); err != nil {
+			glog.Errorf("Cannot create enough slaves to commit the transaction")
+			b.AbortTx()
+			return errors.New("Cannot create enough slaves to commit the transaction")
+		}
+	}
+
+	b.tx.Generation = colony.Generation
+
+	retries := 5
 	for {
 		lives, deads := b.replicateTxOnAllSlaves(b.tx)
 		if len(lives) >= b.app.CommitThreshold() {
 			break
 		}
 
+		glog.Warningf("Replicated less than commit threshold %v", len(lives))
+
 		if retries == 0 {
-			// TODO(soheil): Should we fail here?
-			b.Snooze(5 * time.Millisecond)
+			// TODO(soheil): Should we really fail here?
+			b.AbortTx()
+			return fmt.Errorf("Can only replicate to %v slaves", len(lives))
 		}
 		retries--
-
-		glog.Warningf("Replicated less than commit threshold %v", len(lives))
+		time.Sleep(5 * time.Millisecond)
 		for _, s := range deads {
 			glog.V(2).Infof("Trying to replace slave %v", s)
 			b.handleSlaveFailure(s)

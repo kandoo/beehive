@@ -323,7 +323,6 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 	}
 
 	bee.CommitTx()
-
 	bee.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
 }
 
@@ -417,12 +416,12 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
-	glog.V(2).Infof("Bee %v enqueues message %v", bee.id(), mh.msg)
+	glog.V(3).Infof("Bee %v enqueues message %v", bee.id(), mh.msg)
 	bee.dataCh <- mh
 }
 
 func (bee *localBee) enqueCmd(cmd LocalCmd) {
-	glog.V(2).Infof("Bee %v enqueues a command %v", bee.id(), cmd)
+	glog.V(3).Infof("Bee %v enqueues a command %v", bee.id(), cmd)
 	bee.ctrlCh <- cmd
 }
 
@@ -536,7 +535,6 @@ func (bee *localBee) commitAllBufferedTxs() {
 	}
 
 	for _, tx := range txs {
-		fmt.Println(tx.Seq)
 		bee.tx = tx
 		bee.CommitTx()
 	}

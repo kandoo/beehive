@@ -2,6 +2,7 @@ package bh
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang/glog"
@@ -55,17 +56,18 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 	glog.Warningf("Bee %v has a failed slave %v", bee.id(), slaveID)
 
 	newCol.Generation++
-	newCol, newSlaveID, err := bee.createSlaveForColony(newCol)
-	if err == nil {
-		glog.V(2).Infof("Created slave %v for %v", newSlaveID, newCol.Master)
-	} else {
-		glog.Errorf("Cannot create a new slave for %v: %v", newCol.Master, err)
+	newCol, newSlaveIDs := bee.createSlavesForColony(newCol, 1)
+	switch len(newSlaveIDs) {
+	case 0:
+		glog.Errorf("Cannot create a new slave for %v", newCol.Master)
+	default:
+		glog.V(2).Infof("Created slave %v for %v", newSlaveIDs[0], newCol.Master)
 	}
 
 	cells := bee.mappedCells()
 	glog.V(2).Infof("Trying to replace %v with %v in the registry for %v", oldCol,
 		newCol, cells)
-	oldCol, err = bee.hive.registry.compareAndSet(oldCol, newCol, cells)
+	oldCol, err := bee.hive.registry.compareAndSet(oldCol, newCol, cells)
 	if err != nil {
 		glog.Errorf("Bee %v has an expired colony %v", bee.id(), newCol)
 		bee.stop()
@@ -74,13 +76,12 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 
 	bee.setColony(newCol)
 
-	if newSlaveID.IsNil() {
+	if len(newSlaveIDs) == 0 {
 		return
 	}
 
-	// FIXME(soheil): We are ignoring replication error.
-	bee.replicateAllTxOnSlave(newSlaveID)
-	glog.V(2).Infof("Successfully replaced the failed slave %v", newCol)
+	glog.V(2).Infof("Successfully replaced the failed slave %v with %v", newCol,
+		newSlaveIDs[0])
 }
 
 func (bee *localBee) handleMasterFailure(masterID BeeID) {
@@ -217,15 +218,14 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		}
 	}
 
-	var newSlave BeeID
 	nNewSlaves := bee.app.ReplicationFactor() - len(slaveTxInfo) - 1
-	for i := 0; i < nNewSlaves; i++ {
-		newCol, newSlave, err = bee.createSlaveForColony(newCol)
-		if err != nil {
-			glog.Errorf("Cannot create a slave for colony %v: %v", newCol, err)
-			break
-		}
-		bee.replicateAllTxOnSlave(newSlave)
+	newCol, newSlaves := bee.createSlavesForColony(newCol, nNewSlaves)
+	switch {
+	case len(newSlaves) == 0:
+		glog.Errorf("Cannot create a slave for colony %v: %v", newCol, err)
+	case len(newSlaves) < bee.app.CommitThreshold():
+		glog.Warningf("%v has %v slaves which is less than commit threshold of %v",
+			newCol, len(newSlaves), bee.app.CommitThreshold())
 	}
 
 	newCol.Master = bee.beeID
@@ -262,35 +262,97 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 	glog.V(2).Infof("Successfully replaced the failed master %v", newCol)
 }
 
-func (bee *localBee) createSlaveForColony(
-	col BeeColony) (BeeColony, BeeID, error) {
+func (bee *localBee) createSlavesForColony(
+	col BeeColony, nSlaves int) (BeeColony, []BeeID) {
 
 	blacklist := col.SlaveHives()
 	newCol := col.DeepCopy()
-	var newSlave BeeID
+	newSlaves := make([]BeeID, 0, nSlaves)
 	for {
 		newSlaveHives := bee.hive.ReplicationStrategy().SelectSlaveHives(blacklist,
-			1)
+			nSlaves-len(newSlaves))
 		if len(newSlaveHives) == 0 {
-			return col, BeeID{}, errors.New("Cannot find a hive to host the slave")
+			return col, newSlaves
 		}
 
-		glog.V(2).Infof("Trying to create a slave bee on %v", newSlaveHives[0])
+		for _, h := range newSlaveHives {
+			glog.V(2).Infof("Trying to create a slave bee on %v", h)
+			newSlave, err := CreateBee(h, bee.app.Name())
+			if err != nil {
+				glog.V(2).Infof("Cannot create bee on %v: %v", h, err)
+				blacklist = append(blacklist, newSlave.HiveID)
+				continue
+			}
 
-		var err error
-		if newSlave, err = CreateBee(newSlaveHives[0], bee.app.Name()); err != nil {
-			glog.V(2).Infof("Cannot create bee on %v: %v", newSlaveHives[0], err)
-			blacklist = append(blacklist, newSlave.HiveID)
+			newCol.AddSlave(newSlave)
+			if err = bee.qee.sendJoinColonyCmd(newCol, newSlave); err != nil {
+				glog.Errorf("New slave %v cannot join the colony: %v", newSlave, err)
+				newCol.DelSlave(newSlave)
+				blacklist = append(blacklist, newSlave.HiveID)
+				newCol.DelSlave(newSlave)
+				continue
+			}
+
+			if err := bee.replicateAllTxOnSlave(newSlave); err != nil {
+				glog.Errorf("Error in replicating on %v", newSlave)
+				blacklist = append(blacklist, newSlave.HiveID)
+				newCol.DelSlave(newSlave)
+				continue
+			}
+
+			newSlaves = append(newSlaves, newSlave)
+		}
+
+		if len(newSlaves) < nSlaves {
 			continue
 		}
 
-		newCol.AddSlave(newSlave)
-		if err = bee.qee.sendJoinColonyCmd(newCol, newSlave); err != nil {
-			newCol.DelSlave(newSlave)
-			blacklist = append(blacklist, newSlave.HiveID)
-			continue
-		}
-
-		return newCol, newSlave, nil
+		return newCol, newSlaves
 	}
+}
+
+func (bee *localBee) tryToRecruitSlaves() error {
+	oldCol := bee.colony()
+	if !bee.isMaster() {
+		return fmt.Errorf("%v is not the master of %v", bee.id(), oldCol)
+	}
+
+	nSlaves := bee.app.ReplicationFactor() - len(oldCol.Slaves) - 1
+	if nSlaves <= 0 {
+		return nil
+	}
+
+	newCol, newSlaves := bee.createSlavesForColony(oldCol.DeepCopy(), nSlaves)
+	glog.V(2).Infof("Recruited slaves %v for %v", newSlaves, oldCol)
+
+	for _, s := range newCol.Slaves {
+		cmd := RemoteCmd{
+			Cmd: joinColonyCmd{
+				Colony: newCol,
+			},
+			CmdTo: s,
+		}
+		_, err := NewProxy(s.HiveID).SendCmd(&cmd)
+		if err != nil {
+			glog.Errorf("Slave %v didn't join %v: %v", s, newCol, err)
+		}
+
+		newCol.DelSlave(s)
+	}
+
+	cells := bee.mappedCells()
+	_, err := bee.hive.registry.compareAndSet(oldCol, newCol, cells)
+	if err != nil {
+		return err
+	}
+
+	bee.setColony(newCol)
+
+	if len(newCol.Slaves) < bee.app.CommitThreshold() {
+		return fmt.Errorf(
+			"%v has %v slaves which is lower than commmit threshold of %v",
+			bee.id(), len(newCol.Slaves), bee.app.CommitThreshold())
+	}
+
+	return nil
 }

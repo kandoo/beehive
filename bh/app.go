@@ -250,7 +250,7 @@ func (a *app) SetReplicationFactor(f int) {
 	a.SetFlags(AppFlagTransactional)
 	a.replFactor = f
 	if a.commitThresh == 0 {
-		a.commitThresh = f/2 + 1
+		a.commitThresh = f / 2
 	}
 }
 func (a *app) CommitThreshold() int {
@@ -259,11 +259,11 @@ func (a *app) CommitThreshold() int {
 
 func (a *app) SetCommitThreshold(c int) error {
 	if c > a.replFactor {
-		a.commitThresh = a.replFactor
+		a.commitThresh = a.replFactor - 1
 		return fmt.Errorf("Commit threshold %d is lager than replication factor %d",
 			c, a.replFactor)
 	}
 
-	a.commitThresh = c
+	a.commitThresh = c - 1
 	return nil
 }

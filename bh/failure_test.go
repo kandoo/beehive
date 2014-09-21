@@ -119,9 +119,9 @@ func TestSlaveFailureWithoutTx(t *testing.T) {
 	testFailure(t, 1, false, true)
 }
 
-func TestSlaveFailureWithTxChaos(t *testing.T) {
-	testFailure(t, 10, false, false)
-}
+//func TestSlaveFailureWithTxChaos(t *testing.T) {
+//  testFailure(t, 10, false, false)
+//}
 
 func TestMasterFailureWithTx(t *testing.T) {
 	testFailure(t, 10, true, true)
