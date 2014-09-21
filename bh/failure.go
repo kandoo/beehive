@@ -8,42 +8,114 @@ import (
 	"github.com/golang/glog"
 )
 
-type failureHandler struct {
+type colonyModerator struct {
 	lockTimeout time.Duration
 }
 
-func (h *failureHandler) Rcv(msg Msg, ctx RcvContext) error {
+func (m *colonyModerator) Rcv(msg Msg, ctx RcvContext) error {
 	ctx.AbortTx()
 
-	bFailed := msg.Data().(beeFailed)
+	switch d := msg.Data().(type) {
+	case beeFailed:
+		return m.handleFailed(d, ctx)
+	case HiveJoined:
+		return m.handleJoined(d, ctx)
+	case HiveLeft:
+		return m.handleLeft(d, ctx)
+	}
+	return nil
+
+}
+
+func (m *colonyModerator) Map(msg Msg, ctx MapContext) MappedCells {
+	return MappedCells{}
+}
+
+func (m *colonyModerator) handleFailed(msg beeFailed, ctx RcvContext) error {
 	b, ok := ctx.(*localBee)
 	if !ok {
 		return errors.New("Cannot handle failures of a detached or a proxy.")
 	}
 
-	if err := b.hive.registry.tryLockApp(b.id()); err != nil {
-		ctx.Snooze(h.lockTimeout)
+	col := b.colony()
+	masterFailed := col.IsMaster(msg.id)
+	slaveFailed := col.IsSlave(msg.id) && b.isMaster()
+
+	if !masterFailed && !slaveFailed {
+		return nil
 	}
 
-	defer func() {
-		if err := b.hive.registry.unlockApp(b.id()); err != nil {
-			glog.Fatalf("Cannot unlock the application: %v", err)
+	err := b.hive.registry.trySyncCall(b.id(), func() {
+		if masterFailed {
+			b.handleMasterFailure(msg.id)
+		} else {
+			b.handleSlaveFailure(msg.id)
 		}
-	}()
+	})
 
-	bCol := b.colony()
-	switch {
-	case bCol.IsMaster(bFailed.id):
-		b.handleMasterFailure(bFailed.id)
-
-	case bCol.IsSlave(bFailed.id) && b.isMaster():
-		b.handleSlaveFailure(bFailed.id)
+	if err != nil {
+		ctx.Snooze(m.lockTimeout)
 	}
+
 	return nil
 }
 
-func (h *failureHandler) Map(msg Msg, ctx MapContext) MappedCells {
-	return MappedCells{}
+func (m *colonyModerator) handleJoined(msg HiveJoined, ctx RcvContext) error {
+	b, ok := ctx.(*localBee)
+	if !ok {
+		return errors.New("Cannot handle failures of a detached or a proxy.")
+	}
+
+	col := b.colony()
+	if len(col.Slaves) >= b.app.ReplicationFactor()-1 {
+		return nil
+	}
+
+	err := b.hive.registry.trySyncCall(b.id(), func() {
+		glog.V(2).Infof("Trying to recruit a new slave from %v", msg.HiveID)
+		b.tryToRecruitSlaves()
+	})
+
+	if err != nil {
+		ctx.Snooze(m.lockTimeout)
+	}
+
+	return nil
+}
+
+func (m *colonyModerator) handleLeft(msg HiveLeft, ctx RcvContext) error {
+	b, ok := ctx.(*localBee)
+	if !ok {
+		return errors.New("Cannot handle failures of a detached or a proxy.")
+	}
+
+	col := b.colony()
+	masterFailed := col.Master.HiveID == msg.HiveID
+	failedSlave := BeeID{}
+	for _, s := range col.Slaves {
+		if s.HiveID == msg.HiveID {
+			failedSlave = s
+			break
+		}
+	}
+	slaveFailed := !failedSlave.IsNil() && b.isMaster()
+	if !masterFailed && !slaveFailed {
+		return nil
+	}
+
+	err := b.hive.registry.trySyncCall(b.id(), func() {
+		if masterFailed {
+			b.handleMasterFailure(col.Master)
+		} else {
+			b.handleSlaveFailure(failedSlave)
+		}
+	})
+
+	if err != nil {
+		ctx.Snooze(m.lockTimeout)
+	}
+
+	return nil
 }
 
 func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
@@ -53,7 +125,8 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 		return
 	}
 
-	glog.Warningf("Bee %v has a failed slave %v", bee.id(), slaveID)
+	glog.Warningf("Bee %v has a failed slave %v (colony: %v)", bee.id(), slaveID,
+		oldCol)
 
 	newCol.Generation++
 	newCol, newSlaveIDs := bee.createSlavesForColony(newCol, 1)
@@ -95,7 +168,8 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		return
 	}
 
-	glog.Warningf("Bee %v has a failed master %v", bee.id(), masterID)
+	glog.Warningf("Bee %v has a failed master %v (colony: %v)", bee.id(),
+		masterID, oldCol)
 
 	failedSlaves := make([]BeeID, 0, len(newCol.Slaves))
 	slaveTxInfo := make(map[BeeID]TxInfo)

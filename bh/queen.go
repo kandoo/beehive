@@ -8,11 +8,6 @@ import (
 	"github.com/golang/glog"
 )
 
-type QeeID struct {
-	Hive HiveID
-	App  AppName
-}
-
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
@@ -44,6 +39,13 @@ func (q *qee) detachedBees() []*detachedBee {
 		ds = append(ds, b.(*detachedBee))
 	}
 	return ds
+}
+
+func (q *qee) id() BeeID {
+	return BeeID{
+		HiveID:  q.hive.ID(),
+		AppName: q.app.Name(),
+	}
 }
 
 func (q *qee) start() {
@@ -277,7 +279,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	}
 
 	if cells.LocalBroadcast() {
-		glog.V(2).Infof("Sending a message to all local bees: %v", mh.msg)
+		glog.V(2).Infof("%v sends a message to all local bees: %v", q.id(), mh.msg)
 		for _, bee := range q.idToBees {
 			if _, ok := bee.(*localBee); !ok {
 				return
