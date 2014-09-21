@@ -130,8 +130,8 @@ func init() {
 }
 
 type qeeAndHandler struct {
-	q       *qee
-	handler Handler
+	q *qee
+	h Handler
 }
 
 // hiveStatus represents the status of a hive.
@@ -281,13 +281,20 @@ func (h *hive) registerApp(a *app) {
 	h.apps[a.Name()] = a
 }
 
-func (h *hive) registerHandler(t MsgType, m *qee, hdl Handler) {
-	h.qees[t] = append(h.qees[t], qeeAndHandler{m, hdl})
+func (h *hive) registerHandler(t MsgType, q *qee, l Handler) {
+	for i, qh := range h.qees[t] {
+		if qh.q == q {
+			h.qees[t][i].h = l
+			return
+		}
+	}
+
+	h.qees[t] = append(h.qees[t], qeeAndHandler{q, l})
 }
 
 func (h *hive) handleMsg(m *msg) {
-	for _, mh := range h.qees[m.Type()] {
-		mh.q.dataCh <- msgAndHandler{m, mh.handler}
+	for _, qh := range h.qees[m.Type()] {
+		qh.q.dataCh <- msgAndHandler{m, qh.h}
 	}
 }
 
@@ -362,8 +369,13 @@ func (h *hive) NewApp(name AppName) App {
 	}
 	a.initQee()
 	h.registerApp(a)
+
 	a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
-	a.Handle(beeFailed{}, &failureHandler{h.config.RegLockTimeout})
+	mod := &colonyModerator{h.config.RegLockTimeout}
+	a.Handle(beeFailed{}, mod)
+	a.Handle(HiveJoined{}, mod)
+	a.Handle(HiveLeft{}, mod)
+
 	return a
 }
 

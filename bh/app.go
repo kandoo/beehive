@@ -185,12 +185,12 @@ func (a *app) Handle(msg interface{}, h Handler) error {
 
 func (a *app) registerHandler(t MsgType, h Handler) error {
 	_, ok := a.handlers[t]
+	a.handlers[t] = h
+	a.hive.registerHandler(t, a.qee, h)
+
 	if ok {
 		return errors.New("A handler for this message type already exists.")
 	}
-
-	a.handlers[t] = h
-	a.hive.registerHandler(t, a.qee, h)
 	return nil
 }
 
