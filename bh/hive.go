@@ -209,10 +209,12 @@ func (h *hive) closeChannels() {
 				}
 				stopped = true
 			case <-time.After(1 * time.Second):
-				glog.Infof("Still waiting for a qee %v...", q.id())
 				if tries--; tries < 0 {
-					panic("test")
+					glog.Info("Giving up on qee %v", q.id())
+					stopped = true
+					continue
 				}
+				glog.Infof("Still waiting for a qee %v...", q.id())
 			}
 		}
 	}

@@ -121,6 +121,7 @@ func (g *registry) startPollers() {
 	startedCh := make(chan bool, 1)
 	go g.watchHives(startedCh)
 	<-startedCh
+	glog.V(1).Infof("Registery pollers started")
 }
 
 func (g *registry) updateTTL() {
