@@ -210,7 +210,7 @@ func (h *hive) closeChannels() {
 				stopped = true
 			case <-time.After(1 * time.Second):
 				if tries--; tries < 0 {
-					glog.Info("Giving up on qee %v", q.id())
+					glog.Infof("Giving up on qee %v", q.id())
 					stopped = true
 					continue
 				}
@@ -375,6 +375,7 @@ func (h *hive) NewApp(name AppName) App {
 	}
 	a.initQee()
 	h.registerApp(a)
+	a.SetFlags(AppFlagTransactional)
 
 	a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
 	mod := &colonyModerator{h.config.RegLockTimeout}
