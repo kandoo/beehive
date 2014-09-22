@@ -112,11 +112,13 @@ func main() {
 	shouldPing := flag.Bool("ping", false, "Whether to ping.")
 	shouldPong := flag.Bool("pong", false, "Whether to pong.")
 
-	pingAtor := bh.NewApp("Ping")
-	pingAtor.Handle(pong{}, &pinger{})
+	pingApp := bh.NewApp("Ping")
+	pingApp.SetReplicationFactor(2)
+	pingApp.Handle(pong{}, &pinger{})
 
-	pongAtor := bh.NewApp("Pong")
-	pongAtor.Handle(ping{}, &ponger{})
+	pongApp := bh.NewApp("Pong")
+	pongApp.SetReplicationFactor(2)
+	pongApp.Handle(ping{}, &ponger{})
 
 	if *shouldPing {
 		bh.Emit(ping{})

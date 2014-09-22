@@ -7,11 +7,15 @@ func TestReplicationStrategy(t *testing.T) {
 	hives := startHivesForReplicationTest(t, addrs, func(h Hive) {})
 
 	slaves := hives[1].ReplicationStrategy().SelectSlaveHives(nil, 2)
-	if len(slaves) != 1 {
+
+	switch {
+	case len(slaves) == 0:
+		t.Errorf("Returned no slaves")
+	case len(slaves) != 1:
 		t.Errorf("Returned more slaves that asked: %+v", slaves)
 	}
 
-	if slaves[0] != hives[0].ID() {
+	if len(slaves) > 0 && slaves[0] != hives[0].ID() {
 		t.Errorf("Wrong slave selected %+v", hives[0].ID())
 	}
 

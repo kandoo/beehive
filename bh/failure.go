@@ -354,7 +354,7 @@ func (bee *localBee) createSlavesForColony(
 			newSlave, err := CreateBee(h, bee.app.Name())
 			if err != nil {
 				glog.V(2).Infof("Cannot create bee on %v: %v", h, err)
-				blacklist = append(blacklist, newSlave.HiveID)
+				blacklist = append(blacklist, h)
 				continue
 			}
 
@@ -396,6 +396,7 @@ func (bee *localBee) tryToRecruitSlaves() error {
 		return nil
 	}
 
+	glog.V(2).Infof("%v needs %d more slaves", oldCol, nSlaves)
 	newCol, newSlaves := bee.createSlavesForColony(oldCol.DeepCopy(), nSlaves)
 	glog.V(2).Infof("Recruited slaves %v for %v", newSlaves, oldCol)
 
@@ -409,9 +410,8 @@ func (bee *localBee) tryToRecruitSlaves() error {
 		_, err := NewProxy(s.HiveID).SendCmd(&cmd)
 		if err != nil {
 			glog.Errorf("Slave %v didn't join %v: %v", s, newCol, err)
+			newCol.DelSlave(s)
 		}
-
-		newCol.DelSlave(s)
 	}
 
 	cells := bee.mappedCells()

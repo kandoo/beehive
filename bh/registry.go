@@ -28,7 +28,7 @@ const (
 	regAppDir    = "apps"
 	regHiveDir   = "hives"
 	regAppTTL    = 0
-	regHiveTTL   = 60
+	regHiveTTL   = 2 // In seconds.
 	expireAction = "expire"
 	lockFileName = "__lock__"
 )
@@ -118,7 +118,9 @@ func (g *registry) startPollers() {
 
 	g.liveHives = make(map[HiveID]bool)
 	g.watchCmdCh = make(chan LocalCmd)
-	go g.watchHives()
+	startedCh := make(chan bool, 1)
+	go g.watchHives(startedCh)
+	<-startedCh
 }
 
 func (g *registry) updateTTL() {
@@ -142,7 +144,7 @@ func (g *registry) updateTTL() {
 	}
 }
 
-func (g *registry) watchHives() {
+func (g *registry) watchHives(startedCh chan bool) {
 	res, err := g.Get(g.hivePath(), false, true)
 	if err != nil {
 		glog.Fatalf("Cannot find the hive directory: %#v", err)
@@ -160,6 +162,8 @@ func (g *registry) watchHives() {
 		g.Watch(g.hivePath(), res.EtcdIndex, true, resCh, stopCh)
 		joinCh <- true
 	}()
+
+	startedCh <- true
 
 	for {
 		select {

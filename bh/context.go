@@ -273,9 +273,10 @@ func (b *localBee) CommitTx() error {
 	colony := b.colony()
 	if len(colony.Slaves) < b.app.CommitThreshold() {
 		if err := b.tryToRecruitSlaves(); err != nil {
-			glog.Errorf("Cannot create enough slaves to commit the transaction")
+			glog.Errorf("Cannot create enough slaves to commit the transaction: %v",
+				err)
 			b.AbortTx()
-			return errors.New("Cannot create enough slaves to commit the transaction")
+			return fmt.Errorf("Not enough slaves to commit the transaction: %v", err)
 		}
 	}
 

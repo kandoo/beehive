@@ -3,6 +3,7 @@ package bh
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 
 	"github.com/golang/glog"
 )
@@ -14,10 +15,14 @@ type ReplicationStrategy interface {
 }
 
 type BaseReplHandler struct {
+	sync.Mutex
 	LiveHives map[HiveID]bool
 }
 
 func (h *BaseReplHandler) Rcv(msg Msg, ctx RcvContext) error {
+	h.Lock()
+	defer h.Unlock()
+
 	switch d := msg.Data().(type) {
 	case HiveJoined:
 		h.LiveHives[d.HiveID] = true
@@ -31,21 +36,26 @@ func (h *BaseReplHandler) Map(msg Msg, ctx MapContext) MappedCells {
 	return ctx.LocalCells()
 }
 
-func (h *BaseReplHandler) Hives(ctx RcvContext) []HiveID {
+func (h *BaseReplHandler) Hives(blacklist []HiveID) []HiveID {
+	h.Lock()
+	defer h.Unlock()
+
 	hives := make([]HiveID, 0, len(h.LiveHives))
 	for id := range h.LiveHives {
-		if id == ctx.Hive().ID() {
+		blisted := false
+		for _, b := range blacklist {
+			if b == id {
+				blisted = true
+				break
+			}
+		}
+		if blisted {
 			continue
 		}
+
 		hives = append(hives, id)
 	}
 	return hives
-}
-
-type ReplicationQuery struct {
-	NSlaves   int
-	BlackList []HiveID
-	Res       chan []HiveID
 }
 
 type rndRepliction struct {
@@ -53,58 +63,22 @@ type rndRepliction struct {
 	hive Hive
 }
 
-func (h *rndRepliction) Rcv(msg Msg, ctx RcvContext) error {
-	switch d := msg.Data().(type) {
-	case ReplicationQuery:
-		var hives []HiveID
-		for _, h := range h.Hives(ctx) {
-			found := false
-			for _, blk := range d.BlackList {
-				if h == blk {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				hives = append(hives, h)
-			}
-		}
-
-		if len(hives) < d.NSlaves {
-			d.NSlaves = len(hives)
-		}
-
-		rndHives := make([]HiveID, 0, d.NSlaves)
-		for _, i := range rand.Perm(d.NSlaves) {
-			rndHives = append(rndHives, hives[i])
-		}
-		d.Res <- rndHives
-		return nil
-	default:
-		return h.BaseReplHandler.Rcv(msg, ctx)
-	}
-}
-
-func (h *rndRepliction) SelectSlaveHives(blackList []HiveID,
+func (h *rndRepliction) SelectSlaveHives(blacklist []HiveID,
 	nSlaves int) []HiveID {
-
 	if nSlaves <= 0 {
 		return nil
 	}
 
-	if blackList == nil {
-		blackList = []HiveID{}
+	hives := h.Hives(append(blacklist, h.hive.ID()))
+	if len(hives) < nSlaves {
+		nSlaves = len(hives)
 	}
 
-	resCh := make(chan []HiveID)
-	h.hive.Emit(ReplicationQuery{
-		NSlaves:   nSlaves,
-		BlackList: blackList,
-		Res:       resCh,
-	})
-
-	return <-resCh
+	rndHives := make([]HiveID, 0, nSlaves)
+	for _, i := range rand.Perm(nSlaves) {
+		rndHives = append(rndHives, hives[i])
+	}
+	return rndHives
 }
 
 func newRndReplication(h Hive) *rndRepliction {
@@ -115,7 +89,6 @@ func newRndReplication(h Hive) *rndRepliction {
 		hive: h,
 	}
 	app := h.NewApp("RndRepl")
-	app.Handle(ReplicationQuery{}, r)
 	app.Handle(HiveJoined{}, r)
 	app.Handle(HiveLeft{}, r)
 	app.SetFlags(AppFlagSticky)

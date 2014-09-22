@@ -11,11 +11,12 @@ const (
 	heartbeatAppName = "Heartbeat"
 )
 
+// Heartbeat is the based structor for both request and response.
+// If the BeeID.ID is empty, it heartbeat the application. It's an empty ID it
+// heartbeats the server.
 type heartbeat struct {
 	TimeStamp time.Time
-	// If the BeeID.ID is empty, it heartbeat the application. It's an empty ID it
-	// heartbeats the server.
-	BeeID BeeID
+	BeeID     BeeID
 }
 
 type heartbeatReq heartbeat
@@ -33,6 +34,7 @@ type stopHeartbeating struct {
 }
 
 type pulseTaker struct {
+	hive          *hive
 	ctrlCh        chan interface{}
 	dataCh        chan Msg
 	hbMap         map[BeeID]heartbeat
@@ -45,6 +47,7 @@ func startHeartbeatHandler(h *hive) *pulseTaker {
 	h.RegisterMsg(heartbeatReq{})
 
 	hb := pulseTaker{
+		hive:          h,
 		ctrlCh:        make(chan interface{}),
 		dataCh:        make(chan Msg),
 		hbMap:         make(map[BeeID]heartbeat),
@@ -88,7 +91,9 @@ func (p *pulseTaker) handleHeartbeat(msg Msg, ctx RcvContext) {
 				d.BeeID)
 			return
 		}
-		hb.TimeStamp = time.Now()
+		// Reset the timestamp to make sure there is no spurious timeout when we
+		// have not sent a request yet.
+		hb.TimeStamp = time.Time{}
 		p.hbMap[d.BeeID] = hb
 		glog.V(2).Infof("Heartbeat received from %v on %v", hb.BeeID,
 			ctx.Hive().ID())
@@ -101,14 +106,23 @@ func (p *pulseTaker) handleHeartbeat(msg Msg, ctx RcvContext) {
 	}
 }
 
+func (p *pulseTaker) isToHive(b BeeID) bool {
+	return b.ID == 0 && len(b.AppName) == 0
+}
+
 func (p *pulseTaker) heartbeatAll(ctx RcvContext) {
 	for b, hb := range p.hbMap {
 		if hb.TimeStamp.Equal(time.Time{}) {
 			hb.TimeStamp = time.Now()
 			p.hbMap[b] = hb
 		} else if time.Since(hb.TimeStamp) > p.deadInterval {
-			glog.Errorf("%v announces bee %v dead", ctx.Hive().ID(), hb.BeeID)
-			ctx.Emit(beeFailed{id: hb.BeeID})
+			if id := hb.BeeID; p.isToHive(id) {
+				glog.Errorf("%v announces hive %v dead", ctx.Hive().ID(), id.HiveID)
+				ctx.Emit(HiveLeft{HiveID: id.HiveID})
+			} else {
+				glog.Errorf("%v announces bee %v dead", ctx.Hive().ID(), hb.BeeID)
+				ctx.Emit(beeFailed{id: hb.BeeID})
+			}
 			delete(p.hbMap, b)
 			continue
 		}
@@ -116,8 +130,15 @@ func (p *pulseTaker) heartbeatAll(ctx RcvContext) {
 		hb.TimeStamp = time.Now()
 		// TODO(soheil): There might be a problem here. What if SendToBee blocks
 		// because of an overwhelmed channel. Shouldn't we update "now"?
-		ctx.SendToBee(heartbeatReq(hb), hb.BeeID)
-		glog.V(2).Infof("Heartbeat sent to %v", hb.BeeID)
+		if hb.BeeID.ID == 0 && len(hb.BeeID.AppName) == 0 {
+			id := hb.BeeID.HiveID
+			ctx.SendToBee(heartbeatReq(hb), pulseTakerID(id))
+			glog.V(2).Infof("Heartbeat sent to hive %v", id)
+		} else {
+			id := hb.BeeID
+			ctx.SendToBee(heartbeatReq(hb), id)
+			glog.V(2).Infof("Heartbeat sent to bee %v", id)
+		}
 	}
 }
 
@@ -142,10 +163,14 @@ func pulseTakerID(h HiveID) BeeID {
 }
 
 func startHeartbeatBee(b BeeID, h *hive) {
-	if !h.config.UseBeeHeartbeat || b.AppName == heartbeatAppName {
+	if b.AppName == heartbeatAppName {
 		return
 	}
-
+	if h.config.UseBeeHeartbeat {
+		h.SendToBee(startHeartbeat(b), pulseTakerID(h.ID()))
+	}
+	b.AppName = ""
+	b.ID = 0
 	h.SendToBee(startHeartbeat(b), pulseTakerID(h.ID()))
 }
 

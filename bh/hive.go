@@ -6,7 +6,6 @@ import (
 	"flag"
 	"net"
 	"os"
-	"runtime/pprof"
 	"time"
 
 	"github.com/golang/glog"
@@ -188,7 +187,6 @@ func (h *hive) closeChannels() {
 	h.listener.Close()
 
 	glog.Info("Stopping qees...")
-	stopCh := make(chan CmdResult)
 	qs := make(map[*qee]bool)
 	for _, mhs := range h.qees {
 		for _, mh := range mhs {
@@ -196,18 +194,26 @@ func (h *hive) closeChannels() {
 		}
 	}
 
-	for m, _ := range qs {
-		m.ctrlCh <- NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
-		glog.V(3).Infof("Waiting on a qee: %p", m)
-		select {
-		case res := <-stopCh:
-			_, err := res.get()
-			if err != nil {
-				glog.Errorf("Error in stopping a qee: %v", err)
+	stopCh := make(chan CmdResult)
+	for q, _ := range qs {
+		q.ctrlCh <- NewLocalCmd(stopCmd{}, BeeID{}, stopCh)
+		glog.V(3).Infof("Waiting on a qee: %v", q.id())
+		stopped := false
+		tries := 5
+		for !stopped {
+			select {
+			case res := <-stopCh:
+				_, err := res.get()
+				if err != nil {
+					glog.Errorf("Error in stopping a qee: %v", err)
+				}
+				stopped = true
+			case <-time.After(1 * time.Second):
+				glog.Infof("Still waiting for a qee %v...", q.id())
+				if tries--; tries < 0 {
+					panic("test")
+				}
 			}
-		case <-time.After(1 * time.Second):
-			glog.Info("Still waiting for a qee...")
-			pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 		}
 	}
 }
@@ -253,9 +259,7 @@ func (h *hive) init() {
 	} else {
 		h.collector = &dummyStatCollector{}
 	}
-	if h.config.UseBeeHeartbeat {
-		startHeartbeatHandler(h)
-	}
+	startHeartbeatHandler(h)
 	h.stateMan = newPersistentStateManager(h)
 	h.replStrategy = newRndReplication(h)
 }

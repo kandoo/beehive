@@ -50,12 +50,12 @@ func (p proxy) SendMsg(m *msg) error {
 		return err
 	}
 
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		var b bytes.Buffer
 		b.ReadFrom(res.Body)
 		return errors.New(string(b.Bytes()))
 	}
-
 	return nil
 }
 
@@ -71,12 +71,12 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 		return nil, err
 	}
 
+	defer pRes.Body.Close()
 	if pRes.StatusCode != http.StatusOK {
 		var b bytes.Buffer
 		b.ReadFrom(pRes.Body)
 		return nil, errors.New(string(b.Bytes()))
 	}
-
 	cRes := CmdResult{}
 	if err := gob.NewDecoder(pRes.Body).Decode(&cRes); err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 var addrForTest int = 32771
@@ -65,6 +66,9 @@ func startHivesForReplicationTest(t *testing.T, addrs []string,
 			<-hiveJoinedCh
 		}
 	}
+
+	// To make sure the replication strategy has processed hive joins.
+	time.Sleep(100 * time.Millisecond)
 
 	return hives
 }

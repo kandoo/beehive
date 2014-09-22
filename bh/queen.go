@@ -247,6 +247,7 @@ func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 		}
 	}()
 
+	glog.V(2).Infof("Invoking the map function of %v for %v", q.id(), mh.msg)
 	return mh.handler.Map(mh.msg, q)
 }
 
