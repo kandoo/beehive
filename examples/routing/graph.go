@@ -11,7 +11,8 @@ import (
 
 // Node represents a vertex in the graph.
 type Node struct {
-	ID string // ID of this node.
+	ID      string // ID of this node.
+	Endhost bool   // Whether it is an end-host (important dst for routing).
 }
 
 func (n Node) String() string {

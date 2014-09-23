@@ -140,11 +140,14 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		if err := r.appendNieghbor(Edge(d), ctx); err != nil {
 			return err
 		}
-		adv, err := Path{}.Append(Edge(d).From, Edge(d).To)
-		if err != nil {
-			return err
+
+		if Edge(d).To.Endhost {
+			adv, err := Path{}.Append(Edge(d).From, Edge(d).To)
+			if err != nil {
+				return err
+			}
+			ctx.Emit(Advertisement(adv))
 		}
-		ctx.Emit(Advertisement(adv))
 
 		tbl := r.routeTable(Edge(d).To, ctx)
 		for _, r := range tbl {
@@ -157,6 +160,10 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 
 	case Advertisement:
 		path := Path(d)
+		if to, err := path.To(); err != nil || !to.Endhost {
+			return errors.New("Route is not towards an end-host")
+		}
+
 		from, err := path.From()
 		if err != nil {
 			return err

@@ -184,7 +184,9 @@ func (h *hive) app(name AppName) (*app, bool) {
 
 func (h *hive) closeChannels() {
 	glog.Info("Closing the hive listener...")
-	h.listener.Close()
+	if h.listener != nil {
+		h.listener.Close()
+	}
 
 	glog.Info("Stopping qees...")
 	qs := make(map[*qee]bool)
