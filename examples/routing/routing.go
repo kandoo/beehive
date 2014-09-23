@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/golang/glog"
 	"github.com/soheilhy/beehive/bh"
 )
 
@@ -175,7 +176,8 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		if route.IsShortestPath(path) {
-			fmt.Printf("Shortest path: %v (new: %v)\n", route.ShortestPaths(), path)
+			glog.V(2).Infof("Shortest path: %v (new: %v)\n", route.ShortestPaths(),
+				path)
 			for _, n := range r.neighbors(from, ctx) {
 				if p, err := path.Prepend(n.From); err == nil {
 					ctx.Emit(Advertisement(p))
