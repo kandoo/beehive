@@ -10,7 +10,12 @@ import (
 	"github.com/golang/glog"
 )
 
-var client = &http.Client{}
+var client = &http.Client{
+	Transport: &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		MaxIdleConnsPerHost: 64,
+	},
+}
 
 type proxyBee struct {
 	localBee

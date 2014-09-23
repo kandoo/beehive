@@ -28,7 +28,7 @@ const (
 	regAppDir    = "apps"
 	regHiveDir   = "hives"
 	regAppTTL    = 0
-	regHiveTTL   = 2 // In seconds.
+	regHiveTTL   = 5 // In seconds.
 	expireAction = "expire"
 	lockFileName = "__lock__"
 )
@@ -125,7 +125,7 @@ func (g *registry) startPollers() {
 }
 
 func (g *registry) updateTTL() {
-	waitTimeout := g.hiveTTL / 2
+	waitTimeout := g.hiveTTL / 5
 	if waitTimeout == 0 {
 		waitTimeout = 1
 	}
@@ -138,7 +138,8 @@ func (g *registry) updateTTL() {
 		case <-time.After(time.Duration(waitTimeout) * time.Second):
 			k, v := g.hiveRegKeyVal()
 			if _, err := g.Update(k, v, g.hiveTTL); err != nil {
-				glog.Fatalf("Error in updating hive entry in the registry: %#v", err)
+				glog.Errorf("Error in updating hive entry in the registry: %#v", err)
+				g.Create(k, v, g.hiveTTL)
 			}
 			glog.V(1).Infof("Hive %s's TTL updated in registry", g.hive.ID())
 		}
