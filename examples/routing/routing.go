@@ -178,7 +178,6 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		if err := r.appendNieghbor(Edge(d), ctx); err != nil {
 			return err
 		}
-
 		if Edge(d).To.Endhost {
 			adv, err := Path{}.Append(Edge(d).From, Edge(d).To)
 			if err != nil {
@@ -186,18 +185,24 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 			}
 			ctx.Emit(Advertisement(adv))
 		}
+		// Indication of an update.
+		ctx.SetBeeLocal(true)
 
 	case Advertisement:
 		path := Path(d)
 		if to, err := path.To(); err != nil || !to.Endhost {
 			return errors.New("Route is not towards an end-host")
 		}
-
 		if _, err := r.appendToRoutingTable(path, ctx); err != nil {
 			return err
 		}
 
 	case Timeout:
+		if !ctx.BeeLocal().(bool) {
+			return nil
+		}
+		ctx.SetBeeLocal(false)
+
 		ctx.Dict(routeDict).ForEach(func(k bh.Key, v bh.Value) {
 			var tbl RoutingTable
 			if err := tbl.Decode(v); err != nil {
@@ -322,6 +327,8 @@ func (r Router) appendToRoutingTable(path Path, ctx bh.RcvContext) (Route,
 
 	if route.IsShortestPath(path) {
 		route.Updates = append(route.Updates, path)
+		// Indication of an update in bee local.
+		ctx.SetBeeLocal(true)
 	}
 
 	tbl[to] = route

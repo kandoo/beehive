@@ -108,8 +108,11 @@ func main() {
 
 	chrono := bh.NewApp("Chrono")
 	ch := make(chan bool, 1024)
+	cnt := 0
 	rcvF := func(msg bh.Msg, ctx bh.RcvContext) error {
-		ch <- true
+		if cnt++; cnt%1024 == 0 {
+			ch <- true
+		}
 		return nil
 	}
 	mapF := func(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
@@ -125,15 +128,21 @@ func main() {
 			}
 		}(p)
 	}
-	go bh.Start()
+	go func() {
+		bh.Start()
+		close(ch)
+	}()
 
 	finish := time.Now()
 	for {
 		select {
-		case <-ch:
+		case _, ok := <-ch:
+			if !ok {
+				return
+			}
 			finish = time.Now()
 		case <-time.After(*idleTimeout):
-			log.Fatalf("Took %v (%v-%v)", finish.Sub(start), start, finish)
+			log.Printf("Took %v (%v-%v)", finish.Sub(start), start, finish)
 		}
 	}
 }
