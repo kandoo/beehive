@@ -5,16 +5,167 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/golang/glog"
 )
 
 var client = &http.Client{
 	Transport: &http.Transport{
+		Dial: (&ConnPoolDialer{
+			MaxConnPerAddr: 64,
+		}).Dial,
 		Proxy:               http.ProxyFromEnvironment,
 		MaxIdleConnsPerHost: 64,
 	},
+}
+
+const (
+	DefaultMaxConnsPerHost = 10
+)
+
+type DialFunc func(network, addr string) (net.Conn, error)
+
+// ConnPoolDialer is an http dialer that uses a capped connection pool to bound
+// the number of parallel connections towards each address.
+type ConnPoolDialer struct {
+	sync.Mutex
+	conns map[netAndAddr]*connPool
+
+	// Same as http.Transport.Dial. If nil, net.Dial is used.
+	DialFunc DialFunc
+
+	// The maximum number of connections we can pool per address. If it is set to
+	// 0 we use DefaultMaxConnsPerHost.
+	MaxConnPerAddr int
+}
+
+type netAndAddr struct {
+	net  string
+	addr string
+}
+
+func (p *ConnPoolDialer) pool(network, addr string) *connPool {
+	p.Lock()
+	defer p.Unlock()
+
+	max := p.MaxConnPerAddr
+	if max == 0 {
+		max = DefaultMaxConnsPerHost
+	}
+
+	if p.conns == nil {
+		p.conns = make(map[netAndAddr]*connPool)
+	}
+
+	pool, ok := p.conns[netAndAddr{network, addr}]
+	if !ok {
+		pool = &connPool{
+			connCh: make(chan *pooledConn),
+			tokens: max,
+		}
+		p.conns[netAndAddr{network, addr}] = pool
+	}
+
+	return pool
+}
+
+func (p *ConnPoolDialer) Dial(network, addr string) (net.Conn, error) {
+	pool := p.pool(network, addr)
+
+	dial := p.DialFunc
+	if dial == nil {
+		dial = (&net.Dialer{}).Dial
+	}
+
+	conn, err := pool.maybeDial(network, addr, dial)
+	if err != nil {
+		return nil, err
+	}
+
+	if err == nil && conn != nil {
+		return conn, nil
+	}
+
+	for {
+		select {
+		case conn := <-pool.connCh:
+			return conn, nil
+		case <-time.After(10 * time.Millisecond):
+			conn, err := pool.maybeDial(network, addr, dial)
+			if err != nil {
+				return nil, err
+			}
+
+			if err == nil && conn != nil {
+				return conn, nil
+			}
+		}
+	}
+}
+
+type connPool struct {
+	sync.Mutex
+
+	connCh chan *pooledConn // Used to wait for a new free connection.
+	tokens int              // Cap minus the number of open connections.
+}
+
+func (p *connPool) maybeDial(network, addr string, d DialFunc) (net.Conn,
+	error) {
+
+	if p.getToken() != 0 {
+		conn, err := d(network, addr)
+		if err != nil {
+			return conn, err
+		}
+
+		pConn := &pooledConn{
+			Conn: conn,
+			pool: p,
+		}
+		return pConn, nil
+	}
+
+	return nil, nil
+}
+
+func (p *connPool) getToken() int {
+	p.Lock()
+	defer p.Unlock()
+
+	t := p.tokens
+	if t > 0 {
+		p.tokens--
+	}
+	return t
+}
+
+func (p *connPool) putToken() int {
+	p.Lock()
+	defer p.Unlock()
+
+	t := p.tokens
+	p.tokens++
+	return t
+}
+
+type pooledConn struct {
+	net.Conn
+	pool *connPool
+}
+
+func (c *pooledConn) Close() error {
+	select {
+	case c.pool.connCh <- c:
+		return nil
+	default:
+		c.pool.putToken()
+		return c.Conn.Close()
+	}
 }
 
 type proxyBee struct {
