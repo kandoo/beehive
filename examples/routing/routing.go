@@ -6,15 +6,50 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/soheilhy/beehive/bh"
 )
 
+// InstallRouting installs the routing application on bh.DefaultHive.
+// timeout is the duration between each epoc of routing advertisements.
+func InstallRouting(timeout time.Duration) {
+	app := bh.NewApp("Routing")
+	router := Router{}
+	app.Handle(Advertisement{}, router)
+	app.Handle(Discovery{}, router)
+	app.Handle(Timeout{}, router)
+	go func() {
+		ticker := time.NewTicker(timeout)
+		for {
+			<-ticker.C
+			bh.Emit(Timeout{})
+		}
+	}()
+}
+
+// InstallRoutingOnHive install the routing application
+func InstallRoutingOnHive(h bh.Hive, timeout time.Duration) {
+	app := h.NewApp("Routing")
+	router := Router{}
+	app.Handle(Advertisement{}, router)
+	app.Handle(Discovery{}, router)
+	app.Handle(Timeout{}, router)
+	go func() {
+		ticker := time.NewTicker(timeout)
+		for {
+			<-ticker.C
+			h.Emit(Timeout{})
+		}
+	}()
+}
+
 // Route is a collection of paths towards a desintation node.
 type Route struct {
-	To    Node
-	Paths []Path // Paths is sorted based on Path.Len().
+	To      Node
+	Paths   []Path // Paths is sorted based on Path.Len().
+	Updates []Path // The new routes that may be used for advertisement.
 }
 
 // Contains returns whether route already contains path.
@@ -125,6 +160,10 @@ type Discovery Edge
 // Advertisement is a single route advertisement.
 type Advertisement Path
 
+// Timeout is a message emitted when the router should advertise new routes to
+// its neighbors.
+type Timeout struct{}
+
 // Router is the main handler of the routing application.
 type Router struct{}
 
@@ -150,41 +189,55 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 			ctx.Emit(Advertisement(adv))
 		}
 
-		tbl := r.routeTable(Edge(d).To, ctx)
-		for _, r := range tbl {
-			for _, p := range r.ShortestPaths() {
-				if newp, err := p.Prepend(Edge(d).From); err == nil {
-					ctx.Emit(Advertisement(newp))
-				}
-			}
-		}
-
 	case Advertisement:
 		path := Path(d)
 		if to, err := path.To(); err != nil || !to.Endhost {
 			return errors.New("Route is not towards an end-host")
 		}
 
-		from, err := path.From()
-		if err != nil {
+		if _, err := r.appendToRoutingTable(path, ctx); err != nil {
 			return err
 		}
 
-		route, err := r.appendToRoutingTable(path, ctx)
-		if err != nil {
-			return err
-		}
-
-		if route.IsShortestPath(path) {
-			glog.V(2).Infof("Shortest path: %v (new: %v)\n", route.ShortestPaths(),
-				path)
-			for _, n := range r.neighbors(from, ctx) {
-				if p, err := path.Prepend(n.From); err == nil {
-					ctx.Emit(Advertisement(p))
-				}
+	case Timeout:
+		ctx.Dict(routeDict).ForEach(func(k bh.Key, v bh.Value) {
+			var tbl RoutingTable
+			if err := tbl.Decode(v); err != nil {
+				return
 			}
-		}
+
+			from := Node{
+				ID: string(k),
+			}
+
+			for to, route := range tbl {
+				if len(route.Updates) == 0 {
+					continue
+				}
+
+				shortestPaths := route.ShortestPaths()
+				glog.V(1).Infof("Shortest paths: %v", shortestPaths)
+				for _, p := range route.Updates {
+					if !route.IsShortestPath(p) {
+						continue
+					}
+
+					for _, n := range r.neighbors(from, ctx) {
+						if np, err := p.Prepend(n.From); err == nil {
+							ctx.Emit(Advertisement(np))
+						}
+					}
+				}
+				route.Updates = nil
+				tbl[to] = route
+			}
+
+			if v, err := tbl.Encode(); err == nil {
+				ctx.Dict(routeDict).Put(k, v)
+			}
+		})
 	}
+
 	return nil
 }
 
@@ -200,6 +253,8 @@ func (r Router) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 			return nil
 		}
 		return bh.MappedCells{{neighDict, from.Key()}, {routeDict, from.Key()}}
+	case Timeout:
+		return bh.MappedCells{}
 	}
 	return nil
 }
@@ -227,7 +282,7 @@ func (r Router) appendNieghbor(edge Edge, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (r Router) routeTable(from Node, ctx bh.RcvContext) RoutingTable {
+func (r Router) routingTable(from Node, ctx bh.RcvContext) RoutingTable {
 	dict := ctx.Dict(routeDict)
 	var tbl RoutingTable
 	if v, err := dict.Get(from.Key()); err == nil {
@@ -251,7 +306,7 @@ func (r Router) appendToRoutingTable(path Path, ctx bh.RcvContext) (Route,
 		return Route{}, err
 	}
 
-	tbl := r.routeTable(from, ctx)
+	tbl := r.routingTable(from, ctx)
 	route, ok := tbl[to]
 	if !ok {
 		route = Route{
@@ -267,11 +322,16 @@ func (r Router) appendToRoutingTable(path Path, ctx bh.RcvContext) (Route,
 		return route, err
 	}
 
+	if route.IsShortestPath(path) {
+		route.Updates = append(route.Updates, path)
+	}
+
 	tbl[to] = route
 	b, err := tbl.Encode()
 	if err != nil {
 		return route, err
 	}
+
 	ctx.Dict(routeDict).Put(from.Key(), b)
 	return route, nil
 }

@@ -79,6 +79,8 @@ func emitPod(p int, k int) error {
 var from = flag.Int("from", 1, "First pod in [1..k]")
 var to = flag.Int("to", 4, "Last pod in [1..k]")
 var k = flag.Int("k", 4, "Number of ports of switches (must be even)")
+var timeout = flag.Duration("timeout", 100*time.Millisecond,
+	"The duration between route advertisement epocs.")
 
 func main() {
 	flag.Parse()
@@ -87,10 +89,7 @@ func main() {
 		log.Fatal("Invalid parameters", *from, *to, *k)
 	}
 
-	app := bh.NewApp("Routing")
-	router := routing.Router{}
-	app.Handle(routing.Advertisement{}, router)
-	app.Handle(routing.Discovery{}, router)
+	routing.InstallRouting(*timeout)
 
 	chrono := bh.NewApp("Chrono")
 	ch := make(chan bool)
@@ -118,7 +117,7 @@ func main() {
 		select {
 		case <-ch:
 			finish = time.Now()
-		case <-time.After(60 * time.Second):
+		case <-time.After(10 * time.Second):
 			log.Fatalf("Took %v (%v-%v)", finish.Sub(start), start, finish)
 		}
 	}
