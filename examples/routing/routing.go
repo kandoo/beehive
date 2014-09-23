@@ -124,9 +124,7 @@ func (r Route) KShortestPaths(k int) []Path {
 	if l := len(r.Paths); l < k {
 		k = l
 	}
-	c := make([]Path, k)
-	copy(c, r.Paths[:k])
-	return c
+	return r.Paths[:k]
 }
 
 // ShortestPaths returns all the paths of shortest length in this route.
@@ -134,10 +132,10 @@ func (r Route) ShortestPaths() []Path {
 	p := PathByLen(r.Paths)
 	for i := 0; i < len(p)-1; i++ {
 		if p.Less(i, i+1) {
-			return r.KShortestPaths(i + 1)
+			return r.Paths[0:i]
 		}
 	}
-	return r.KShortestPaths(p.Len())
+	return r.Paths
 }
 
 // IsShortestPath returns whether path is a shortest path.
