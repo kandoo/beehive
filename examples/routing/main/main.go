@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"runtime/pprof"
 	"time"
 
 	"github.com/soheilhy/beehive/bh"
@@ -79,8 +81,11 @@ func emitPod(p int, k int) error {
 var from = flag.Int("from", 1, "First pod in [1..k]")
 var to = flag.Int("to", 4, "Last pod in [1..k]")
 var k = flag.Int("k", 4, "Number of ports of switches (must be even)")
-var timeout = flag.Duration("timeout", 100*time.Millisecond,
+var epoc = flag.Duration("epoc", 100*time.Millisecond,
 	"The duration between route advertisement epocs.")
+var idleTimeout = flag.Duration("idletimeout", 60*time.Second,
+	"If the router was idle for this duration, the program is killed.")
+var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
 	flag.Parse()
@@ -89,10 +94,20 @@ func main() {
 		log.Fatal("Invalid parameters", *from, *to, *k)
 	}
 
-	routing.InstallRouting(*timeout)
+	flag.Parse()
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	routing.InstallRouting(*epoc)
 
 	chrono := bh.NewApp("Chrono")
-	ch := make(chan bool)
+	ch := make(chan bool, 1024)
 	rcvF := func(msg bh.Msg, ctx bh.RcvContext) error {
 		ch <- true
 		return nil
@@ -117,7 +132,7 @@ func main() {
 		select {
 		case <-ch:
 			finish = time.Now()
-		case <-time.After(10 * time.Second):
+		case <-time.After(*idleTimeout):
 			log.Fatalf("Took %v (%v-%v)", finish.Sub(start), start, finish)
 		}
 	}
