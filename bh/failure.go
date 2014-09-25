@@ -125,7 +125,7 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 		return
 	}
 
-	glog.Warningf("Bee %v has a failed slave %v (colony: %v)", bee.id(), slaveID,
+	glog.Warningf("Bee %v has a failed slave %v (colony: %v)", bee, slaveID,
 		oldCol)
 
 	newCol.Generation++
@@ -142,7 +142,7 @@ func (bee *localBee) handleSlaveFailure(slaveID BeeID) {
 		newCol, cells)
 	oldCol, err := bee.hive.registry.compareAndSet(oldCol, newCol, cells)
 	if err != nil {
-		glog.Errorf("Bee %v has an expired colony %v", bee.id(), newCol)
+		glog.Errorf("Bee %v has an expired colony %v", bee, newCol)
 		bee.stop()
 		return
 	}
@@ -168,8 +168,8 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		return
 	}
 
-	glog.Warningf("Bee %v has a failed master %v (colony: %v)", bee.id(),
-		masterID, oldCol)
+	glog.Warningf("Bee %v has a failed master %v (colony: %v)", bee, masterID,
+		oldCol)
 
 	failedSlaves := make([]BeeID, 0, len(newCol.Slaves))
 	slaveTxInfo := make(map[BeeID]TxInfo)
@@ -177,7 +177,7 @@ func (bee *localBee) handleMasterFailure(masterID BeeID) {
 		cmd := NewRemoteCmd(getTxInfoCmd{}, s)
 		d, err := NewProxy(s.HiveID).SendCmd(&cmd)
 		if err != nil {
-			glog.V(2).Infof("Bee %v finds peer slave dead %v: %v", bee.id(), s, err)
+			glog.V(2).Infof("Bee %v finds peer slave dead %v: %v", bee, s, err)
 			failedSlaves = append(failedSlaves, s)
 			continue
 		}
@@ -388,7 +388,7 @@ func (bee *localBee) createSlavesForColony(
 func (bee *localBee) tryToRecruitSlaves() error {
 	oldCol := bee.colony()
 	if !bee.isMaster() {
-		return fmt.Errorf("%v is not the master of %v", bee.id(), oldCol)
+		return fmt.Errorf("%v is not the master of %v", bee, oldCol)
 	}
 
 	nSlaves := bee.app.ReplicationFactor() - len(oldCol.Slaves) - 1

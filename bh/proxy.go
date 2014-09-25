@@ -244,16 +244,16 @@ func (p proxy) SendCmd(c *RemoteCmd) (interface{}, error) {
 func (b *proxyBee) handleMsg(mh msgAndHandler) {
 	mh.msg.MsgTo = b.id()
 
-	glog.V(2).Infof("Proxy %v sends msg %v", b.id(), mh.msg)
+	glog.V(2).Infof("Proxy %v sends msg %v", b, mh.msg)
 	if err := b.proxy.SendMsg(mh.msg); err != nil {
-		glog.Errorf("Cannot send message %v to %v: %v", mh.msg, b.id(), err)
+		glog.Errorf("Cannot send message %v to %v: %v", mh.msg, b, err)
 	}
 }
 
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
 	b.stopped = false
-	glog.V(2).Infof("Proxy started for %v", b.id())
+	glog.V(2).Infof("Proxy started for %v", b)
 
 	for !b.stopped {
 		select {

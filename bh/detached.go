@@ -9,7 +9,7 @@ type detachedBee struct {
 
 func (b *detachedBee) start() {
 	b.stopped = false
-	glog.V(2).Infof("Detached %v started.", b.id())
+	glog.V(2).Infof("Detached %v started.", b)
 
 	go b.h.Start(b)
 	defer b.h.Stop(b)

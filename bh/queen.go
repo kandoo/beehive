@@ -190,7 +190,7 @@ func (q *qee) lockLocally(bee bee, dks ...CellKey) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	glog.V(2).Infof("Bee %v locally locks %v", bee.id(), MappedCells(dks))
+	glog.V(2).Infof("Bee %v locally locks %v", bee, MappedCells(dks))
 	for _, dk := range dks {
 		q.cellToBees[dk] = bee
 	}
@@ -301,7 +301,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		q.syncBees(cells, bee)
 	}
 
-	glog.V(2).Infof("Message sent to bee %v: %v", bee.id(), mh.msg)
+	glog.V(2).Infof("Message sent to bee %v: %v", bee, mh.msg)
 	bee.enqueMsg(mh)
 }
 
@@ -540,7 +540,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 		return
 	}
 
-	glog.V(2).Infof("Bee %v is stopped for migration", oldBee.id())
+	glog.V(2).Infof("Bee %v is stopped for migration", oldBee)
 
 	// TODO(soheil): There is a possibility of a deadlock. If the number of
 	// migrrations pass the control channel's buffer size.
@@ -595,7 +595,7 @@ func (q *qee) migrate(beeID BeeID, to HiveID, resCh chan CmdResult) {
 
 	go newBee.start()
 
-	glog.V(2).Infof("Local bee is converted to proxy %v", newBee.id())
+	glog.V(2).Infof("Local bee is converted to proxy %v", newBee)
 
 	cmd := RemoteCmd{
 		CmdTo: newColony.Master.queen(),

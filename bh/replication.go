@@ -111,7 +111,7 @@ func (bee *localBee) replicateTxOnSlave(slave BeeID, txs ...Tx) (int, error) {
 func (bee *localBee) replicateAllTxOnSlave(slave BeeID) error {
 	// FIXME(soheil): Once tx compaction is implemented, we have to replicate the
 	// state as well.
-	glog.Infof("Replicating the state of %v on a new slave %v", bee.id(), slave)
+	glog.Infof("Replicating the state of %v on a new slave %v", bee, slave)
 
 	n, err := bee.replicateTxOnSlave(slave, bee.txBuf...)
 	if err != nil {

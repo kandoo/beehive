@@ -220,14 +220,14 @@ func (b *localBee) BeginTx() error {
 	}
 
 	if err := b.txState().BeginTx(); err != nil {
-		glog.Errorf("Cannot begin a transaction for %v: %v", b.id(), err)
+		glog.Errorf("Cannot begin a transaction for %v: %v", b, err)
 		return err
 	}
 
 	b.tx.Status = TxOpen
-	b.tx.Generation = b.colony().Generation
+	b.tx.Generation = b.generation()
 	b.tx.Seq++
-	glog.V(2).Infof("Bee %v begins transaction #%v", b.id(), b.tx)
+	glog.V(2).Infof("Bee %v begins transaction #%v", b, b.tx)
 	return nil
 }
 
@@ -315,7 +315,7 @@ func (b *localBee) CommitTx() error {
 		glog.Errorf("Cannot notify all salves about transaction: %v", err)
 	}
 
-	glog.V(2).Infof("Bee %v committed tx #%v", b.id(), b.tx.Seq)
+	glog.V(2).Infof("Bee %v committed tx #%v", b, b.tx.Seq)
 	return nil
 }
 
@@ -324,7 +324,7 @@ func (b *localBee) AbortTx() error {
 		return nil
 	}
 
-	glog.V(2).Infof("Bee %v aborts tx #%v", b.id(), b.tx.Seq)
+	glog.V(2).Infof("Bee %v aborts tx #%v", b, b.tx.Seq)
 	b.tx.Reset()
 	b.tx.Seq--
 	return b.txState().AbortTx()

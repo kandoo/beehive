@@ -21,7 +21,7 @@ func (b *BeeID) IsNil() bool {
 	return len(b.HiveID) == 0 && len(b.AppName) == 0 && b.ID == 0
 }
 
-func (b *BeeID) Key() Key {
+func (b BeeID) Key() Key {
 	return Key(b.Bytes())
 }
 
@@ -219,6 +219,10 @@ func (bee *localBee) id() BeeID {
 	return bee.beeID
 }
 
+func (bee *localBee) String() string {
+	return bee.id().String()
+}
+
 func (bee *localBee) gen() TxGeneration {
 	bee.mutex.Lock()
 	defer bee.mutex.Unlock()
@@ -231,6 +235,13 @@ func (bee *localBee) colony() BeeColony {
 	defer bee.mutex.Unlock()
 
 	return bee.beeColony.DeepCopy()
+}
+
+func (bee *localBee) generation() TxGeneration {
+	bee.mutex.Lock()
+	defer bee.mutex.Unlock()
+
+	return bee.beeColony.Generation
 }
 
 func (bee *localBee) setColony(c BeeColony) {
@@ -311,7 +322,7 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 		}
 	}()
 
-	glog.V(2).Infof("Bee %v handles a message: %v", bee.id(), mh.msg)
+	glog.V(2).Infof("Bee %v handles a message: %v", bee, mh.msg)
 
 	if bee.app.Transactional() {
 		bee.BeginTx()
@@ -327,7 +338,7 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 }
 
 func (bee *localBee) handleCmd(lcmd LocalCmd) {
-	glog.V(2).Infof("Bee %v handles command %v", bee.id(), lcmd)
+	glog.V(2).Infof("Bee %v handles command %v", bee, lcmd)
 
 	switch cmd := lcmd.Cmd.(type) {
 	case stopCmd:
@@ -382,7 +393,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 
 	case bufferTxCmd:
 		bee.txBuf = append(bee.txBuf, cmd.Tx)
-		glog.V(2).Infof("Buffered transaction %v in %v", cmd.Tx, bee.id())
+		glog.V(2).Infof("Buffered transaction %v in %v", cmd.Tx, bee)
 		lcmd.ResCh <- CmdResult{}
 
 	case commitTxCmd:
@@ -416,12 +427,12 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 }
 
 func (bee *localBee) enqueMsg(mh msgAndHandler) {
-	glog.V(3).Infof("Bee %v enqueues message %v", bee.id(), mh.msg)
+	glog.V(3).Infof("Bee %v enqueues message %v", bee, mh.msg)
 	bee.dataCh <- mh
 }
 
 func (bee *localBee) enqueCmd(cmd LocalCmd) {
-	glog.V(3).Infof("Bee %v enqueues a command %v", bee.id(), cmd)
+	glog.V(3).Infof("Bee %v enqueues a command %v", bee, cmd)
 	bee.ctrlCh <- cmd
 }
 
@@ -455,7 +466,7 @@ func (bee *localBee) addMappedCells(cells MappedCells) {
 	}
 
 	for _, c := range cells {
-		glog.V(2).Infof("Adding cell %v to %v", c, bee.id())
+		glog.V(2).Infof("Adding cell %v to %v", c, bee)
 		bee.cells[c] = true
 	}
 }
