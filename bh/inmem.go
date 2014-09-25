@@ -6,27 +6,28 @@ import "errors"
 type inMemoryState struct {
 	Name  string
 	Dicts map[DictName]*inMemDict
-	tx    *inMemoryTx
+	tx    inMemoryTx
 }
 
 func (s *inMemoryState) BeginTx() error {
-	if s.tx != nil {
+	if s.tx.status == TxOpen {
 		return errors.New("Transaction is already started")
 	}
 
-	s.tx = s.newTransaction()
+	s.maybeNewTransaction()
+	s.tx.status = TxOpen
 	return nil
 }
 
-func (s *inMemoryState) newTransaction() *inMemoryTx {
-	return &inMemoryTx{
-		state: s,
-		stage: make(map[DictName]*inMemStagedDict),
+func (s *inMemoryState) maybeNewTransaction() {
+	if s.tx.stage == nil {
+		s.tx.state = s
+		s.tx.stage = make(map[DictName]*inMemStagedDict)
 	}
 }
 
 func (s *inMemoryState) Tx() []StateOp {
-	if s.tx == nil {
+	if s.tx.stage == nil {
 		return nil
 	}
 
@@ -45,27 +46,31 @@ func (s *inMemoryState) Tx() []StateOp {
 }
 
 func (s *inMemoryState) CommitTx() error {
-	if s.tx == nil {
+	if s.tx.status != TxOpen {
 		return errors.New("No active transaction")
 	}
 
 	s.tx.Commit()
-	s.tx = nil
+	if len(s.tx.stage) != 0 {
+		s.tx.stage = make(map[DictName]*inMemStagedDict)
+	}
 	return nil
 }
 
 func (s *inMemoryState) AbortTx() error {
-	if s.tx == nil {
+	if s.tx.status != TxOpen {
 		return errors.New("No active transaction")
 	}
 
 	s.tx.Abort()
-	s.tx = nil
+	if len(s.tx.stage) != 0 {
+		s.tx.stage = make(map[DictName]*inMemStagedDict)
+	}
 	return nil
 }
 
 func (s *inMemoryState) Dict(name DictName) Dict {
-	if s.tx != nil {
+	if s.tx.status == TxOpen {
 		return s.tx.Dict(name)
 	}
 
@@ -115,8 +120,9 @@ func (d *inMemDict) ForEach(f IterFn) {
 }
 
 type inMemoryTx struct {
-	state *inMemoryState
-	stage map[DictName]*inMemStagedDict
+	state  *inMemoryState
+	stage  map[DictName]*inMemStagedDict
+	status TxStatus
 }
 
 type inMemStagedDict struct {
@@ -145,9 +151,11 @@ func (t *inMemoryTx) Commit() {
 			}
 		}
 	}
+	t.status = TxCommitted
 }
 
 func (t *inMemoryTx) Abort() {
+	t.status = TxCommitted
 	return
 }
 
