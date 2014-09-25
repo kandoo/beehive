@@ -181,8 +181,8 @@ func (q *qee) beeByKey(dk CellKey) (bee, bool) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	r, ok := q.cellToBees[dk]
-	return r, ok
+	c, ok := q.cellToBees[dk]
+	return c, ok
 }
 
 func (q *qee) beeByID(id BeeID) (bee, bool) {
@@ -228,9 +228,12 @@ func (q *qee) syncBees(cells MappedCells, bee bee) {
 	}
 }
 
-func (q *qee) anyBee(ms MappedCells) bee {
-	for _, dictKey := range ms {
-		bee, ok := q.beeByKey(dictKey)
+func (q *qee) anyBee(cells MappedCells) bee {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	for _, c := range cells {
+		bee, ok := q.cellToBees[c]
 		if ok {
 			return bee
 		}
