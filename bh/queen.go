@@ -11,9 +11,10 @@ import (
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
-	mutex sync.Mutex
-	hive  *hive
-	app   *app
+	mutex   sync.Mutex
+	hive    *hive
+	app     *app
+	stopped bool
 
 	dataCh chan msgAndHandler
 	ctrlCh chan LocalCmd
@@ -53,19 +54,14 @@ func (q *qee) id() BeeID {
 }
 
 func (q *qee) start() {
-	for {
+	q.stopped = false
+	for !q.stopped {
 		select {
-		case d, ok := <-q.dataCh:
-			if !ok {
-				return
-			}
+		case d := <-q.dataCh:
 			q.handleMsg(d)
 
-		case cmd, ok := <-q.ctrlCh:
-			if !ok {
-				return
-			}
-			q.handleCmd(cmd)
+		case c := <-q.ctrlCh:
+			q.handleCmd(c)
 		}
 	}
 }
@@ -109,6 +105,7 @@ func (q *qee) handleCmd(lcmd LocalCmd) {
 
 	switch cmd := lcmd.Cmd.(type) {
 	case stopCmd:
+		q.stopped = true
 		glog.V(3).Infof("Stopping bees of %p", q)
 		q.stopBees()
 		lcmd.ResCh <- CmdResult{}
