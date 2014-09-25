@@ -1,9 +1,11 @@
 package bh
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,11 +20,11 @@ type BeeID struct {
 }
 
 func (b *BeeID) IsNil() bool {
-	return len(b.HiveID) == 0 && len(b.AppName) == 0 && b.ID == 0
+	return b.ID == 0 && len(b.HiveID) == 0 && len(b.AppName) == 0
 }
 
 func (b BeeID) Key() Key {
-	return Key(b.Bytes())
+	return Key(b.String())
 }
 
 func (b BeeID) String() string {
@@ -30,11 +32,19 @@ func (b BeeID) String() string {
 		return "*"
 	}
 
+	var buf bytes.Buffer
+	buf.WriteString(string(b.HiveID))
+	buf.WriteString("/")
+	buf.WriteString(string(b.AppName))
+	buf.WriteString("/")
+
 	if b.ID == 0 {
-		return fmt.Sprintf("%s/%s/Q", b.HiveID, b.AppName)
+		buf.WriteString("Q")
+		return buf.String()
 	}
 
-	return fmt.Sprintf("%s/%s/%d", b.HiveID, b.AppName, b.ID)
+	buf.WriteString(strconv.FormatUint(b.ID, 10))
+	return buf.String()
 }
 
 func (b *BeeID) Bytes() []byte {

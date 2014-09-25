@@ -41,6 +41,10 @@ func (q *qee) detachedBees() []*detachedBee {
 	return ds
 }
 
+func (q *qee) String() string {
+	return q.id().String()
+}
+
 func (q *qee) id() BeeID {
 	return BeeID{
 		HiveID:  q.hive.ID(),
@@ -197,11 +201,7 @@ func (q *qee) lockLocally(bee bee, dks ...CellKey) {
 }
 
 func (q *qee) syncBees(cells MappedCells, bee bee) {
-	colony := BeeColony{
-		Master: bee.id(),
-		Slaves: bee.slaves(),
-	}
-
+	colony := bee.colony()
 	newCell := false
 	for _, dictKey := range cells {
 		dkRcvr, ok := q.beeByKey(dictKey)
@@ -247,7 +247,7 @@ func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 		}
 	}()
 
-	glog.V(2).Infof("Invoking the map function of %v for %v", q.id(), mh.msg)
+	glog.V(2).Infof("Invoking the map function of %v for %v", q, mh.msg)
 	return mh.handler.Map(mh.msg, q)
 }
 
@@ -297,7 +297,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		if lbee, ok := bee.(*localBee); ok {
 			lbee.addMappedCells(cells)
 		}
-	} else {
+	} else if len(cells) > 1 {
 		q.syncBees(cells, bee)
 	}
 
