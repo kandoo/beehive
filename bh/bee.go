@@ -33,6 +33,7 @@ func (b BeeID) String() string {
 	}
 
 	var buf bytes.Buffer
+	buf.Grow(len(b.HiveID) + len(b.AppName) + 2)
 	buf.WriteString(string(b.HiveID))
 	buf.WriteString("/")
 	buf.WriteString(string(b.AppName))
@@ -43,8 +44,7 @@ func (b BeeID) String() string {
 		return buf.String()
 	}
 
-	buf.WriteString(strconv.FormatUint(b.ID, 10))
-	return buf.String()
+	return string(strconv.AppendUint(buf.Bytes(), b.ID, 10))
 }
 
 func (b *BeeID) Bytes() []byte {
