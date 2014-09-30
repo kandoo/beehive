@@ -156,7 +156,7 @@ func (b *localBee) SendToCellKey(msgData interface{}, to AppName,
 }
 
 func (b *localBee) SendToBee(msgData interface{}, to BeeID) {
-	b.bufferOrEmit(newMsgFromData(msgData, b.id(), to))
+	b.bufferOrEmit(newMsgFromData(msgData, b.beeID, to))
 }
 
 // Reply to thatMsg with the provided replyData.

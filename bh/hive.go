@@ -394,14 +394,14 @@ func (h *hive) Emit(msgData interface{}) {
 
 func (h *hive) emitMsg(msg *msg) {
 	switch {
-	case msg.isBroadCast():
-		h.dataCh <- msg
 	case msg.isUnicast():
-		a, ok := h.app(msg.To().AppName)
+		a, ok := h.app(msg.MsgTo.AppName)
 		if !ok {
 			glog.Fatalf("Application not found: %s", msg.To().AppName)
 		}
 		a.qee.dataCh <- msgAndHandler{msg, a.handler(msg.Type())}
+	default:
+		h.dataCh <- msg
 	}
 }
 

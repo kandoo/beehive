@@ -230,7 +230,7 @@ func (bee *localBee) id() BeeID {
 }
 
 func (bee *localBee) String() string {
-	return bee.id().String()
+	return bee.beeID.String()
 }
 
 func (bee *localBee) gen() TxGeneration {
@@ -319,7 +319,7 @@ func (bee *localBee) recoverFromError(mh msgAndHandler, err interface{},
 		return
 	}
 
-	glog.Errorf("Error in %s: %v", bee.id().AppName, err)
+	glog.Errorf("Error in %s: %v", bee.beeID.AppName, err)
 	if stack {
 		glog.Errorf("%s", debug.Stack())
 	}
@@ -344,7 +344,7 @@ func (bee *localBee) handleMsg(mh msgAndHandler) {
 	}
 
 	bee.CommitTx()
-	bee.hive.collector.collect(mh.msg.From(), bee.id(), mh.msg)
+	bee.hive.collector.collect(mh.msg.MsgFrom, bee.beeID, mh.msg)
 }
 
 func (bee *localBee) handleCmd(lcmd LocalCmd) {
@@ -360,15 +360,15 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		lcmd.ResCh <- CmdResult{}
 
 	case joinColonyCmd:
-		if cmd.Colony.Contains(bee.id()) {
+		if cmd.Colony.Contains(bee.beeID) {
 			bee.setColony(cmd.Colony)
 			lcmd.ResCh <- CmdResult{}
 
 			switch {
-			case bee.colony().IsSlave(bee.id()):
+			case bee.colony().IsSlave(bee.beeID):
 				startHeartbeatBee(bee.colony().Master, bee.hive)
 
-			case bee.colony().IsMaster(bee.id()):
+			case bee.colony().IsMaster(bee.beeID):
 				for _, s := range bee.colony().Slaves {
 					startHeartbeatBee(s, bee.hive)
 				}
@@ -378,8 +378,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		}
 
 		lcmd.ResCh <- CmdResult{
-			Err: fmt.Errorf("Bee %#v is not in this colony %#v", bee.id(),
-				cmd.Colony),
+			Err: fmt.Errorf("Bee %v is not in this colony %v", bee, cmd.Colony),
 		}
 
 	case getColonyCmd:
@@ -411,8 +410,7 @@ func (bee *localBee) handleCmd(lcmd LocalCmd) {
 		for i, tx := range bee.txBuf {
 			if seq == tx.Seq {
 				bee.txBuf[i].Status = TxCommitted
-				glog.V(2).Infof("Committed buffered transaction #%d in %#v", tx.Seq,
-					bee.id())
+				glog.V(2).Infof("Committed buffered transaction #%d in %v", tx.Seq, bee)
 				lcmd.ResCh <- CmdResult{}
 				return
 			}
@@ -447,11 +445,11 @@ func (bee *localBee) enqueCmd(cmd LocalCmd) {
 }
 
 func (bee *localBee) isMaster() bool {
-	return bee.colony().IsMaster(bee.id())
+	return bee.colony().IsMaster(bee.beeID)
 }
 
 func (bee *localBee) stop() {
-	glog.Infof("Bee %s stopped", bee.id())
+	glog.Infof("Bee %s stopped", bee.beeID)
 	bee.stopped = true
 	// TODO(soheil): Do we need to stop timers?
 }
