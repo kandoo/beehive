@@ -119,6 +119,14 @@ func (d *inMemDict) ForEach(f IterFn) {
 	}
 }
 
+func (d *inMemDict) GetGob(k Key, v interface{}) error {
+	return GetGob(d, k, v)
+}
+
+func (d *inMemDict) PutGob(k Key, v interface{}) error {
+	return PutGob(d, k, v)
+}
+
 type inMemoryTx struct {
 	state  *inMemoryState
 	stage  map[DictName]*inMemStagedDict
@@ -211,4 +219,12 @@ func (d *inMemStagedDict) ForEach(f IterFn) {
 
 		f(k, v)
 	})
+}
+
+func (d *inMemStagedDict) GetGob(k Key, v interface{}) error {
+	return GetGob(d, k, v)
+}
+
+func (d *inMemStagedDict) PutGob(k Key, v interface{}) error {
+	return PutGob(d, k, v)
 }

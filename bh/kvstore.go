@@ -331,3 +331,11 @@ func (d *persistentDict) Del(k Key) error {
 func (d *persistentDict) ForEach(f IterFn) {
 	d.state.forEach(d.name, f)
 }
+
+func (d *persistentDict) GetGob(k Key, v interface{}) error {
+	return GetGob(d, k, v)
+}
+
+func (d *persistentDict) PutGob(k Key, v interface{}) error {
+	return PutGob(d, k, v)
+}
