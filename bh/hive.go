@@ -52,10 +52,10 @@ type Hive interface {
 type HiveConfig struct {
 	HiveAddr        string        // Listening address of the hive.
 	RegAddrs        []string      // Reigstery service addresses.
+	StatePath       string        // Where to store state data.
 	DataChBufSize   int           // Buffer size of the data channels.
 	CmdChBufSize    int           // Buffer size of the control channels.
 	Instrument      bool          // Whether to instrument apps on the hive.
-	DBDir           string        // Directory to persist application state.
 	HBQueryInterval time.Duration // Heartbeating interval.
 	HBDeadTimeout   time.Duration // When to announce a bee dead.
 	RegLockTimeout  time.Duration // When to retry to lock an entry in a registry.
@@ -114,7 +114,7 @@ func init() {
 		"Buffer size of command channels.")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"Whether to insturment apps.")
-	flag.StringVar(&DefaultCfg.DBDir, "dbdir", "/tmp",
+	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp",
 		"Where to store persistent state data.")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
 		100*time.Millisecond, "Heartbeat interval.")
@@ -158,7 +158,6 @@ type hive struct {
 
 	registry  registry
 	collector statCollector
-	stateMan  *persistentStateManager
 
 	listener net.Listener
 
@@ -264,7 +263,6 @@ func (h *hive) init() {
 		h.collector = &dummyStatCollector{}
 	}
 	startHeartbeatHandler(h)
-	h.stateMan = newPersistentStateManager(h)
 	h.replStrategy = newRndReplication(h)
 }
 
@@ -275,7 +273,6 @@ func (h *hive) handleCmd(cmd HiveCmd) {
 		h.status = hiveStopped
 		h.registry.disconnect()
 		h.closeChannels()
-		h.stateMan.closeDBs()
 		cmd.ResCh <- true
 	case DrainHive:
 		// TODO(soheil): Implement drain.

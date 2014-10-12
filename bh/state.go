@@ -64,10 +64,6 @@ func (dk *CellKey) String() string {
 }
 
 func newState(a *app) TxState {
-	if a.Persistent() {
-		return a.hive.stateMan.newState(a)
-	}
-
 	return &inMemoryState{
 		Name:  string(a.Name()),
 		Dicts: make(map[DictName]*inMemDict),

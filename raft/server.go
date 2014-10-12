@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"encoding/gob"
 	"errors"
 	"os"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"github.com/coreos/etcd/third_party/code.google.com/p/go.net/context"
 	"github.com/coreos/etcd/wal"
 	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/gen"
 )
 
 // Most of this code is adapted from etcd/etcdserver/server.go.
@@ -27,6 +29,7 @@ type Node struct {
 	id   uint64
 	node etcdraft.Node
 	line line
+	gen  gen.IDGenerator
 
 	store     Store
 	wal       *wal.WAL
@@ -41,14 +44,20 @@ type Node struct {
 
 func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 	store Store, snapCount uint64, ticker <-chan time.Time) *Node {
+
+	gob.Register(RequestID{})
+	gob.Register(Request{})
+	gob.Register(Response{})
+
 	snapDir := path.Join(datadir, "snap")
 	if err := os.MkdirAll(snapDir, 0700); err != nil {
 		glog.Fatal("raft: cannot create snapshot directory")
 	}
 
+	var lastIndex uint64
+	var n etcdraft.Node
 	ss := snap.New(snapDir)
 	var w *wal.WAL
-	var n etcdraft.Node
 	waldir := path.Join(datadir, "wal")
 	if !wal.Exist(waldir) {
 		// We are creating a new node.
@@ -93,11 +102,13 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 		}
 
 		n = etcdraft.RestartNode(id, peers, 10, 1, snapshot, st, ents)
+		lastIndex = ents[len(ents)-1].Index
 	}
 
 	node := &Node{
 		id:        id,
 		node:      n,
+		gen:       gen.NewSeqIDGen(lastIndex),
 		store:     store,
 		wal:       w,
 		snap:      ss,
@@ -113,7 +124,15 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 }
 
 // Do processes the request and returns the response. It is blocking.
-func (n *Node) Do(ctx context.Context, r Request) (Response, error) {
+func (n *Node) Do(ctx context.Context, req interface{}) (interface{}, error) {
+	r := Request{
+		ID: RequestID{
+			NodeID: n.id,
+			Seq:    n.gen.GenID(),
+		},
+		Data: req,
+	}
+
 	b, err := r.Encode()
 	if err != nil {
 		return Response{}, err
@@ -123,12 +142,12 @@ func (n *Node) Do(ctx context.Context, r Request) (Response, error) {
 	n.node.Propose(ctx, b)
 	select {
 	case res := <-ch:
-		return res, nil
+		return res.Data, nil
 	case <-ctx.Done():
 		n.line.call(Response{ID: r.ID})
-		return Response{}, ctx.Err()
+		return nil, ctx.Err()
 	case <-n.done:
-		return Response{}, ErrStopped
+		return nil, ErrStopped
 	}
 }
 
