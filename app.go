@@ -1,13 +1,12 @@
-package bh
+package beehive
 
 import (
 	"errors"
 	"fmt"
 
 	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/state"
 )
-
-type AppName string
 
 type AppFlag uint64
 
@@ -39,7 +38,7 @@ type App interface {
 	// themselves.
 	State() State
 	// Returns the app name.
-	Name() AppName
+	Name() string
 
 	// SetFlags sets the flags for this application.
 	SetFlags(flag AppFlag)
@@ -65,25 +64,6 @@ type App interface {
 
 	// SetCommitThreshold sets the commit threshold.
 	SetCommitThreshold(c int) error
-}
-
-// This is the list of dictionary keys returned by the map functions.
-type MappedCells []CellKey
-
-func (mc MappedCells) String() string {
-	return fmt.Sprintf("Cells{%v}", []CellKey(mc))
-}
-
-func (mc MappedCells) Len() int      { return len(mc) }
-func (mc MappedCells) Swap(i, j int) { mc[i], mc[j] = mc[j], mc[i] }
-func (mc MappedCells) Less(i, j int) bool {
-	return mc[i].Dict < mc[j].Dict ||
-		(mc[i].Dict == mc[j].Dict && mc[i].Key < mc[j].Key)
-}
-
-// An empty mapset means a local broadcast of message.
-func (mc MappedCells) LocalBroadcast() bool {
-	return len(mc) == 0
 }
 
 // An applications map function that maps a specific message to the set of keys
@@ -156,17 +136,17 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 }
 
 type app struct {
-	name         AppName
+	name         string
 	hive         *hive
 	qee          *qee
-	handlers     map[MsgType]Handler
+	handlers     map[string]Handler
 	flags        AppFlag
 	replFactor   int
 	commitThresh int
 }
 
-func (a *app) HandleFunc(msgType interface{}, m MapFunc, r RcvFunc) error {
-	return a.Handle(msgType, &funcHandler{m, r})
+func (a *app) HandleFunc(msg interface{}, m MapFunc, r RcvFunc) error {
+	return a.Handle(msg, &funcHandler{m, r})
 }
 
 func (a *app) DetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) {
@@ -183,7 +163,7 @@ func (a *app) Handle(msg interface{}, h Handler) error {
 	return a.registerHandler(t, h)
 }
 
-func (a *app) registerHandler(t MsgType, h Handler) error {
+func (a *app) registerHandler(t string, h Handler) error {
 	_, ok := a.handlers[t]
 	a.handlers[t] = h
 	a.hive.registerHandler(t, a.qee, h)
@@ -194,19 +174,20 @@ func (a *app) registerHandler(t MsgType, h Handler) error {
 	return nil
 }
 
-func (a *app) handler(t MsgType) Handler {
+func (a *app) handler(t string) Handler {
 	return a.handlers[t]
 }
 
 func (a *app) Detached(h DetachedHandler) {
-	a.qee.ctrlCh <- NewLocalCmd(startDetachedCmd{Handler: h}, BeeID{}, nil)
+	a.qee.ctrlCh <- newCmdAndChannel(cmdStartDetached{Handler: h}, a.Name(), 0,
+		nil)
 }
 
 func (a *app) State() State {
 	return a.qee.State()
 }
 
-func (a *app) Name() AppName {
+func (a *app) Name() string {
 	return a.name
 }
 
@@ -234,11 +215,11 @@ func (a *app) initQee() {
 	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
 		dataCh:     make(chan msgAndHandler, a.hive.config.DataChBufSize),
-		ctrlCh:     make(chan LocalCmd, a.hive.config.CmdChBufSize),
+		ctrlCh:     make(chan cmdAndChannel, a.hive.config.CmdChBufSize),
 		hive:       a.hive,
 		app:        a,
 		cellToBees: make(map[CellKey]bee),
-		idToBees:   make(map[BeeID]bee),
+		idToBees:   make(map[uint64]bee),
 	}
 }
 
@@ -266,4 +247,8 @@ func (a *app) SetCommitThreshold(c int) error {
 
 	a.commitThresh = c - 1
 	return nil
+}
+
+func (a *app) newState() State {
+	return state.NewInMem()
 }

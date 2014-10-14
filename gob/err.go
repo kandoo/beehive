@@ -1,4 +1,4 @@
-package bh
+package gob
 
 type GobError struct {
 	Err string

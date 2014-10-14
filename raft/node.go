@@ -49,14 +49,14 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 	gob.Register(Request{})
 	gob.Register(Response{})
 
-	snapDir := path.Join(datadir, "snap")
-	if err := os.MkdirAll(snapDir, 0700); err != nil {
+	snapdir := path.Join(datadir, "snap")
+	if err := os.MkdirAll(snapdir, 0700); err != nil {
 		glog.Fatal("raft: cannot create snapshot directory")
 	}
 
 	var lastIndex uint64
 	var n etcdraft.Node
-	ss := snap.New(snapDir)
+	ss := snap.New(snapdir)
 	var w *wal.WAL
 	waldir := path.Join(datadir, "wal")
 	if !wal.Exist(waldir) {
@@ -80,7 +80,7 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 
 		if snapshot != nil {
 			glog.Infof("Restarting from snapshot at index %d", snapshot.Index)
-			store.Recover(snapshot.Data)
+			store.Restore(snapshot.Data)
 			index = snapshot.Index
 		}
 
@@ -206,7 +206,7 @@ func (n *Node) Start() {
 
 			// Recover from snapshot if it is more recent than the currently applied.
 			if rd.Snapshot.Index > appliedi {
-				if err := n.store.Recover(rd.Snapshot.Data); err != nil {
+				if err := n.store.Restore(rd.Snapshot.Data); err != nil {
 					panic("TODO: this is bad, what do we do about it?")
 				}
 				appliedi = rd.Snapshot.Index
@@ -231,4 +231,8 @@ func (n *Node) snapshot(snapi uint64, snapnodes []uint64) {
 
 func (n *Node) Stop() {
 	close(n.done)
+}
+
+func (n *Node) Step(ctx context.Context, msg raftpb.Message) error {
+	return n.node.Step(ctx, msg)
 }

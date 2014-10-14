@@ -5,7 +5,7 @@ type Persistent interface {
 	// Save saves the store into bytes.
 	Save() ([]byte, error)
 	// Recover recovers the store from bytes.
-	Recover(b []byte) error
+	Restore(b []byte) error
 }
 
 // Store represents an application defined state. Changes in this store are

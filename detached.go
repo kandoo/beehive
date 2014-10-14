@@ -1,4 +1,4 @@
-package bh
+package beehive
 
 import "github.com/golang/glog"
 
