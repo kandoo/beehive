@@ -34,13 +34,14 @@ func peersInfo(addrs []string) []HiveInfo {
 	return <-ch
 }
 
-func hiveIdFromPeers(addrs []string) uint64 {
+func hiveIDFromPeers(addrs []string) uint64 {
 	if len(addrs) == 0 {
 		return 1
 	}
 
 	ch := make(chan uint64, len(addrs))
 	for _, a := range addrs {
+		glog.V(2).Infof("Requesting hive ID from %v", a)
 		go func(a string) {
 			p := newProxyWithAddr(a)
 			if d, err := p.sendCmd(&cmd{Data: cmdCreateHiveID{}}); err == nil {
@@ -50,10 +51,11 @@ func hiveIdFromPeers(addrs []string) uint64 {
 		select {
 		case id := <-ch:
 			return id
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(300 * time.Millisecond):
 			continue
 		}
 	}
+
 	glog.Fatalf("Cannot get a new hive ID from peers")
 	return 1
 }
@@ -75,7 +77,7 @@ func meta(cfg HiveConfig) hiveMeta {
 			goto save
 		}
 
-		m.Hive.ID = hiveIdFromPeers(cfg.PeerAddrs)
+		m.Hive.ID = hiveIDFromPeers(cfg.PeerAddrs)
 		goto save
 	}
 
