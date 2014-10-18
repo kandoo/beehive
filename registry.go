@@ -311,7 +311,7 @@ func (r *registry) hive(id uint64) (HiveInfo, error) {
 
 func (r *registry) beesOfHive(id uint64) []BeeInfo {
 	r.m.RLock()
-	defer r.m.Unlock()
+	defer r.m.RUnlock()
 	var bees []BeeInfo
 	for _, b := range r.Bees {
 		if b.Hive == id {
