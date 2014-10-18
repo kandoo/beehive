@@ -1,0 +1,52 @@
+{
+	"ImportPath": "github.com/soheilhy/beehive",
+	"GoVersion": "go1.2.1",
+	"Deps": [
+		{
+			"ImportPath": "code.google.com/p/go.net/context",
+			"Comment": "null-144",
+			"Rev": "ad01a6fcc8a19d3a4478c836895ffe883bd2ceab"
+		},
+		{
+			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
+			"Rev": "7fd1620f09261338b6b1ca1289ace83aee0ec946"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/crc",
+			"Comment": "v0.4.4-1193-gf12583c",
+			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/pbutil",
+			"Comment": "v0.4.4-1193-gf12583c",
+			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/raft",
+			"Comment": "v0.4.4-1193-gf12583c",
+			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/snap",
+			"Comment": "v0.4.4-1193-gf12583c",
+			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/wal",
+			"Comment": "v0.4.4-1193-gf12583c",
+			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+		},
+		{
+			"ImportPath": "github.com/golang/glog",
+			"Rev": "d1c4472bf2efd3826f2b5bdcc02d8416798d678c"
+		},
+		{
+			"ImportPath": "github.com/gorilla/context",
+			"Rev": "14f550f51af52180c2eefed15e5fd18d63c0a64a"
+		},
+		{
+			"ImportPath": "github.com/gorilla/mux",
+			"Rev": "4b8fbc56f3b2400a7c7ea3dba9b3539787c486b6"
+		}
+	]
+}
