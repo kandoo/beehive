@@ -45,7 +45,7 @@ func newCellStore() CellStore {
 func (s *CellStore) assign(app string, k CellKey, c Colony) {
 	cells, ok := s.CellBees[app]
 	if !ok {
-		cells := make(map[CellKey]Colony)
+		cells = make(map[CellKey]Colony)
 		s.CellBees[app] = cells
 	}
 	cells[k] = c
