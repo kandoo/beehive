@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/golang/glog"
 	bhgob "github.com/soheilhy/beehive/gob"
 )
@@ -19,29 +20,6 @@ var (
 	ErrDuplicateBee       = errors.New("Duplicate bee")
 )
 
-// HiveJoined is emitted when a hive joins the cluster. Note that this message
-// is emitted on all hives.
-type HiveJoined struct {
-	ID   uint64 // The ID of the hive.
-	Addr string // Connection addr of the hive.
-}
-
-// HiveLeft is emitted when a hive leaves the cluster. Note that this event is
-// emitted on all hives.
-type HiveLeft struct {
-	ID uint64 // The ID of the hive.
-}
-
-// BeeMoved is emitted when a bee is moved from a hive to another hive.
-type BeeMoved MoveBee
-
-// CellLocked is when a cell is successfully locked by a colony.
-type CellsLocked struct {
-	Colony Colony
-	App    string
-	Cells  MappedCells
-}
-
 // HiveInfo stores the ID and the address of a hive.
 type HiveInfo struct {
 	ID   uint64
@@ -49,7 +27,9 @@ type HiveInfo struct {
 }
 
 // NewHiveID is the registry request to create a unique 64-bit hive ID.
-type NewHiveID struct{}
+type NewHiveID struct {
+	Addr string
+}
 
 // NewBeeID is the registry request to create a unique 64-bit bee ID.
 type NewBeeID struct{}
@@ -102,8 +82,8 @@ type TransferCells struct {
 }
 
 func init() {
-	gob.Register(HiveJoined{})
-	gob.Register(HiveLeft{})
+	gob.Register(NewBeeID{})
+	gob.Register(NewHiveID{})
 	gob.Register(HiveInfo{})
 	gob.Register(AddHive{})
 	gob.Register(DelHive(0))
@@ -118,7 +98,6 @@ func init() {
 
 type registry struct {
 	m sync.RWMutex
-	e Emitter
 
 	HiveID uint64
 	BeeID  uint64
@@ -127,9 +106,8 @@ type registry struct {
 	Store  CellStore
 }
 
-func newRegistry(e Emitter) *registry {
+func newRegistry() *registry {
 	return &registry{
-		e:      e,
 		HiveID: 1, // We need to start from one to preserve the first hive's ID.
 		BeeID:  0,
 		Hives:  make(map[uint64]HiveInfo),
@@ -150,36 +128,59 @@ func (r *registry) Restore(b []byte) error {
 	return bhgob.Decode(r, b)
 }
 
-func (r *registry) Apply(req interface{}) interface{} {
+func (r *registry) Apply(req interface{}) (interface{}, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
 	switch tr := req.(type) {
 	case NewHiveID:
-		return r.newHiveID()
+		return r.newHiveID(tr.Addr), nil
 	case NewBeeID:
-		return r.newBeeID()
-	case AddHive:
-		return r.addHive(HiveInfo(tr))
-	case DelHive:
-		return r.deleteHive(uint64(tr))
+		return r.newBeeID(), nil
 	case AddBee:
-		return r.addBee(BeeInfo(tr))
+		return nil, r.addBee(BeeInfo(tr))
 	case DelBee:
-		return r.delBee(uint64(tr))
+		return nil, r.delBee(uint64(tr))
 	case MoveBee:
-		return r.moveBee(tr)
+		return nil, r.moveBee(tr)
 	case LockMappedCell:
 		return r.lock(tr)
 	case TransferCells:
-		return r.transfer(tr)
+		return nil, r.transfer(tr)
 	}
 
-	return ErrUnsupportedRequest
+	return nil, ErrUnsupportedRequest
 }
 
-func (r *registry) newHiveID() uint64 {
+func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
+	data interface{}) error {
+
+	switch td := data.(type) {
+	case AddHive:
+		if td.ID != cc.NodeID {
+			glog.Fatalf("Invalid data in the config change: %v != %v", td, cc.NodeID)
+		}
+		r.addHive(HiveInfo(td))
+		glog.V(2).Infof("Hive added %v@%v", td.ID, td.Addr)
+
+	case DelHive:
+		if uint64(td) != cc.NodeID {
+			glog.Fatalf("Invalid data in the config change: %v != %v", td, cc.NodeID)
+		}
+		r.delHive(uint64(td))
+		glog.V(2).Infof("Hive %v deleted", td)
+
+	default:
+		if cc.Type == raftpb.ConfChangeRemoveNode {
+			r.delHive(cc.NodeID)
+		}
+	}
+	return nil
+}
+
+func (r *registry) newHiveID(addr string) uint64 {
 	r.HiveID++
+	r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
 	return r.HiveID
 }
 
@@ -188,24 +189,20 @@ func (r *registry) newBeeID() uint64 {
 	return r.BeeID
 }
 
-func (r *registry) deleteHive(id uint64) error {
+func (r *registry) delHive(id uint64) error {
 	if _, ok := r.Hives[id]; !ok {
 		return fmt.Errorf("No such hive %v", id)
 	}
 	delete(r.Hives, id)
-	go r.e.Emit(HiveLeft{ID: id})
 	return nil
 }
 
 func (r *registry) addHive(info HiveInfo) error {
-	if _, ok := r.Hives[info.ID]; ok {
-		return ErrDuplicateHive
-	}
 	if info.ID < r.HiveID {
 		glog.Fatalf("Invalid hive ID: %v < %v", info.ID, r.HiveID)
 	}
+	glog.V(2).Infof("Hive %v's address is set to %v", info.ID, info.Addr)
 	r.Hives[info.ID] = info
-	go r.e.Emit(HiveJoined(info))
 	return nil
 }
 
@@ -244,11 +241,14 @@ func (r *registry) moveBee(m MoveBee) error {
 
 	b.Hive = m.ToHive
 	r.Bees[m.ID] = b
-	go r.e.Emit(BeeMoved(m))
 	return nil
 }
 
-func (r *registry) lock(l LockMappedCell) Colony {
+func (r *registry) lock(l LockMappedCell) (Colony, error) {
+	if l.Colony.Leader == 0 {
+		return Colony{}, ErrInvalidParam
+	}
+
 	locked := false
 	openk := make(MappedCells, 0, 10)
 	for _, k := range l.Cells {
@@ -275,15 +275,13 @@ func (r *registry) lock(l LockMappedCell) Colony {
 		for _, k := range openk {
 			r.Store.assign(l.App, k, l.Colony)
 		}
-		go r.e.Emit(CellsLocked{Colony: l.Colony, App: l.App, Cells: l.Cells})
-		return l.Colony
+		return l.Colony, nil
 	}
 
 	for _, k := range l.Cells {
 		r.Store.assign(l.App, k, l.Colony)
 	}
-	go r.e.Emit(CellsLocked{Colony: l.Colony, App: l.App, Cells: l.Cells})
-	return l.Colony
+	return l.Colony, nil
 }
 
 func (r *registry) transfer(t TransferCells) error {
@@ -298,7 +296,6 @@ func (r *registry) transfer(t TransferCells) error {
 	for _, k := range keys {
 		r.Store.assign(i.App, k, t.To)
 	}
-	go r.e.Emit(CellsLocked{Colony: t.To, App: i.App, Cells: keys})
 	return nil
 }
 
@@ -310,6 +307,18 @@ func (r *registry) hive(id uint64) (HiveInfo, error) {
 		return i, ErrNoSuchHive
 	}
 	return i, nil
+}
+
+func (r *registry) beesOfHive(id uint64) []BeeInfo {
+	r.m.RLock()
+	defer r.m.Unlock()
+	var bees []BeeInfo
+	for _, b := range r.Bees {
+		if b.Hive == id {
+			bees = append(bees, b)
+		}
+	}
+	return bees
 }
 
 func (r *registry) bee(id uint64) (BeeInfo, error) {

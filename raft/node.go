@@ -108,7 +108,7 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 	node := &Node{
 		id:        id,
 		node:      n,
-		gen:       gen.NewSeqIDGen(lastIndex),
+		gen:       gen.NewSeqIDGen(lastIndex + 2*snapCount), // To avoid collisions.
 		store:     store,
 		wal:       w,
 		snap:      ss,
@@ -118,18 +118,23 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 		done:      make(chan struct{}),
 	}
 	node.line.init()
-
 	go node.Start()
 	return node
 }
 
-// Do processes the request and returns the response. It is blocking.
-func (n *Node) Do(ctx context.Context, req interface{}) (interface{}, error) {
+func (n *Node) genID() RequestID {
+	return RequestID{
+		NodeID: n.id,
+		Seq:    n.gen.GenID(),
+	}
+}
+
+// Process processes the request and returns the response. It is blocking.
+func (n *Node) Process(ctx context.Context, req interface{}) (interface{},
+	error) {
+
 	r := Request{
-		ID: RequestID{
-			NodeID: n.id,
-			Seq:    n.gen.GenID(),
-		},
+		ID:   n.genID(),
 		Data: req,
 	}
 
@@ -142,7 +147,7 @@ func (n *Node) Do(ctx context.Context, req interface{}) (interface{}, error) {
 	n.node.Propose(ctx, b)
 	select {
 	case res := <-ch:
-		return res.Data, nil
+		return res.Data, res.Err
 	case <-ctx.Done():
 		n.line.call(Response{ID: r.ID})
 		return nil, ctx.Err()
@@ -151,7 +156,51 @@ func (n *Node) Do(ctx context.Context, req interface{}) (interface{}, error) {
 	}
 }
 
+func (n *Node) AddNode(ctx context.Context, id uint64, data interface{}) error {
+	cc := raftpb.ConfChange{
+		ID:     0,
+		Type:   raftpb.ConfChangeAddNode,
+		NodeID: id,
+	}
+	return n.ProcessConfChange(ctx, cc, data)
+}
+
+func (n *Node) RemoveNode(ctx context.Context, id uint64, data interface{}) error {
+	cc := raftpb.ConfChange{
+		ID:     0,
+		Type:   raftpb.ConfChangeRemoveNode,
+		NodeID: id,
+	}
+	return n.ProcessConfChange(ctx, cc, data)
+}
+
+func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
+	data interface{}) error {
+	r := Request{
+		ID:   n.genID(),
+		Data: data,
+	}
+	var err error
+	cc.Context, err = r.Encode()
+	if err != nil {
+		return err
+	}
+
+	ch := n.line.wait(r.ID)
+	n.node.ProposeConfChange(ctx, cc)
+	select {
+	case res := <-ch:
+		return res.Err
+	case <-ctx.Done():
+		n.line.call(Response{ID: r.ID})
+		return ctx.Err()
+	case <-n.done:
+		return ErrStopped
+	}
+}
+
 func (n *Node) Start() {
+	glog.V(2).Infof("Raft node %v started", n.id)
 	var snapi, appliedi uint64
 	var nodes []uint64
 	for {
@@ -164,12 +213,24 @@ func (n *Node) Start() {
 			n.send(rd.Messages)
 
 			for _, e := range rd.CommittedEntries {
-				var req Request
 				switch e.Type {
 				case raftpb.EntryNormal:
-					if err := req.Decode(e.Data); err != nil {
-						glog.Fatalf("raftserver: cannot decode context %v", err)
+					if len(e.Data) == 0 {
+						break
 					}
+					var req Request
+					if err := req.Decode(e.Data); err != nil {
+						glog.Fatalf("raftserver: cannot decode entry data %v", err)
+					}
+
+					if req.Data == nil {
+						break
+					}
+					res := Response{
+						ID: req.ID,
+					}
+					res.Data, res.Err = n.store.Apply(req.Data)
+					n.line.call(res)
 
 				case raftpb.EntryConfChange:
 					var cc raftpb.ConfChange
@@ -177,17 +238,24 @@ func (n *Node) Start() {
 						glog.Fatalf("raftserver: cannot decode confchange %v", err)
 					}
 					n.node.ApplyConfChange(cc)
+					if len(cc.Context) == 0 {
+						n.store.ApplyConfChange(cc, nil)
+						break
+					}
+
+					var req Request
 					if err := req.Decode(cc.Context); err != nil {
 						glog.Fatalf("raftserver: cannot decode context %v", err)
 					}
+					res := Response{
+						ID: req.ID,
+					}
+					res.Err = n.store.ApplyConfChange(cc, req.Data)
+					n.line.call(res)
+
 				default:
 					panic("unexpected entry type")
 				}
-
-				var res Response
-				res.ID = req.ID
-				res.Data = n.store.Apply(req.Data)
-				n.line.call(res)
 
 				appliedi = e.Index
 			}
@@ -216,6 +284,8 @@ func (n *Node) Start() {
 				n.snapshot(appliedi, nodes)
 				snapi = appliedi
 			}
+		case <-n.done:
+			return
 		}
 	}
 }

@@ -23,12 +23,8 @@ func (r *Request) Encode() ([]byte, error) {
 }
 
 // Response represents a response to a request.
-type Response Request
-
-func (r *Response) Decode(b []byte) error {
-	return gob.Decode(r, b)
-}
-
-func (r *Response) Encode() ([]byte, error) {
-	return gob.Encode(r)
+type Response struct {
+	ID   RequestID   // Response ID is always set to the ID of the request.
+	Data interface{} // Data is set if there was no error.
+	Err  error       // Error, if any.
 }
