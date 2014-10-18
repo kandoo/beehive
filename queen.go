@@ -43,7 +43,7 @@ func (q *qee) start() {
 }
 
 func (q *qee) String() string {
-	return fmt.Sprintf("queen %d/%s", q.hive.ID(), q.app.Name())
+	return fmt.Sprintf("%d/%s/Q", q.hive.ID(), q.app.Name())
 }
 
 func (q *qee) State() State {
@@ -72,14 +72,15 @@ func (q *qee) beeByID(id uint64) (b bee, ok bool) {
 }
 
 func (q *qee) allocateNewBeeID() (BeeInfo, error) {
-	res, err := q.hive.node.Do(context.TODO(), NewBeeID{})
+	res, err := q.hive.node.Process(context.TODO(), NewBeeID{})
 	if err != nil {
 		return BeeInfo{}, err
 	}
 	id := res.(uint64)
 	info := BeeInfo{
-		ID:  id,
-		App: q.app.Name(),
+		ID:   id,
+		Hive: q.hive.ID(),
+		App:  q.app.Name(),
 		Colony: Colony{
 			Leader: id,
 		},
@@ -90,18 +91,18 @@ func (q *qee) allocateNewBeeID() (BeeInfo, error) {
 func (q *qee) newLocalBee() (*localBee, error) {
 	info, err := q.allocateNewBeeID()
 	if err != nil {
-		return nil, fmt.Errorf("%v cannot allocate a new bee ID")
+		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}
 
 	if _, ok := q.beeByID(info.ID); ok {
 		return nil, fmt.Errorf("Bee %v already exists", info.ID)
 	}
 
-	if !q.isLocalBee(info) {
-		return nil, errors.New("cannot create local bee for a remote bee")
+	b := q.defaultLocalBee(info.ID)
+	if _, err := q.hive.node.Process(context.TODO(), AddBee(info)); err != nil {
+		return nil, err
 	}
 
-	b := q.defaultLocalBee(info.ID)
 	q.idToBees[info.ID] = &b
 	go b.start()
 	return &b, nil
@@ -139,6 +140,12 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 //return ds
 //}
 
+func (q *qee) processCmd(data interface{}) (interface{}, error) {
+	ch := make(chan cmdResult)
+	q.ctrlCh <- newCmdAndChannel(data, q.app.Name(), 0, ch)
+	return (<-ch).get()
+}
+
 func (q *qee) stopBees() {
 	stopCh := make(chan cmdResult)
 	stopCmd := newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
@@ -168,6 +175,8 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		return
 	}
 
+	glog.V(2).Infof("%v handles command %#v", q, cc.cmd.Data)
+
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		q.stopped = true
@@ -188,7 +197,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{Err: err}
 		return
 
-	case createBeeCmd:
+	case cmdCreateBee:
 		b, err := q.newLocalBee()
 		if err != nil {
 			cc.ch <- cmdResult{Err: err}
@@ -197,6 +206,11 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		}
 		cc.ch <- cmdResult{Data: b.ID()}
 		glog.V(2).Infof("Created a new local bee %v", b)
+		return
+
+	case cmdReloadBee:
+		_, err := q.reloadBee(cmd.ID)
+		cc.ch <- cmdResult{Err: err}
 		return
 
 	// FIXME REFACTOR
@@ -247,6 +261,13 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 			}
 		}
 	}
+}
+
+func (q *qee) reloadBee(id uint64) (bee, error) {
+	b := q.defaultLocalBee(id)
+	q.idToBees[id] = &b
+	go b.start()
+	return &b, nil
 }
 
 func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
@@ -325,10 +346,6 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			glog.Fatal(err)
 		}
 
-		if q.app.ReplicationFactor() > 1 {
-			panic("FIXME REFACTOR")
-		}
-
 		info := BeeInfo{
 			Hive:   q.hive.ID(),
 			App:    q.app.Name(),
@@ -336,15 +353,29 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			Colony: lb.colony(),
 		}
 
-		q.lock(info, cells)
-		lb.addMappedCells(cells)
+		if info, err = q.lock(info, cells); err != nil {
+			glog.Fatalf("Error in locking the cells: %v", err)
+		}
+
+		if info.ID == lb.ID() {
+			lb.addMappedCells(cells)
+			if q.app.ReplicationFactor() > 1 {
+				panic("FIXME REFACTOR")
+			}
+			bee = lb
+		} else {
+			bee, err = q.beeByCells(cells)
+			if err != nil {
+				glog.Fatalf("Neither can lock a cell nor can find its bee")
+			}
+		}
 	}
 	glog.V(2).Infof("Message sent to bee %v: %v", bee, mh.msg)
 	bee.enqueMsg(mh)
 }
 
 func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
-	res, err := q.hive.node.Do(context.TODO(), LockMappedCell{
+	res, err := q.hive.node.Process(context.TODO(), LockMappedCell{
 		Colony: b.Colony,
 		App:    b.App,
 		Cells:  cells,
@@ -492,13 +523,14 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 
 func (q *qee) defaultLocalBee(id uint64) localBee {
 	return localBee{
-		qee:    q,
-		beeID:  id,
-		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
-		ctrlCh: make(chan cmdAndChannel, cap(q.ctrlCh)),
-		hive:   q.hive,
-		app:    q.app,
-		state:  q.app.newState(),
+		qee:       q,
+		beeID:     id,
+		beeColony: Colony{Leader: id},
+		dataCh:    make(chan msgAndHandler, cap(q.dataCh)),
+		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
+		hive:      q.hive,
+		app:       q.app,
+		state:     q.app.newState(),
 	}
 }
 

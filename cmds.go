@@ -18,7 +18,11 @@ type cmdFindBee struct {
 	ID uint64
 }
 
-type createBeeCmd struct{}
+type cmdCreateBee struct{}
+
+type cmdReloadBee struct {
+	ID uint64
+}
 
 // FIXME REFACTOR
 //type joinColonyCmd struct {

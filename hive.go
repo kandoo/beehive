@@ -73,9 +73,11 @@ type HiveConfig struct {
 
 // Creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
+	os.MkdirAll(cfg.StatePath, 0700)
 	m := meta(cfg)
 	h := &hive{
 		id:     m.Hive.ID,
+		meta:   m,
 		status: hiveStopped,
 		config: cfg,
 		dataCh: make(chan *msg, cfg.DataChBufSize),
@@ -85,14 +87,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		ticker: time.NewTicker(10 * time.Millisecond),
 	}
 
-	h.registry = newRegistry(h)
-	peerIDs := make([]uint64, 0, len(m.Peers))
-	for _, p := range m.Peers {
-		peerIDs = append(peerIDs, p.ID)
-	}
-	h.node = raft.NewNode(m.Hive.ID, peerIDs, h.sendRaft, cfg.StatePath,
-		h.registry, 1024, h.ticker.C)
-
+	h.registry = newRegistry()
 	gob.Register(Colony{})
 	gob.Register(msg{})
 	gob.Register(cmd{})
@@ -100,7 +95,8 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	gob.Register(cmdStop{})
 	gob.Register(cmdStart{})
 	gob.Register(cmdFindBee{})
-	gob.Register(createBeeCmd{})
+	gob.Register(cmdCreateBee{})
+	gob.Register(cmdReloadBee{})
 	gob.Register(cmdLiveHives{})
 	gob.Register(cmdCreateHiveID{})
 	gob.Register(bhgob.GobError{})
@@ -154,7 +150,7 @@ func init() {
 		"Buffer size of command channels.")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"Whether to insturment apps.")
-	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp",
+	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
 		"Where to store persistent state data.")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
 		100*time.Millisecond, "Heartbeat interval.")
@@ -185,6 +181,7 @@ const (
 // The internal implementation of Hive.
 type hive struct {
 	id     uint64
+	meta   hiveMeta
 	config HiveConfig
 
 	status hiveStatus
@@ -290,6 +287,12 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{}
 	case cmdPingHive:
 		cc.ch <- cmdResult{}
+	case cmdCreateHiveID:
+		d, err := h.node.Process(context.TODO(), NewHiveID{})
+		cc.ch <- cmdResult{
+			Data: d,
+			Err:  err,
+		}
 	}
 }
 
@@ -342,12 +345,43 @@ func (h *hive) startListener() {
 	h.listen()
 }
 
+func (h *hive) startRaftNode() {
+	peerIDs := make([]uint64, 0, len(h.meta.Peers)+1)
+	for _, p := range h.meta.Peers {
+		peerIDs = append(peerIDs, p.ID)
+	}
+	peerIDs = append(peerIDs, h.id)
+	h.node = raft.NewNode(h.id, peerIDs, h.sendRaft, h.config.StatePath,
+		h.registry, 1024, h.ticker.C)
+	// This will act like a barrier.
+	ctx := context.TODO()
+	if err := h.node.AddNode(ctx, h.ID(), AddHive(h.info())); err != nil {
+		glog.Fatalf("Error when joining the cluster: %v", err)
+	}
+}
+
+func (h *hive) reloadState() {
+	for _, b := range h.registry.beesOfHive(h.id) {
+		a, ok := h.app(b.App)
+		if !ok {
+			glog.Errorf("Found a bee for app %v, which is not registered")
+			continue
+		}
+		_, err := a.qee.processCmd(cmdReloadBee{ID: b.ID})
+		if err != nil {
+			glog.Errorf("Cannot reload bee %v on %v", b.ID, h.id)
+			continue
+		}
+	}
+}
+
 func (h *hive) Start() error {
 	h.status = hiveStarted
 	h.registerSignals()
-	h.startListener()
-	go h.node.Start()
 	h.startQees()
+	h.startListener()
+	h.startRaftNode()
+	h.reloadState()
 
 	for h.status == hiveStarted {
 		select {
@@ -366,6 +400,13 @@ func (h *hive) Start() error {
 	}
 
 	return nil
+}
+
+func (h *hive) info() HiveInfo {
+	return HiveInfo{
+		ID:   h.id,
+		Addr: h.config.Addr,
+	}
 }
 
 func (h *hive) Stop() error {
