@@ -50,9 +50,9 @@ func (c *Colony) DelFollower(id uint64) bool {
 }
 
 func (c Colony) DeepCopy() Colony {
-	slaves := make([]uint64, len(c.Followers))
-	copy(slaves, c.Followers)
-	c.Followers = slaves
+	f := make([]uint64, len(c.Followers))
+	copy(f, c.Followers)
+	c.Followers = f
 	return c
 }
 
@@ -69,13 +69,13 @@ func (c Colony) Equal(thatC Colony) bool {
 		return true
 	}
 
-	slaves := make(map[uint64]bool)
+	f := make(map[uint64]bool)
 	for _, b := range c.Followers {
-		slaves[b] = true
+		f[b] = true
 	}
 
 	for _, b := range thatC.Followers {
-		if _, ok := slaves[b]; !ok {
+		if _, ok := f[b]; !ok {
 			return false
 		}
 	}
@@ -84,11 +84,11 @@ func (c Colony) Equal(thatC Colony) bool {
 }
 
 //func (c *Colony) FollowerHives() []HiveID {
-//slaves := make([]HiveID, 0, len(c.Followers))
+//f:= make([]HiveID, 0, len(c.Followers))
 //for _, s := range c.Followers {
-//slaves = append(slaves, s.HiveID)
+//f= append(f, s.HiveID)
 //}
-//return slaves
+//return f
 //}
 
 func (c *Colony) Bytes() ([]byte, error) {
