@@ -12,10 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/third_party/code.google.com/p/go.net/context"
-	"github.com/golang/glog"
-	"github.com/gorilla/mux"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	etcdraft "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhflag "github.com/soheilhy/beehive/flag"
 	bhgob "github.com/soheilhy/beehive/gob"
 	"github.com/soheilhy/beehive/raft"
@@ -346,16 +347,16 @@ func (h *hive) startListener() {
 }
 
 func (h *hive) startRaftNode() {
-	peerIDs := make([]uint64, 0, len(h.meta.Peers)+1)
+	peers := make([]etcdraft.Peer, 0, len(h.meta.Peers)+1)
 	for _, p := range h.meta.Peers {
-		peerIDs = append(peerIDs, p.ID)
+		peers = append(peers, raft.NodeInfo(p).Peer())
 	}
-	peerIDs = append(peerIDs, h.id)
-	h.node = raft.NewNode(h.id, peerIDs, h.sendRaft, h.config.StatePath,
+	peers = append(peers, raft.NodeInfo(h.info()).Peer())
+	h.node = raft.NewNode(h.id, peers, h.sendRaft, h.config.StatePath,
 		h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
 	ctx := context.TODO()
-	if err := h.node.AddNode(ctx, h.ID(), AddHive(h.info())); err != nil {
+	if _, err := h.node.Process(ctx, NoOp{}); err != nil {
 		glog.Fatalf("Error when joining the cluster: %v", err)
 	}
 }

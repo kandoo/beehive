@@ -1,6 +1,6 @@
 package raft
 
-import "github.com/coreos/etcd/raft/raftpb"
+import "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 
 // Persistent wraps the two save and recover method.
 type Persistent interface {
@@ -17,5 +17,5 @@ type Store interface {
 	// Apply applies a request and returns the response.
 	Apply(req interface{}) (interface{}, error)
 	// ApplyConfChange processes a configuration change.
-	ApplyConfChange(cc raftpb.ConfChange, data interface{}) error
+	ApplyConfChange(cc raftpb.ConfChange, n NodeInfo) error
 }

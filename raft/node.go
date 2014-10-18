@@ -3,18 +3,20 @@ package raft
 import (
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strconv"
 	"time"
 
-	etcdraft "github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/coreos/etcd/snap"
-	"github.com/coreos/etcd/third_party/code.google.com/p/go.net/context"
-	"github.com/coreos/etcd/wal"
-	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	etcdraft "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/gen"
+	bhgob "github.com/soheilhy/beehive/gob"
 )
 
 // Most of this code is adapted from etcd/etcdserver/server.go.
@@ -24,6 +26,30 @@ var (
 )
 
 type SendFunc func(m []raftpb.Message)
+
+// NodeInfo stores the ID and the address of a hive.
+type NodeInfo struct {
+	ID   uint64
+	Addr string
+}
+
+// Peer returns a peer which stores the binary representation of the hive info
+// in the the peer's context.
+func (i NodeInfo) Peer() etcdraft.Peer {
+	return etcdraft.Peer{
+		ID:      i.ID,
+		Context: i.MustEncode(),
+	}
+}
+
+// MustEncode encodes the hive into bytes.
+func (i NodeInfo) MustEncode() []byte {
+	b, err := bhgob.Encode(i)
+	if err != nil {
+		glog.Fatalf("Error in encoding peer: %v", err)
+	}
+	return b
+}
 
 type Node struct {
 	id   uint64
@@ -42,7 +68,7 @@ type Node struct {
 	done   chan struct{}
 }
 
-func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
+func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 	store Store, snapCount uint64, ticker <-chan time.Time) *Node {
 
 	gob.Register(RequestID{})
@@ -101,7 +127,7 @@ func NewNode(id uint64, peers []uint64, send SendFunc, datadir string,
 			glog.Fatal("ID in write-ahead-log is %v and different than %v", walid, id)
 		}
 
-		n = etcdraft.RestartNode(id, peers, 10, 1, snapshot, st, ents)
+		n = etcdraft.RestartNode(id, 10, 1, snapshot, st, ents)
 		lastIndex = ents[len(ents)-1].Index
 	}
 
@@ -199,6 +225,97 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 	}
 }
 
+func (n *Node) applyNormal(e raftpb.Entry) {
+	if len(e.Data) == 0 {
+		return
+	}
+	var req Request
+	if err := req.Decode(e.Data); err != nil {
+		glog.Fatalf("raftserver: cannot decode entry data %v", err)
+	}
+
+	if req.Data == nil {
+		return
+	}
+	res := Response{
+		ID: req.ID,
+	}
+	res.Data, res.Err = n.store.Apply(req.Data)
+	n.line.call(res)
+}
+
+func containsNode(nodes []uint64, node uint64) bool {
+	for _, n := range nodes {
+		if node == n {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) validConfChange(cc raftpb.ConfChange,
+	nodes, removedNodes []uint64) error {
+
+	if containsNode(removedNodes, cc.NodeID) {
+		return fmt.Errorf("%v is removed", cc.NodeID)
+	}
+
+	switch cc.Type {
+	case raftpb.ConfChangeAddNode:
+		if containsNode(nodes, cc.NodeID) {
+			return fmt.Errorf("%v is duplicate", cc.NodeID)
+		}
+	case raftpb.ConfChangeRemoveNode:
+		if !containsNode(nodes, cc.NodeID) {
+			return fmt.Errorf("No such node", cc.NodeID)
+		}
+	default:
+		glog.Fatalf("Invalid ConfChange type %v", cc.Type)
+	}
+	return nil
+}
+
+func (n *Node) applyConfChange(e raftpb.Entry, nodes, removedNodes []uint64) {
+	var cc raftpb.ConfChange
+	if err := cc.Unmarshal(e.Data); err != nil {
+		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
+	}
+
+	if err := n.validConfChange(cc, nodes, removedNodes); err != nil {
+		glog.V(2).Infof("Received an invalid conf change for node %v: %v",
+			cc.NodeID, err)
+		cc.NodeID = etcdraft.None
+		n.node.ApplyConfChange(cc)
+		return
+	}
+
+	n.node.ApplyConfChange(cc)
+	if len(cc.Context) == 0 {
+		n.store.ApplyConfChange(cc, NodeInfo{})
+		return
+	}
+
+	var info NodeInfo
+	if err := bhgob.Decode(&info, cc.Context); err == nil {
+		if info.ID != cc.NodeID {
+			glog.Fatalf("Invalid config change: %v != %v", info.ID, cc.NodeID)
+		}
+		n.store.ApplyConfChange(cc, info)
+		return
+	}
+
+	var req Request
+	if err := req.Decode(cc.Context); err != nil {
+		// It should be either a node info or a request.
+		glog.Fatalf("raftserver: cannot decode context (%v)", err)
+	}
+	res := Response{
+		ID: req.ID,
+	}
+	res.Err = n.store.ApplyConfChange(cc, req.Data.(NodeInfo))
+	n.line.call(res)
+}
+
 func (n *Node) Start() {
 	glog.V(2).Infof("Raft node %v started", n.id)
 	var snapi, appliedi uint64
@@ -208,64 +325,38 @@ func (n *Node) Start() {
 		case <-n.ticker:
 			n.node.Tick()
 		case rd := <-n.node.Ready():
-			n.wal.Save(rd.HardState, rd.Entries)
-			n.snap.SaveSnap(rd.Snapshot)
-			n.send(rd.Messages)
-
-			for _, e := range rd.CommittedEntries {
-				switch e.Type {
-				case raftpb.EntryNormal:
-					if len(e.Data) == 0 {
-						break
-					}
-					var req Request
-					if err := req.Decode(e.Data); err != nil {
-						glog.Fatalf("raftserver: cannot decode entry data %v", err)
-					}
-
-					if req.Data == nil {
-						break
-					}
-					res := Response{
-						ID: req.ID,
-					}
-					res.Data, res.Err = n.store.Apply(req.Data)
-					n.line.call(res)
-
-				case raftpb.EntryConfChange:
-					var cc raftpb.ConfChange
-					if err := cc.Unmarshal(e.Data); err != nil {
-						glog.Fatalf("raftserver: cannot decode confchange %v", err)
-					}
-					n.node.ApplyConfChange(cc)
-					if len(cc.Context) == 0 {
-						n.store.ApplyConfChange(cc, nil)
-						break
-					}
-
-					var req Request
-					if err := req.Decode(cc.Context); err != nil {
-						glog.Fatalf("raftserver: cannot decode context %v", err)
-					}
-					res := Response{
-						ID: req.ID,
-					}
-					res.Err = n.store.ApplyConfChange(cc, req.Data)
-					n.line.call(res)
-
-				default:
-					panic("unexpected entry type")
-				}
-
-				appliedi = e.Index
-			}
-
 			if rd.SoftState != nil {
 				nodes = rd.SoftState.Nodes
 				if rd.SoftState.ShouldStop {
 					n.Stop()
 					return
 				}
+			}
+
+			n.wal.Save(rd.HardState, rd.Entries)
+			n.snap.SaveSnap(rd.Snapshot)
+			n.send(rd.Messages)
+
+			glog.V(2).Infof("Raft update on node %v", n.id)
+
+			for _, e := range rd.CommittedEntries {
+				switch e.Type {
+				case raftpb.EntryNormal:
+					n.applyNormal(e)
+
+				case raftpb.EntryConfChange:
+					var ln, rn []uint64
+					if rd.SoftState != nil {
+						ln = rd.SoftState.Nodes
+						rn = rd.SoftState.RemovedNodes
+					}
+					n.applyConfChange(e, ln, rn)
+
+				default:
+					panic("unexpected entry type")
+				}
+
+				appliedi = e.Index
 			}
 
 			if rd.Snapshot.Index > snapi {

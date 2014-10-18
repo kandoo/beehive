@@ -6,8 +6,11 @@ import (
 	"path"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/soheilhy/beehive/raft"
 )
+
+type HiveInfo raft.NodeInfo
 
 type hiveMeta struct {
 	Hive  HiveInfo

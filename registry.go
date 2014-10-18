@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	bhgob "github.com/soheilhy/beehive/gob"
+	"github.com/soheilhy/beehive/raft"
 )
 
 var (
@@ -20,11 +21,9 @@ var (
 	ErrDuplicateBee       = errors.New("Duplicate bee")
 )
 
-// HiveInfo stores the ID and the address of a hive.
-type HiveInfo struct {
-	ID   uint64
-	Addr string
-}
+// NoOp is a barrier: a registery request to make sure all the updates are
+// applied to store.
+type NoOp struct{}
 
 // NewHiveID is the registry request to create a unique 64-bit hive ID.
 type NewHiveID struct {
@@ -33,12 +32,6 @@ type NewHiveID struct {
 
 // NewBeeID is the registry request to create a unique 64-bit bee ID.
 type NewBeeID struct{}
-
-// AddHive is the registery request to add a hive.
-type AddHive HiveInfo
-
-// DelHive is the registery request to delete a hive.
-type DelHive uint64
 
 // BeeInfo stores the metadata about a bee.
 type BeeInfo struct {
@@ -82,11 +75,10 @@ type TransferCells struct {
 }
 
 func init() {
+	gob.Register(NoOp{})
 	gob.Register(NewBeeID{})
 	gob.Register(NewHiveID{})
 	gob.Register(HiveInfo{})
-	gob.Register(AddHive{})
-	gob.Register(DelHive(0))
 	gob.Register(BeeInfo{})
 	gob.Register(AddBee{})
 	gob.Register(DelBee(0))
@@ -133,6 +125,8 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 	defer r.m.Unlock()
 
 	switch tr := req.(type) {
+	case NoOp:
+		return nil, nil
 	case NewHiveID:
 		return r.newHiveID(tr.Addr), nil
 	case NewBeeID:
@@ -153,27 +147,19 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 }
 
 func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
-	data interface{}) error {
+	n raft.NodeInfo) error {
 
-	switch td := data.(type) {
-	case AddHive:
-		if td.ID != cc.NodeID {
-			glog.Fatalf("Invalid data in the config change: %v != %v", td, cc.NodeID)
+	switch cc.Type {
+	case raftpb.ConfChangeAddNode:
+		if n.ID != cc.NodeID {
+			glog.Fatalf("Invalid data in the config change: %v != %v", n, cc.NodeID)
 		}
-		r.addHive(HiveInfo(td))
-		glog.V(2).Infof("Hive added %v@%v", td.ID, td.Addr)
+		r.addHive(HiveInfo(n))
+		glog.V(2).Infof("Hive added %v@%v", n.ID, n.Addr)
 
-	case DelHive:
-		if uint64(td) != cc.NodeID {
-			glog.Fatalf("Invalid data in the config change: %v != %v", td, cc.NodeID)
-		}
-		r.delHive(uint64(td))
-		glog.V(2).Infof("Hive %v deleted", td)
-
-	default:
-		if cc.Type == raftpb.ConfChangeRemoveNode {
-			r.delHive(cc.NodeID)
-		}
+	case raftpb.ConfChangeRemoveNode:
+		r.delHive(cc.NodeID)
+		glog.V(2).Infof("Hive %v deleted", cc.NodeID)
 	}
 	return nil
 }

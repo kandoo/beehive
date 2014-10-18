@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/state"
 )
 

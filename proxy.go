@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/connpool"
 )
 

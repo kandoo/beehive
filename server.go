@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/glog"
-	"github.com/gorilla/mux"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhgob "github.com/soheilhy/beehive/gob"
 )
 
