@@ -231,7 +231,7 @@ func (b *localBee) enqueCmd(cc cmdAndChannel) {
 //}
 
 func (b *localBee) stop() {
-	glog.Infof("Bee %s stopped", b.beeID)
+	glog.Infof("Bee %v stopped", b.beeID)
 	b.stopped = true
 	// TODO(soheil): Do we need to stop timers?
 }
