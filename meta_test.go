@@ -6,7 +6,7 @@ import (
 )
 
 func TestHiveIDFromPeers(t *testing.T) {
-	if id := hiveIDFromPeers(nil); id != 1 {
+	if id := hiveIDFromPeers("", nil); id != 1 {
 		t.Errorf("%v is not a valid default hive ID", id)
 	}
 }

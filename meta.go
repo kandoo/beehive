@@ -37,19 +37,34 @@ func peersInfo(addrs []string) []HiveInfo {
 	return <-ch
 }
 
-func hiveIDFromPeers(addrs []string) uint64 {
-	if len(addrs) == 0 {
+func hiveIDFromPeers(addr string, paddrs []string) uint64 {
+	if len(paddrs) == 0 {
 		return 1
 	}
 
-	ch := make(chan uint64, len(addrs))
-	for _, a := range addrs {
+	ch := make(chan uint64, len(paddrs))
+	for _, a := range paddrs {
 		glog.V(2).Infof("Requesting hive ID from %v", a)
 		go func(a string) {
 			p := newProxyWithAddr(a)
-			if d, err := p.sendCmd(&cmd{Data: cmdCreateHiveID{}}); err == nil {
-				ch <- d.(uint64)
+			id, err := p.sendCmd(&cmd{Data: cmdNewHiveID{Addr: addr}})
+			if err != nil {
+				glog.Error(err)
+				return
 			}
+			_, err = p.sendCmd(&cmd{
+				Data: cmdAddHive{
+					Info: raft.NodeInfo{
+						ID:   id.(uint64),
+						Addr: addr,
+					},
+				},
+			})
+			if err != nil {
+				glog.Error(err)
+				return
+			}
+			ch <- id.(uint64)
 		}(a)
 		select {
 		case id := <-ch:
@@ -80,7 +95,7 @@ func meta(cfg HiveConfig) hiveMeta {
 			goto save
 		}
 
-		m.Hive.ID = hiveIDFromPeers(cfg.PeerAddrs)
+		m.Hive.ID = hiveIDFromPeers(cfg.Addr, cfg.PeerAddrs)
 		goto save
 	}
 

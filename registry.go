@@ -79,6 +79,7 @@ func init() {
 	gob.Register(NewBeeID{})
 	gob.Register(NewHiveID{})
 	gob.Register(HiveInfo{})
+	gob.Register([]HiveInfo{})
 	gob.Register(BeeInfo{})
 	gob.Register(AddBee{})
 	gob.Register(DelBee(0))
@@ -154,7 +155,9 @@ func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
 		if n.ID != cc.NodeID {
 			glog.Fatalf("Invalid data in the config change: %v != %v", n, cc.NodeID)
 		}
-		r.addHive(HiveInfo(n))
+		if n.Addr != "" {
+			r.addHive(HiveInfo(n))
+		}
 		glog.V(2).Infof("Hive added %v@%v", n.ID, n.Addr)
 
 	case raftpb.ConfChangeRemoveNode:
@@ -166,7 +169,9 @@ func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
 
 func (r *registry) newHiveID(addr string) uint64 {
 	r.HiveID++
-	r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
+	if addr != "" {
+		r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
+	}
 	return r.HiveID
 }
 
@@ -184,8 +189,8 @@ func (r *registry) delHive(id uint64) error {
 }
 
 func (r *registry) addHive(info HiveInfo) error {
-	if info.ID < r.HiveID {
-		glog.Fatalf("Invalid hive ID: %v < %v", info.ID, r.HiveID)
+	if r.HiveID < info.ID {
+		//glog.Fatalf("Hive ID %v is after allocated hive id", r.HiveID, info.ID)
 	}
 	glog.V(2).Infof("Hive %v's address is set to %v", info.ID, info.Addr)
 	r.Hives[info.ID] = info
@@ -283,6 +288,16 @@ func (r *registry) transfer(t TransferCells) error {
 		r.Store.assign(i.App, k, t.To)
 	}
 	return nil
+}
+
+func (r *registry) hives() []HiveInfo {
+	r.m.RLock()
+	defer r.m.RUnlock()
+	hives := make([]HiveInfo, len(r.Hives))
+	for _, h := range r.Hives {
+		hives = append(hives, h)
+	}
+	return hives
 }
 
 func (r *registry) hive(id uint64) (HiveInfo, error) {

@@ -1,6 +1,9 @@
 package beehive
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // If App is not "" and To is 0, the command should be handed to the qee.
 // Otherwise it is for a bee of that app.
@@ -13,6 +16,8 @@ type cmd struct {
 func (c cmd) String() string {
 	return fmt.Sprintf("CMD -> %v\t%#v", c.To, c.Data)
 }
+
+var ErrInvalidCmd = errors.New("Invalid command")
 
 type cmdAndChannel struct {
 	cmd cmd

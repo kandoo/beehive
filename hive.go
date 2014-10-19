@@ -96,10 +96,11 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	gob.Register(cmdStop{})
 	gob.Register(cmdStart{})
 	gob.Register(cmdFindBee{})
+	gob.Register(cmdNewHiveID{})
+	gob.Register(cmdAddHive{})
 	gob.Register(cmdCreateBee{})
 	gob.Register(cmdReloadBee{})
 	gob.Register(cmdLiveHives{})
-	gob.Register(cmdCreateHiveID{})
 	gob.Register(bhgob.GobError{})
 
 	// FIXME REFACTOR
@@ -278,7 +279,7 @@ func (h *hive) stopQees() {
 }
 
 func (h *hive) handleCmd(cc cmdAndChannel) {
-	switch cc.cmd.Data.(type) {
+	switch d := cc.cmd.Data.(type) {
 	case cmdStop:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
 		h.status = hiveStopped
@@ -286,15 +287,37 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		h.stopQees()
 		h.node.Stop()
 		cc.ch <- cmdResult{}
+
 	case cmdPingHive:
 		cc.ch <- cmdResult{}
-	case cmdCreateHiveID:
-		d, err := h.node.Process(context.TODO(), NewHiveID{})
+
+	case cmdNewHiveID:
+		r, err := h.node.Process(context.TODO(), NewHiveID{d.Addr})
 		cc.ch <- cmdResult{
-			Data: d,
+			Data: r,
 			Err:  err,
 		}
+
+	case cmdAddHive:
+		err := h.node.AddNode(context.TODO(), d.Info.ID, d.Info)
+		cc.ch <- cmdResult{
+			Err: err,
+		}
+
+	case cmdLiveHives:
+		cc.ch <- cmdResult{
+			Data: h.registry.hives(),
+		}
+
+	default:
+		cc.ch <- cmdResult{
+			Err: ErrInvalidCmd,
+		}
 	}
+}
+
+func (h *hive) processRaft(ctx context.Context, msg raftpb.Message) error {
+	return h.node.Step(ctx, msg)
 }
 
 func (h *hive) registerApp(a *app) {
@@ -359,6 +382,7 @@ func (h *hive) startRaftNode() {
 	if _, err := h.node.Process(ctx, NoOp{}); err != nil {
 		glog.Fatalf("Error when joining the cluster: %v", err)
 	}
+	glog.V(2).Infof("%v is in sync with the cluster", h)
 }
 
 func (h *hive) reloadState() {
@@ -545,16 +569,12 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 				glog.Errorf("No addresses for %v", m.To)
 				return
 			}
-			d, err := m.Marshal()
-			if err != nil {
-				glog.Errorf("Error in marshaling a raft message: %v", err)
+			glog.V(2).Infof("Sending raft message %v", m)
+			if err = newProxyWithAddr(a).sendRaft(m); err != nil {
+				glog.Errorf("Error in sending a raft message: %v", err)
 				return
 			}
-			newProxyWithAddr(a).sendCmd(&cmd{Data: cmdProcessRaftMessage{Msg: d}})
+			glog.V(2).Infof("Raft message sucessfully sent to %v", m.To)
 		}(m)
 	}
-}
-
-func (h *hive) processRaft(ctx context.Context, msg raftpb.Message) error {
-	return h.node.Step(ctx, msg)
 }

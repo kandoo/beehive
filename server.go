@@ -3,19 +3,25 @@ package beehive
 import (
 	"encoding/gob"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 
+	"code.google.com/p/go.net/context"
+
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhgob "github.com/soheilhy/beehive/gob"
 )
 
 const (
-	serverV1MsgPath   = "/hive/v1/msg"
-	serverV1MsgFormat = "http://%s" + serverV1MsgPath
-	serverV1CmdPath   = "/hive/v1/cmd/"
-	serverV1CmdFormat = "http://%s" + serverV1CmdPath
+	serverV1MsgPath    = "/hive/v1/msg"
+	serverV1MsgFormat  = "http://%s" + serverV1MsgPath
+	serverV1CmdPath    = "/hive/v1/cmd/"
+	serverV1CmdFormat  = "http://%s" + serverV1CmdPath
+	serverV1RaftPath   = "/hive/v1/raft/"
+	serverV1RaftFormat = "http://%s" + serverV1RaftPath
 )
 
 // server is the HTTP server that act as the remote endpoint for Beehive.
@@ -40,6 +46,7 @@ type v1Handler struct {
 func (h *v1Handler) Install(r *mux.Router) {
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
 	r.HandleFunc(serverV1CmdPath, h.handleCmd)
+	r.HandleFunc(serverV1RaftPath, h.handleRaft)
 }
 
 func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
@@ -59,17 +66,27 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	glog.V(2).Infof("Server %v handles command %v", h.srv.hive.ID(), c)
-
-	a, ok := h.srv.hive.app(c.App)
-	if !ok {
-		http.Error(w, fmt.Sprintf("Cannot find app %s", c.App),
-			http.StatusBadRequest)
-		return
+	ch := make(chan cmdResult)
+	var ctrlCh chan cmdAndChannel
+	if c.App == "" {
+		glog.V(2).Infof("Server %v handles command to hive: %v", h.srv.hive.ID(), c)
+		ctrlCh = h.srv.hive.ctrlCh
+	} else {
+		a, ok := h.srv.hive.app(c.App)
+		glog.V(2).Infof("Server %v handles command to app %v: %v", h.srv.hive.ID(),
+			a, c)
+		if !ok {
+			http.Error(w, fmt.Sprintf("Cannot find app %s", c.App),
+				http.StatusBadRequest)
+			return
+		}
+		ctrlCh = a.qee.ctrlCh
 	}
 
-	ch := make(chan cmdResult)
-	a.qee.ctrlCh <- newCmdAndChannel(c.Data, c.App, c.To, ch)
+	ctrlCh <- cmdAndChannel{
+		cmd: c,
+		ch:  ch,
+	}
 	for {
 		select {
 		case res := <-ch:
@@ -86,5 +103,24 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(1 * time.Second):
 			glog.Fatalf("Server is blocked on %v", c)
 		}
+	}
+}
+
+func (h *v1Handler) handleRaft(w http.ResponseWriter, r *http.Request) {
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var msg raftpb.Message
+	if err = msg.Unmarshal(b); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = h.srv.hive.processRaft(context.TODO(), msg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }

@@ -60,7 +60,7 @@ func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	return nil
 }
 
-func TestHive(t *testing.T) {
+func runHiveTest(cfg HiveConfig, t *testing.T) {
 	runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(1)
 
@@ -70,7 +70,7 @@ func TestHive(t *testing.T) {
 		testHiveCh = nil
 	}()
 
-	hive := NewHive()
+	hive := NewHiveWithConfig(cfg)
 	app := hive.NewApp("TestHiveApp")
 	app.Handle(MyMsg(0), &testHiveHandler{})
 
@@ -87,4 +87,51 @@ func TestHive(t *testing.T) {
 	if err := hive.Stop(); err != nil {
 		t.Errorf("Cannot stop the hive %v", err)
 	}
+}
+
+func TestHiveStart(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest"
+	defer removeState(cfg)
+	runHiveTest(DefaultCfg, t)
+}
+
+func TestHiveRestart(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest"
+	defer removeState(cfg)
+	runHiveTest(DefaultCfg, t)
+	runHiveTest(DefaultCfg, t)
+}
+
+func TestCluster(t *testing.T) {
+	cfg1 := DefaultCfg
+	cfg1.StatePath = "/tmp/bhtest1"
+	cfg1.Addr = "127.0.0.1:7767"
+	defer removeState(cfg1)
+	h1 := NewHiveWithConfig(cfg1)
+	go h1.Start()
+	waitTilStareted(h1)
+
+	cfg2 := DefaultCfg
+	cfg2.StatePath = "/tmp/bhtest2"
+	cfg2.Addr = "127.0.0.1:7777"
+	cfg2.PeerAddrs = []string{"127.0.0.1:7767"}
+	defer removeState(cfg2)
+	h2 := NewHiveWithConfig(cfg2)
+	go h2.Start()
+
+	cfg3 := DefaultCfg
+	cfg3.StatePath = "/tmp/bhtest3"
+	cfg3.Addr = "127.0.0.1:7787"
+	defer removeState(cfg3)
+	h3 := NewHiveWithConfig(cfg3)
+	go h3.Start()
+
+	waitTilStareted(h2)
+	waitTilStareted(h3)
+
+	h3.Stop()
+	h2.Stop()
+	h1.Stop()
 }

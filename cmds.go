@@ -1,5 +1,7 @@
 package beehive
 
+import "github.com/soheilhy/beehive/raft"
+
 type cmdStop struct{}
 
 type cmdStart struct{}
@@ -8,10 +10,12 @@ type cmdPingHive struct{}
 
 type cmdLiveHives struct{}
 
-type cmdCreateHiveID struct{}
+type cmdNewHiveID struct {
+	Addr string
+}
 
-type cmdProcessRaftMessage struct {
-	Msg []byte
+type cmdAddHive struct {
+	Info raft.NodeInfo
 }
 
 type cmdFindBee struct {

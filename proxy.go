@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/connpool"
 )
@@ -27,16 +28,18 @@ type proxyBee struct {
 }
 
 type proxy struct {
-	to     string
-	msgURL string
-	cmdURL string
+	to      string
+	msgURL  string
+	cmdURL  string
+	raftURL string
 }
 
 func newProxyWithAddr(addr string) proxy {
 	p := proxy{
-		to:     addr,
-		msgURL: msgURL(addr),
-		cmdURL: cmdURL(addr),
+		to:      addr,
+		msgURL:  fmt.Sprintf(serverV1MsgFormat, addr),
+		cmdURL:  fmt.Sprintf(serverV1CmdFormat, addr),
+		raftURL: fmt.Sprintf(serverV1RaftFormat, addr),
 	}
 	return p
 }
@@ -48,14 +51,6 @@ func (h *hive) newProxy(to uint64) (proxy, error) {
 	}
 
 	return newProxyWithAddr(a), nil
-}
-
-func msgURL(addr string) string {
-	return fmt.Sprintf(serverV1MsgFormat, addr)
-}
-
-func cmdURL(addr string) string {
-	return fmt.Sprintf(serverV1CmdFormat, addr)
 }
 
 func (p proxy) sendMsg(m *msg) error {
@@ -112,6 +107,27 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 	if err := b.proxy.sendMsg(mh.msg); err != nil {
 		glog.Errorf("Cannot send message %v to %v: %v", mh.msg, b, err)
 	}
+}
+
+func (p proxy) sendRaft(m raftpb.Message) error {
+	d, err := m.Marshal()
+	if err != nil {
+		glog.Fatalf("Cannot marshal raft message")
+	}
+
+	glog.V(2).Infof("Proxy to %v sends raft %v", p.to, m)
+	r, err := client.Post(p.raftURL, "application/x-protobuf", bytes.NewBuffer(d))
+	if err != nil {
+		return err
+	}
+
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		var b bytes.Buffer
+		b.ReadFrom(r.Body)
+		return errors.New(string(b.Bytes()))
+	}
+	return nil
 }
 
 // TODO(soheil): Maybe start should return an error.
