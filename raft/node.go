@@ -71,6 +71,7 @@ type Node struct {
 func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 	store Store, snapCount uint64, ticker <-chan time.Time) *Node {
 
+	gob.Register(NodeInfo{})
 	gob.Register(RequestID{})
 	gob.Register(Request{})
 	gob.Register(Response{})
@@ -225,10 +226,13 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 	}
 }
 
-func (n *Node) applyNormal(e raftpb.Entry) {
+func (n *Node) applyEntry(e raftpb.Entry) {
+	glog.V(2).Infof("Node %v receives a raft entry %#v", n.id, e)
+
 	if len(e.Data) == 0 {
 		return
 	}
+
 	var req Request
 	if err := req.Decode(e.Data); err != nil {
 		glog.Fatalf("raftserver: cannot decode entry data %v", err)
@@ -260,6 +264,10 @@ func (n *Node) validConfChange(cc raftpb.ConfChange,
 		return fmt.Errorf("%v is removed", cc.NodeID)
 	}
 
+	if cc.NodeID == etcdraft.None {
+		return errors.New("NodeID is nil")
+	}
+
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
 		if containsNode(nodes, cc.NodeID) {
@@ -280,6 +288,8 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes, removedNodes []uint64) {
 	if err := cc.Unmarshal(e.Data); err != nil {
 		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
 	}
+
+	glog.V(2).Infof("Node %v receives a conf change %#v", n.id, cc)
 
 	if err := n.validConfChange(cc, nodes, removedNodes); err != nil {
 		glog.V(2).Infof("Received an invalid conf change for node %v: %v",
@@ -337,12 +347,14 @@ func (n *Node) Start() {
 			n.snap.SaveSnap(rd.Snapshot)
 			n.send(rd.Messages)
 
-			glog.V(2).Infof("Raft update on node %v", n.id)
+			if len(rd.CommittedEntries) > 0 {
+				glog.V(2).Infof("Raft update on node %v", n.id)
+			}
 
 			for _, e := range rd.CommittedEntries {
 				switch e.Type {
 				case raftpb.EntryNormal:
-					n.applyNormal(e)
+					n.applyEntry(e)
 
 				case raftpb.EntryConfChange:
 					var ln, rn []uint64
