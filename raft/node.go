@@ -170,10 +170,12 @@ func (n *Node) Process(ctx context.Context, req interface{}) (interface{},
 		return Response{}, err
 	}
 
+	glog.V(2).Infof("Node %v waits on raft request %v: %+v", n.id, r.ID, req)
 	ch := n.line.wait(r.ID)
 	n.node.Propose(ctx, b)
 	select {
 	case res := <-ch:
+		glog.V(2).Infof("Node %v wakes up for raft request %v", n.id, r.ID)
 		return res.Data, res.Err
 	case <-ctx.Done():
 		n.line.call(Response{ID: r.ID})

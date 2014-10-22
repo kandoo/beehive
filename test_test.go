@@ -7,5 +7,9 @@ func removeState(cfg HiveConfig) {
 }
 
 func waitTilStareted(h Hive) {
+	pingHive(h)
+}
+
+func pingHive(h Hive) {
 	h.(*hive).sendCmd(cmdPingHive{})
 }

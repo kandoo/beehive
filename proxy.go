@@ -85,6 +85,7 @@ func (p proxy) sendCmd(c *cmd) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	glog.V(2).Infof("Proxy to %v receives the result for command %v", p.to, c)
 
 	defer pRes.Body.Close()
 	if pRes.StatusCode != http.StatusOK {

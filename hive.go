@@ -279,6 +279,7 @@ func (h *hive) stopQees() {
 }
 
 func (h *hive) handleCmd(cc cmdAndChannel) {
+	glog.V(2).Infof("Hive %d handles cmd %+v", h.ID(), cc.cmd)
 	switch d := cc.cmd.Data.(type) {
 	case cmdStop:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.

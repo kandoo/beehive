@@ -172,6 +172,7 @@ func (r *registry) newHiveID(addr string) uint64 {
 	if addr != "" {
 		r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
 	}
+	glog.V(2).Infof("Registry allocate new hive ID %v", r.HiveID)
 	return r.HiveID
 }
 
