@@ -124,6 +124,7 @@ func TestCluster(t *testing.T) {
 	cfg3 := DefaultCfg
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = "127.0.0.1:7787"
+	cfg3.PeerAddrs = []string{"127.0.0.1:7767"}
 	defer removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	go h3.Start()

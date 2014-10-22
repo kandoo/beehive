@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"code.google.com/p/go.net/context"
-
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
