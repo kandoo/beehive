@@ -1,3 +1,19 @@
+/*
+   Copyright 2014 CoreOS, Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package raft
 
 import (
@@ -37,8 +53,10 @@ func (l *raftLog) String() string {
 	return fmt.Sprintf("offset=%d committed=%d applied=%d len(ents)=%d", l.offset, l.committed, l.applied, len(l.ents))
 }
 
-func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry) bool {
-	lastnewi := index + uint64(len(ents))
+// maybeAppend returns (0, false) if the entries cannot be appended. Otherwise,
+// it returns (last index of entries, true).
+func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry) (lastnewi uint64, ok bool) {
+	lastnewi = index + uint64(len(ents))
 	if l.matchTerm(index, logTerm) {
 		from := index + 1
 		ci := l.findConflict(from, ents)
@@ -54,9 +72,9 @@ func (l *raftLog) maybeAppend(index, logTerm, committed uint64, ents ...pb.Entry
 		if l.committed < tocommit {
 			l.committed = tocommit
 		}
-		return true
+		return lastnewi, true
 	}
-	return false
+	return 0, false
 }
 
 func (l *raftLog) append(after uint64, ents ...pb.Entry) uint64 {
@@ -159,13 +177,12 @@ func (l *raftLog) compact(i uint64) uint64 {
 	return uint64(len(l.ents))
 }
 
-func (l *raftLog) snap(d []byte, index, term uint64, nodes []uint64, removed []uint64) {
+func (l *raftLog) snap(d []byte, index, term uint64, nodes []uint64) {
 	l.snapshot = pb.Snapshot{
-		Data:         d,
-		Nodes:        nodes,
-		Index:        index,
-		Term:         term,
-		RemovedNodes: removed,
+		Data:  d,
+		Nodes: nodes,
+		Index: index,
+		Term:  term,
 	}
 }
 

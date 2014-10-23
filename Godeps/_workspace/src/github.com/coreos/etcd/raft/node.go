@@ -1,3 +1,19 @@
+/*
+   Copyright 2014 CoreOS, Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package raft
 
 import (
@@ -19,11 +35,9 @@ var (
 // SoftState provides state that is useful for logging and debugging.
 // The state is volatile and does not need to be persisted to the WAL.
 type SoftState struct {
-	Lead         uint64
-	RaftState    StateType
-	Nodes        []uint64
-	RemovedNodes []uint64
-	ShouldStop   bool
+	Lead      uint64
+	RaftState StateType
+	Nodes     []uint64
 }
 
 func (a *SoftState) equal(b *SoftState) bool {
@@ -130,17 +144,16 @@ func StartNode(id uint64, peers []Peer, election, heartbeat int) Node {
 	n := newNode()
 	r := newRaft(id, nil, election, heartbeat)
 
-	ents := make([]pb.Entry, len(peers))
-	for i, peer := range peers {
+	for _, peer := range peers {
 		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
-		data, err := cc.Marshal()
+		d, err := cc.Marshal()
 		if err != nil {
 			panic("unexpected marshal error")
 		}
-		ents[i] = pb.Entry{Type: pb.EntryConfChange, Term: 1, Index: uint64(i + 1), Data: data}
+		e := pb.Entry{Type: pb.EntryConfChange, Term: 1, Index: r.raftLog.lastIndex() + 1, Data: d}
+		r.raftLog.append(r.raftLog.lastIndex(), e)
 	}
-	r.raftLog.append(0, ents...)
-	r.raftLog.committed = uint64(len(ents))
+	r.raftLog.committed = r.raftLog.lastIndex()
 
 	go n.run(r)
 	return &n

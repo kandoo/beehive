@@ -1,3 +1,19 @@
+/*
+   Copyright 2014 CoreOS, Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package raft
 
 import (
@@ -156,7 +172,7 @@ func TestNode(t *testing.T) {
 	}
 	wants := []Ready{
 		{
-			SoftState: &SoftState{Lead: 1, Nodes: []uint64{1}, RemovedNodes: []uint64{}, RaftState: StateLeader},
+			SoftState: &SoftState{Lead: 1, Nodes: []uint64{1}, RaftState: StateLeader},
 			HardState: raftpb.HardState{Term: 1, Commit: 2},
 			Entries: []raftpb.Entry{
 				{},
@@ -174,7 +190,6 @@ func TestNode(t *testing.T) {
 			CommittedEntries: []raftpb.Entry{{Term: 1, Index: 3, Data: []byte("foo")}},
 		},
 	}
-
 	n := StartNode(1, []Peer{{ID: 1}}, 10, 1)
 	n.ApplyConfChange(cc)
 	n.Campaign(ctx)
@@ -232,11 +247,10 @@ func TestNodeCompact(t *testing.T) {
 	n.Propose(ctx, []byte("foo"))
 
 	w := raftpb.Snapshot{
-		Term:         1,
-		Index:        2, // one nop + one proposal
-		Data:         []byte("a snapshot"),
-		Nodes:        []uint64{1},
-		RemovedNodes: []uint64{},
+		Term:  1,
+		Index: 2, // one nop + one proposal
+		Data:  []byte("a snapshot"),
+		Nodes: []uint64{1},
 	}
 
 	pkg.ForceGosched()
@@ -279,9 +293,7 @@ func TestSoftStateEqual(t *testing.T) {
 		{&SoftState{}, true},
 		{&SoftState{Lead: 1}, false},
 		{&SoftState{RaftState: StateLeader}, false},
-		{&SoftState{ShouldStop: true}, false},
 		{&SoftState{Nodes: []uint64{1, 2}}, false},
-		{&SoftState{RemovedNodes: []uint64{1, 2}}, false},
 	}
 	for i, tt := range tests {
 		if g := tt.st.equal(&SoftState{}); g != tt.we {

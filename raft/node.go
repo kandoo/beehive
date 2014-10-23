@@ -259,13 +259,7 @@ func containsNode(nodes []uint64, node uint64) bool {
 	return false
 }
 
-func (n *Node) validConfChange(cc raftpb.ConfChange,
-	nodes, removedNodes []uint64) error {
-
-	if containsNode(removedNodes, cc.NodeID) {
-		return fmt.Errorf("%v is removed", cc.NodeID)
-	}
-
+func (n *Node) validConfChange(cc raftpb.ConfChange, nodes []uint64) error {
 	if cc.NodeID == etcdraft.None {
 		return errors.New("NodeID is nil")
 	}
@@ -285,7 +279,7 @@ func (n *Node) validConfChange(cc raftpb.ConfChange,
 	return nil
 }
 
-func (n *Node) applyConfChange(e raftpb.Entry, nodes, removedNodes []uint64) {
+func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 	var cc raftpb.ConfChange
 	if err := cc.Unmarshal(e.Data); err != nil {
 		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
@@ -293,7 +287,7 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes, removedNodes []uint64) {
 
 	glog.V(2).Infof("Node %v receives a conf change %#v", n.id, cc)
 
-	if err := n.validConfChange(cc, nodes, removedNodes); err != nil {
+	if err := n.validConfChange(cc, nodes); err != nil {
 		glog.V(2).Infof("Received an invalid conf change for node %v: %v",
 			cc.NodeID, err)
 		cc.NodeID = etcdraft.None
@@ -339,10 +333,6 @@ func (n *Node) Start() {
 		case rd := <-n.node.Ready():
 			if rd.SoftState != nil {
 				nodes = rd.SoftState.Nodes
-				if rd.SoftState.ShouldStop {
-					n.Stop()
-					return
-				}
 			}
 
 			n.wal.Save(rd.HardState, rd.Entries)
@@ -359,12 +349,7 @@ func (n *Node) Start() {
 					n.applyEntry(e)
 
 				case raftpb.EntryConfChange:
-					var ln, rn []uint64
-					if rd.SoftState != nil {
-						ln = rd.SoftState.Nodes
-						rn = rd.SoftState.RemovedNodes
-					}
-					n.applyConfChange(e, ln, rn)
+					n.applyConfChange(e, nodes)
 
 				default:
 					panic("unexpected entry type")

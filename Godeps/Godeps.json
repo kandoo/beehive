@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/soheilhy/beehive",
-	"GoVersion": "go1.2.1",
+	"GoVersion": "go1.3.3",
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/go.net/context",
@@ -13,28 +13,28 @@
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/crc",
-			"Comment": "v0.4.4-1193-gf12583c",
-			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+			"Comment": "v0.4.6-1235-g09e9618",
+			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/pbutil",
-			"Comment": "v0.4.4-1193-gf12583c",
-			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+			"Comment": "v0.4.6-1235-g09e9618",
+			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/raft",
-			"Comment": "v0.4.4-1193-gf12583c",
-			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+			"Comment": "v0.4.6-1235-g09e9618",
+			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/snap",
-			"Comment": "v0.4.4-1193-gf12583c",
-			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+			"Comment": "v0.4.6-1235-g09e9618",
+			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/wal",
-			"Comment": "v0.4.4-1193-gf12583c",
-			"Rev": "f12583c163f6f0ace5980a2129fd3a0c3f1d6bbf"
+			"Comment": "v0.4.6-1235-g09e9618",
+			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
 		},
 		{
 			"ImportPath": "github.com/golang/glog",
