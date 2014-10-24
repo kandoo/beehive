@@ -19,13 +19,15 @@ func testInMemTx(t *testing.T, abort bool) {
 	vals := [][]byte{[]byte("v1"), []byte("v2")}
 
 	for i := range keys {
-		d1.Put(keys[i], vals[i])
+		if err := d1.Put(keys[i], vals[i]); err != nil {
+			t.Error(err)
+		}
 		_, ok := state.State.(*InMem).Dicts[n1].Dict[keys[i]]
 		if ok {
 			t.Errorf("Key is inserted before commit: %s", keys[i])
 		}
 
-		v, err := d1.Get(keys[i])
+		v, err := state.Dict(n1).Get(keys[i])
 		if err != nil {
 			t.Errorf("Key cannot be read in the transaction: %s", keys[i])
 		}

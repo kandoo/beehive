@@ -14,6 +14,11 @@ const (
 	TxOpen          = iota
 )
 
+var (
+	ErrOpenTx error = errors.New("transaction is already open")
+	ErrNoTx   error = errors.New("no open transaction")
+)
+
 // Tx represents the side effects of an operation: messages emitted during the
 // transaction as well as state operations.
 type Tx struct {
@@ -55,13 +60,8 @@ func NewTransactional(s State) *Transactional {
 // Transactional wraps any state dictionary and makes it transactional.
 type Transactional struct {
 	State  State
-	stage  map[string]*stageDict
+	stage  map[string]*TxDict
 	status TxStatus
-}
-
-type stageDict struct {
-	dict Dict
-	ops  map[string]Op
 }
 
 func (t *Transactional) TxStatus() TxStatus {
@@ -70,7 +70,7 @@ func (t *Transactional) TxStatus() TxStatus {
 
 func (t *Transactional) BeginTx() error {
 	if t.status == TxOpen {
-		return errors.New("Transaction is already started")
+		return ErrOpenTx
 	}
 
 	t.maybeNewTransaction()
@@ -79,7 +79,7 @@ func (t *Transactional) BeginTx() error {
 }
 func (t *Transactional) maybeNewTransaction() {
 	if t.stage == nil {
-		t.stage = make(map[string]*stageDict)
+		t.stage = make(map[string]*TxDict)
 	}
 }
 
@@ -90,12 +90,12 @@ func (t *Transactional) Tx() []Op {
 
 	l := 0
 	for _, dict := range t.stage {
-		l += len(dict.ops)
+		l += len(dict.Ops)
 	}
 
 	ops := make([]Op, 0, l)
 	for _, dict := range t.stage {
-		for _, op := range dict.ops {
+		for _, op := range dict.Ops {
 			ops = append(ops, op)
 		}
 	}
@@ -107,10 +107,10 @@ func (t *Transactional) CommitTx() error {
 		return errors.New("No active transaction")
 	}
 
-	t.Commit()
-	if len(t.stage) != 0 {
-		t.stage = make(map[string]*stageDict)
+	for _, d := range t.stage {
+		d.CommitTx()
 	}
+	t.Reset()
 	return nil
 }
 
@@ -119,11 +119,15 @@ func (t *Transactional) AbortTx() error {
 		return errors.New("No active transaction")
 	}
 
-	t.Abort()
-	if len(t.stage) != 0 {
-		t.stage = make(map[string]*stageDict)
-	}
+	t.Reset()
 	return nil
+}
+
+func (t *Transactional) Reset() {
+	t.status = TxNone
+	if len(t.stage) != 0 {
+		t.stage = make(map[string]*TxDict)
+	}
 }
 
 func (t *Transactional) Save() ([]byte, error) {
@@ -143,50 +147,48 @@ func (t *Transactional) Dict(name string) Dict {
 		return t.State.Dict(name)
 	}
 
-	d := &stageDict{
-		dict: t.State.Dict(name),
-		ops:  make(map[string]Op),
+	d, ok := t.stage[name]
+	if ok {
+		return d
 	}
 
+	d = &TxDict{
+		Dict:   t.State.Dict(name),
+		Ops:    make(map[string]Op),
+		Status: TxNone,
+	}
+	d.BeginTx()
 	t.stage[name] = d
 	return d
 }
 
-func (t *Transactional) Commit() {
-	for _, d := range t.stage {
-		for _, o := range d.ops {
-			switch o.T {
-			case Put:
-				d.dict.Put(o.K, o.V)
-			case Del:
-				d.dict.Del(o.K)
-			}
-		}
+// TxDict implements the Dict interface, and wraps any dictionary and make it
+// transactional. All modifications will fail if there is no open tx.
+type TxDict struct {
+	Dict   Dict
+	Status TxStatus
+	Ops    map[string]Op
+}
+
+func (d *TxDict) Name() string {
+	return d.Dict.Name()
+}
+
+func (d *TxDict) Put(k string, v []byte) error {
+	if d.Status != TxOpen {
+		return ErrNoTx
 	}
-	t.status = TxNone
-}
-
-func (t *Transactional) Abort() {
-	t.status = TxNone
-	return
-}
-
-func (d *stageDict) Name() string {
-	return d.dict.Name()
-}
-
-func (d *stageDict) Put(k string, v []byte) error {
-	d.ops[k] = Op{
+	d.Ops[k] = Op{
 		T: Put,
-		D: d.dict.Name(),
+		D: d.Dict.Name(),
 		K: k,
 		V: v,
 	}
 	return nil
 }
 
-func (d *stageDict) Get(k string) ([]byte, error) {
-	op, ok := d.ops[k]
+func (d *TxDict) Get(k string) ([]byte, error) {
+	op, ok := d.Ops[k]
 	if ok {
 		switch op.T {
 		case Put:
@@ -196,21 +198,24 @@ func (d *stageDict) Get(k string) ([]byte, error) {
 		}
 	}
 
-	return d.dict.Get(k)
+	return d.Dict.Get(k)
 }
 
-func (d *stageDict) Del(k string) error {
-	d.ops[k] = Op{
+func (d *TxDict) Del(k string) error {
+	if d.Status != TxOpen {
+		return ErrNoTx
+	}
+	d.Ops[k] = Op{
 		T: Del,
-		D: d.dict.Name(),
+		D: d.Dict.Name(),
 		K: k,
 	}
 	return nil
 }
 
-func (d *stageDict) ForEach(f IterFn) {
-	d.dict.ForEach(func(k string, v []byte) {
-		op, ok := d.ops[k]
+func (d *TxDict) ForEach(f IterFn) {
+	d.Dict.ForEach(func(k string, v []byte) {
+		op, ok := d.Ops[k]
 		if ok {
 			switch op.T {
 			case Put:
@@ -225,10 +230,49 @@ func (d *stageDict) ForEach(f IterFn) {
 	})
 }
 
-func (d *stageDict) GetGob(k string, v interface{}) error {
+func (d *TxDict) GetGob(k string, v interface{}) error {
 	return GetGob(d, k, v)
 }
 
-func (d *stageDict) PutGob(k string, v interface{}) error {
+func (d *TxDict) PutGob(k string, v interface{}) error {
 	return PutGob(d, k, v)
+}
+
+func (d *TxDict) BeginTx() error {
+	if d.Status == TxOpen {
+		return ErrOpenTx
+	}
+	d.Status = TxOpen
+	return nil
+}
+
+func (d *TxDict) CommitTx() error {
+	if d.Status == TxNone {
+		return ErrNoTx
+	}
+	for _, o := range d.Ops {
+		switch o.T {
+		case Put:
+			d.Dict.Put(o.K, o.V)
+		case Del:
+			d.Dict.Del(o.K)
+		}
+	}
+	d.reset()
+	return nil
+}
+
+func (d *TxDict) AbortTx() error {
+	if d.Status == TxNone {
+		return ErrNoTx
+	}
+	d.reset()
+	return nil
+}
+
+func (d *TxDict) reset() {
+	d.Status = TxNone
+	if len(d.Ops) != 0 {
+		d.Ops = make(map[string]Op)
+	}
 }
