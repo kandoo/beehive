@@ -28,11 +28,11 @@ type cmdReloadBee struct {
 	ID uint64
 }
 
-// FIXME REFACTOR
-//type joinColonyCmd struct {
-//Colony BeeColony
-//}
+type cmdJoinColony struct {
+	Colony Colony
+}
 
+// FIXME REFACTOR
 type cmdStartDetached struct {
 	Handler DetachedHandler
 }

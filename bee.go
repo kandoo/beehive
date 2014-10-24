@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/soheilhy/beehive/raft"
 	"github.com/soheilhy/beehive/state"
 )
 
@@ -18,7 +20,7 @@ type bee interface {
 	start()
 
 	State() State
-	setState(s State)
+	setState(s state.State)
 
 	enqueMsg(mh msgAndHandler)
 	enqueCmd(cc cmdAndChannel)
@@ -38,9 +40,11 @@ type localBee struct {
 	dataCh chan msgAndHandler
 	ctrlCh chan cmdAndChannel
 
-	state State
-	cells map[CellKey]bool
-	tx    Tx
+	node         raft.Node
+	cells        map[CellKey]bool
+	txStatus     state.TxStatus
+	state        *state.Transactional
+	bufferedMsgs []Msg
 
 	local interface{}
 }
@@ -67,8 +71,45 @@ func (b *localBee) setColony(c Colony) {
 	b.beeColony = c
 }
 
-func (b *localBee) setState(s State) {
-	b.state = s
+func (b *localBee) addFollower(bid uint64, hid uint64) error {
+	oldc := b.colony()
+	newc := oldc
+	if !newc.AddFollower(bid) {
+		return ErrDuplicateBee
+	}
+	// TODO(soheil): It's important to have a proper order here. Or launch both in
+	// parallel and cancel them on error.
+	up := UpdateColony{
+		Old: oldc,
+		New: newc,
+	}
+	if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+		return err
+	}
+
+	p, err := b.hive.newProxy(hid)
+	if err != nil {
+		return err
+	}
+	cmd := cmd{
+		To:   bid,
+		App:  b.app.Name(),
+		Data: cmdJoinColony{Colony: newc},
+	}
+	if _, err = p.sendCmd(&cmd); err != nil {
+		return err
+	}
+
+	if err = b.node.AddNode(context.TODO(), bid, ""); err != nil {
+		return err
+	}
+	b.setColony(newc)
+
+	return nil
+}
+
+func (b *localBee) setState(s state.State) {
+	b.state = state.NewTransactional(s)
 }
 
 func (b *localBee) start() {
@@ -322,14 +363,18 @@ func (b *localBee) doEmit(msg *msg) {
 	b.hive.emitMsg(msg)
 }
 
+func (b *localBee) bufferMsg(msg *msg) {
+	b.bufferedMsgs = append(b.bufferedMsgs, msg)
+}
+
 func (b *localBee) bufferOrEmit(msg *msg) {
-	if !b.tx.IsOpen() {
+	if b.txStatus != state.TxOpen {
 		b.doEmit(msg)
 		return
 	}
 
 	glog.V(2).Infof("Buffers msg %+v in tx", msg)
-	b.tx.AddMsg(msg)
+	b.bufferMsg(msg)
 }
 
 func (b *localBee) SendToCellKey(msgData interface{}, to string, k CellKey) {
@@ -389,8 +434,8 @@ func (b *localBee) StartDetachedFunc(start StartFunc, stop StopFunc,
 }
 
 func (b *localBee) BeginTx() error {
-	if b.tx.IsOpen() {
-		return errors.New("Another tx is open.")
+	if b.txStatus != state.TxOpen {
+		return state.ErrOpenTx
 	}
 
 	if err := b.state.BeginTx(); err != nil {
@@ -398,45 +443,73 @@ func (b *localBee) BeginTx() error {
 		return err
 	}
 
-	b.tx.Status = state.TxOpen
-	glog.V(2).Infof("Bee %v begins transaction #%v", b, b.tx)
+	b.txStatus = state.TxOpen
+	glog.V(2).Infof("Bee %v begins a new transaction", b)
 	return nil
 }
 
 func (b *localBee) emitTxMsgs() {
-	if b.tx.Msgs == nil {
+	if len(b.bufferedMsgs) == 0 {
 		return
 	}
 
-	for _, m := range b.tx.Msgs {
+	for _, m := range b.bufferedMsgs {
 		b.doEmit(m.(*msg))
 	}
 }
 
 func (b *localBee) doCommitTx() error {
+	defer b.resetTx()
 	b.emitTxMsgs()
 	if err := b.state.CommitTx(); err != nil {
 		return err
 	}
 
-	b.tx.Reset()
 	return nil
 }
 
-func (b *localBee) CommitTx() error {
-	if !b.tx.IsOpen() {
-		return nil
+func (b *localBee) resetTx() {
+	b.txStatus = state.TxNone
+	b.state.Reset()
+	b.bufferedMsgs = nil
+}
+
+func (b *localBee) replicate() error {
+	ops := b.state.Tx()
+	if len(ops) == 0 {
+		return b.doCommitTx()
 	}
 
-	defer b.tx.Reset()
+	if n := len(b.colony().Followers) + 1; n < b.app.ReplicationFactor() {
+		glog.Warning("%v can replicate only on %v nodes", b, n)
+	}
+
+	_, err := b.node.Process(context.TODO(), commitTx(b.tx()))
+	return err
+}
+
+func (b *localBee) tx() Tx {
+	return Tx{
+		Tx:   state.Tx{Ops: b.state.Tx()},
+		Msgs: b.bufferedMsgs,
+	}
+}
+
+func (b *localBee) CommitTx() error {
+	if b.txStatus != state.TxOpen {
+		return state.ErrNoTx
+	}
+
+	defer b.resetTx()
 
 	// No need to update sequences.
-	if b.app.ReplicationFactor() < 2 {
+	if !b.app.Persistent() {
 		b.doCommitTx()
 		return nil
 	}
 
 	panic("FIXME we need to do this through raft")
+	return b.replicate()
 
 	//b.tx.Ops = b.txState().Tx()
 	//if b.tx.IsEmpty() {
@@ -494,15 +567,17 @@ func (b *localBee) CommitTx() error {
 }
 
 func (b *localBee) AbortTx() error {
-	if !b.tx.IsOpen() {
-		return nil
+	if b.txStatus != state.TxOpen {
+		return state.ErrNoTx
 	}
 
 	glog.V(2).Infof("Bee %v aborts tx", b)
-	b.tx.Reset()
+	defer b.resetTx()
 	return b.state.AbortTx()
 }
 
 func (bee *localBee) Snooze(d time.Duration) {
 	panic(d)
 }
+
+type commitTx Tx

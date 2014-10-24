@@ -522,7 +522,7 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 }
 
 func (q *qee) defaultLocalBee(id uint64) localBee {
-	return localBee{
+	b := localBee{
 		qee:       q,
 		beeID:     id,
 		beeColony: Colony{Leader: id},
@@ -530,8 +530,9 @@ func (q *qee) defaultLocalBee(id uint64) localBee {
 		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:      q.hive,
 		app:       q.app,
-		state:     q.app.newState(),
 	}
+	b.setState(q.app.newState())
+	return b
 }
 
 // FIXME REFACTOR

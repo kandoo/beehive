@@ -300,7 +300,7 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		}
 
 	case cmdAddHive:
-		err := h.node.AddNode(context.TODO(), d.Info.ID, d.Info)
+		err := h.node.AddNode(context.TODO(), d.Info.ID, d.Info.Addr)
 		cc.ch <- cmdResult{
 			Err: err,
 		}
@@ -379,8 +379,7 @@ func (h *hive) startRaftNode() {
 	h.node = raft.NewNode(h.id, peers, h.sendRaft, h.config.StatePath,
 		h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
-	ctx := context.TODO()
-	if _, err := h.node.Process(ctx, NoOp{}); err != nil {
+	if _, err := h.node.Process(context.TODO(), NoOp{}); err != nil {
 		glog.Fatalf("Error when joining the cluster: %v", err)
 	}
 	glog.V(2).Infof("%v is in sync with the cluster", h)

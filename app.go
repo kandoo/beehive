@@ -249,6 +249,6 @@ func (a *app) SetCommitThreshold(c int) error {
 	return nil
 }
 
-func (a *app) newState() State {
+func (a *app) newState() state.State {
 	return state.NewInMem()
 }
