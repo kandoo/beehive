@@ -185,29 +185,30 @@ func (n *Node) Process(ctx context.Context, req interface{}) (interface{},
 	}
 }
 
-func (n *Node) AddNode(ctx context.Context, id uint64, data interface{}) error {
+func (n *Node) AddNode(ctx context.Context, id uint64, addr string) error {
 	cc := raftpb.ConfChange{
 		ID:     0,
 		Type:   raftpb.ConfChangeAddNode,
 		NodeID: id,
 	}
-	return n.ProcessConfChange(ctx, cc, data)
+	return n.ProcessConfChange(ctx, cc, NodeInfo{ID: id, Addr: addr})
 }
 
-func (n *Node) RemoveNode(ctx context.Context, id uint64, data interface{}) error {
+func (n *Node) RemoveNode(ctx context.Context, id uint64, addr string) error {
 	cc := raftpb.ConfChange{
 		ID:     0,
 		Type:   raftpb.ConfChangeRemoveNode,
 		NodeID: id,
 	}
-	return n.ProcessConfChange(ctx, cc, data)
+	return n.ProcessConfChange(ctx, cc, NodeInfo{ID: id, Addr: addr})
 }
 
 func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
-	data interface{}) error {
+	info NodeInfo) error {
+
 	r := Request{
 		ID:   n.genID(),
-		Data: data,
+		Data: info,
 	}
 	var err error
 	cc.Context, err = r.Encode()
