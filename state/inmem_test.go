@@ -6,7 +6,7 @@ import (
 )
 
 func testInMemTx(t *testing.T, abort bool) {
-	state := NewInMem()
+	state := NewTransactional(NewInMem())
 
 	if err := state.BeginTx(); err != nil {
 		t.Errorf("Error in tx begin: %v", err)
@@ -20,7 +20,7 @@ func testInMemTx(t *testing.T, abort bool) {
 
 	for i := range keys {
 		d1.Put(keys[i], vals[i])
-		_, ok := state.Dicts[n1].Dict[keys[i]]
+		_, ok := state.State.(*InMem).Dicts[n1].Dict[keys[i]]
 		if ok {
 			t.Errorf("Key is inserted before commit: %s", keys[i])
 		}
@@ -46,7 +46,7 @@ func testInMemTx(t *testing.T, abort bool) {
 	}
 
 	for i := range keys {
-		v, err := state.Dicts[n1].Get(keys[i])
+		v, err := state.State.(*InMem).Dicts[n1].Get(keys[i])
 		if abort {
 			if err == nil {
 				t.Errorf("Key is inserted despite aborting the tx: %s", keys[i])
@@ -76,7 +76,7 @@ func TestAbort(t *testing.T) {
 }
 
 func TestTxStatus(t *testing.T) {
-	var state State = NewInMem()
+	state := NewTransactional(NewInMem())
 	if state.BeginTx(); state.TxStatus() != TxOpen {
 		t.Error("Tx status should be open")
 	}
@@ -95,7 +95,7 @@ func TestTxStatus(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
-	state := NewInMem()
+	state := NewTransactional(NewInMem())
 	state.BeginTx()
 	if _, err := state.Save(); err == nil {
 		t.Error("Should not save state when there is an open transaction")
@@ -108,7 +108,7 @@ func TestSave(t *testing.T) {
 }
 
 func TestSaveRestore(t *testing.T) {
-	src := NewInMem()
+	src := NewTransactional(NewInMem())
 	src.BeginTx()
 	d := "d"
 	k := "k"
