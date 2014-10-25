@@ -17,9 +17,9 @@ import (
 const (
 	serverV1MsgPath    = "/hive/v1/msg"
 	serverV1MsgFormat  = "http://%s" + serverV1MsgPath
-	serverV1CmdPath    = "/hive/v1/cmd/"
+	serverV1CmdPath    = "/hive/v1/cmd"
 	serverV1CmdFormat  = "http://%s" + serverV1CmdPath
-	serverV1RaftPath   = "/hive/v1/raft/"
+	serverV1RaftPath   = "/hive/v1/raft"
 	serverV1RaftFormat = "http://%s" + serverV1RaftPath
 )
 
@@ -68,14 +68,14 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan cmdResult)
 	var ctrlCh chan cmdAndChannel
 	if c.App == "" {
-		glog.V(2).Infof("Server %v handles command to hive: %v", h.srv.hive.ID(), c)
+		glog.V(2).Infof("server %v handles command to hive: %v", h.srv.hive.ID(), c)
 		ctrlCh = h.srv.hive.ctrlCh
 	} else {
 		a, ok := h.srv.hive.app(c.App)
-		glog.V(2).Infof("Server %v handles command to app %v: %v", h.srv.hive.ID(),
+		glog.V(2).Infof("server %v handles command to app %v: %v", h.srv.hive.ID(),
 			a, c)
 		if !ok {
-			http.Error(w, fmt.Sprintf("Cannot find app %s", c.App),
+			http.Error(w, fmt.Sprintf("cannot find app %s", c.App),
 				http.StatusBadRequest)
 			return
 		}
@@ -96,11 +96,14 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 
 			if err := gob.NewEncoder(w).Encode(res); err != nil {
 				glog.Errorf("Error in encoding the command results: %s", err)
+				return
 			}
 
+			glog.V(2).Infof("server %v returned result %#v for command %v",
+				h.srv.hive.ID(), res, c)
 			return
 		case <-time.After(1 * time.Second):
-			glog.Fatalf("Server is blocked on %v", c)
+			glog.Errorf("Server is blocked on %v", c)
 		}
 	}
 }

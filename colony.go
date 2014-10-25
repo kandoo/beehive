@@ -2,10 +2,18 @@ package beehive
 
 import "encoding/json"
 
+const (
+	Nil uint64 = 0
+)
+
 // Colony is the colony of bees that maintain a consistent state.
 type Colony struct {
 	Leader    uint64   `json:"leader"`
 	Followers []uint64 `json:"followers"`
+}
+
+func (c Colony) IsNil() bool {
+	return c.Leader == Nil && len(c.Followers) == 0
 }
 
 func (c Colony) IsLeader(id uint64) bool {

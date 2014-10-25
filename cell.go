@@ -27,22 +27,21 @@ func (mc MappedCells) LocalBroadcast() bool {
 	return len(mc) == 0
 }
 
-// CellStore is public for the sake of serialization.
-type CellStore struct {
+type cellStore struct {
 	// appname -> cellkey -> colony
 	CellBees map[string]map[CellKey]Colony
 	// beeid -> cellkey
 	BeeCells map[uint64]map[CellKey]struct{}
 }
 
-func newCellStore() CellStore {
-	return CellStore{
+func newCellStore() cellStore {
+	return cellStore{
 		CellBees: make(map[string]map[CellKey]Colony),
 		BeeCells: make(map[uint64]map[CellKey]struct{}),
 	}
 }
 
-func (s *CellStore) assign(app string, k CellKey, c Colony) {
+func (s *cellStore) assign(app string, k CellKey, c Colony) {
 	cells, ok := s.CellBees[app]
 	if !ok {
 		cells = make(map[CellKey]Colony)
@@ -58,7 +57,7 @@ func (s *CellStore) assign(app string, k CellKey, c Colony) {
 	m[k] = struct{}{}
 }
 
-func (s *CellStore) colony(app string, cell CellKey) (c Colony, ok bool) {
+func (s *cellStore) colony(app string, cell CellKey) (c Colony, ok bool) {
 	cells, ok := s.CellBees[app]
 	if !ok {
 		return Colony{}, ok
@@ -68,7 +67,7 @@ func (s *CellStore) colony(app string, cell CellKey) (c Colony, ok bool) {
 	return c, ok
 }
 
-func (s *CellStore) cells(bee uint64) MappedCells {
+func (s *cellStore) cells(bee uint64) MappedCells {
 	m, ok := s.BeeCells[bee]
 	if !ok {
 		return nil

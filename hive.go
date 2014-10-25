@@ -22,6 +22,10 @@ import (
 	"github.com/soheilhy/beehive/raft"
 )
 
+const (
+	defaultRaftTick = 30 * time.Millisecond
+)
+
 type Hive interface {
 	// ID of the hive. Valid only if the hive is started.
 	ID() uint64
@@ -85,7 +89,8 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		ctrlCh: make(chan cmdAndChannel),
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
-		ticker: time.NewTicker(10 * time.Millisecond),
+		ticker: time.NewTicker(defaultRaftTick),
+		client: newHttpClient(),
 	}
 
 	h.registry = newRegistry()
@@ -102,6 +107,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	gob.Register(cmdReloadBee{})
 	gob.Register(cmdLiveHives{})
 	gob.Register(bhgob.GobError{})
+	gob.Register(commitTx{})
 
 	// FIXME REFACTOR
 	//gob.Register(joinColonyCmd{})
@@ -199,6 +205,7 @@ type hive struct {
 	registry *registry
 	ticker   *time.Ticker
 	listener net.Listener
+	client   *http.Client
 
 	// FIXME REFACTOR
 	//collector statCollector
@@ -210,7 +217,7 @@ func (h *hive) ID() uint64 {
 }
 
 func (h *hive) String() string {
-	return fmt.Sprintf("Hive %v@%v", h.id, h.config.Addr)
+	return fmt.Sprintf("hive %v@%v", h.id, h.config.Addr)
 }
 
 func (h *hive) Config() HiveConfig {
@@ -279,7 +286,7 @@ func (h *hive) stopQees() {
 }
 
 func (h *hive) handleCmd(cc cmdAndChannel) {
-	glog.V(2).Infof("Hive %d handles cmd %+v", h.ID(), cc.cmd)
+	glog.V(2).Infof("%v handles cmd %+v", h, cc.cmd)
 	switch d := cc.cmd.Data.(type) {
 	case cmdStop:
 		// TODO(soheil): This has a race with Stop(). Use atomics here.
@@ -293,7 +300,7 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{}
 
 	case cmdNewHiveID:
-		r, err := h.node.Process(context.TODO(), NewHiveID{d.Addr})
+		r, err := h.node.Process(context.TODO(), newHiveID{d.Addr})
 		cc.ch <- cmdResult{
 			Data: r,
 			Err:  err,
@@ -366,10 +373,6 @@ func (h *hive) startQees() {
 	}
 }
 
-func (h *hive) startListener() {
-	h.listen()
-}
-
 func (h *hive) startRaftNode() {
 	peers := make([]etcdraft.Peer, 0, len(h.meta.Peers)+1)
 	for _, p := range h.meta.Peers {
@@ -379,7 +382,7 @@ func (h *hive) startRaftNode() {
 	h.node = raft.NewNode(h.id, peers, h.sendRaft, h.config.StatePath,
 		h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
-	if _, err := h.node.Process(context.TODO(), NoOp{}); err != nil {
+	if _, err := h.node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Fatalf("Error when joining the cluster: %v", err)
 	}
 	glog.V(2).Infof("%v is in sync with the cluster", h)
@@ -404,22 +407,21 @@ func (h *hive) Start() error {
 	h.status = hiveStarted
 	h.registerSignals()
 	h.startQees()
-	h.startListener()
+	if err := h.listen(); err != nil {
+		glog.Errorf("%v cannot start listener: %v", err)
+		h.Stop()
+		return err
+	}
 	h.startRaftNode()
 	h.reloadState()
 
+	glog.V(2).Infof("%v starts message loop %v %p", h, h.ctrlCh, h)
 	for h.status == hiveStarted {
 		select {
-		case msg, ok := <-h.dataCh:
-			if !ok {
-				return errors.New("Data channel is closed.")
-			}
+		case msg := <-h.dataCh:
 			h.handleMsg(msg)
-		case cmd, ok := <-h.ctrlCh:
-			if !ok {
-				return errors.New("Control channel is closed.")
-			}
 
+		case cmd := <-h.ctrlCh:
 			h.handleCmd(cmd)
 		}
 	}
@@ -526,16 +528,16 @@ func (s *hive) registerSignals() {
 func (h *hive) listen() error {
 	l, e := net.Listen("tcp", h.config.Addr)
 	if e != nil {
-		glog.Errorf("Hive cannot listen: %v", e)
+		glog.Errorf("%v cannot listen: %v", h, e)
 		return e
 	}
-	glog.Infof("Hive listens at %s", h.config.Addr)
+	glog.Infof("%v listens", h)
 	h.listener = l
 
 	s := h.newServer(h.config.Addr)
 	go func() {
 		s.Serve(l)
-		glog.Infof("Hive %v listener closed", h.ID())
+		glog.Infof("%v closed listener", h)
 	}()
 	return nil
 }
@@ -570,7 +572,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 				return
 			}
 			glog.V(2).Infof("Sending raft message %v", m)
-			if err = newProxyWithAddr(a).sendRaft(m); err != nil {
+			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
 				glog.Errorf("Error in sending a raft message: %v", err)
 				return
 			}

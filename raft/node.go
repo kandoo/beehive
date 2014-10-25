@@ -68,6 +68,10 @@ type Node struct {
 	done   chan struct{}
 }
 
+func (n *Node) String() string {
+	return fmt.Sprintf("node %v", n.id)
+}
+
 func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 	store Store, snapCount uint64, ticker <-chan time.Time) *Node {
 
@@ -170,12 +174,12 @@ func (n *Node) Process(ctx context.Context, req interface{}) (interface{},
 		return Response{}, err
 	}
 
-	glog.V(2).Infof("Node %v waits on raft request %v: %+v", n.id, r.ID, req)
+	glog.V(2).Infof("%v waits on raft request %v: %#v", n, r.ID, req)
 	ch := n.line.wait(r.ID)
 	n.node.Propose(ctx, b)
 	select {
 	case res := <-ch:
-		glog.V(2).Infof("Node %v wakes up for raft request %v", n.id, r.ID)
+		glog.V(2).Infof("%v wakes up for raft request %v", n, r.ID)
 		return res.Data, res.Err
 	case <-ctx.Done():
 		n.line.call(Response{ID: r.ID})

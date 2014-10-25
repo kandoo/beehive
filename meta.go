@@ -23,10 +23,10 @@ func peersInfo(addrs []string) []HiveInfo {
 	}
 
 	ch := make(chan []HiveInfo, len(addrs))
-
+	client := newHttpClient()
 	for _, a := range addrs {
 		go func(a string) {
-			p := newProxyWithAddr(a)
+			p := newProxyWithAddr(client, a)
 			if d, err := p.sendCmd(&cmd{Data: cmdLiveHives{}}); err == nil {
 				ch <- d.([]HiveInfo)
 			}
@@ -34,7 +34,9 @@ func peersInfo(addrs []string) []HiveInfo {
 	}
 
 	// Return the first one that returns.
-	return <-ch
+	hives := <-ch
+	glog.V(2).Infof("found live hives: %v", hives)
+	return hives
 }
 
 func hiveIDFromPeers(addr string, paddrs []string) uint64 {
@@ -43,10 +45,11 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	}
 
 	ch := make(chan uint64, len(paddrs))
+	client := newHttpClient()
 	for _, a := range paddrs {
 		glog.V(2).Infof("Requesting hive ID from %v", a)
 		go func(a string) {
-			p := newProxyWithAddr(a)
+			p := newProxyWithAddr(client, a)
 			id, err := p.sendCmd(&cmd{Data: cmdNewHiveID{Addr: addr}})
 			if err != nil {
 				glog.Error(err)

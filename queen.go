@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
@@ -72,7 +73,7 @@ func (q *qee) beeByID(id uint64) (b bee, ok bool) {
 }
 
 func (q *qee) allocateNewBeeID() (BeeInfo, error) {
-	res, err := q.hive.node.Process(context.TODO(), NewBeeID{})
+	res, err := q.hive.node.Process(context.TODO(), newBeeID{})
 	if err != nil {
 		return BeeInfo{}, err
 	}
@@ -81,14 +82,11 @@ func (q *qee) allocateNewBeeID() (BeeInfo, error) {
 		ID:   id,
 		Hive: q.hive.ID(),
 		App:  q.app.Name(),
-		Colony: Colony{
-			Leader: id,
-		},
 	}
 	return info, nil
 }
 
-func (q *qee) newLocalBee() (*localBee, error) {
+func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
 	info, err := q.allocateNewBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
@@ -99,10 +97,15 @@ func (q *qee) newLocalBee() (*localBee, error) {
 	}
 
 	b := q.defaultLocalBee(info.ID)
-	if _, err := q.hive.node.Process(context.TODO(), AddBee(info)); err != nil {
+	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
 
+	if withInitColony {
+		b.beeColony = Colony{
+			Leader: info.ID,
+		}
+	}
 	q.idToBees[info.ID] = &b
 	go b.start()
 	return &b, nil
@@ -143,6 +146,12 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 func (q *qee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
 	q.ctrlCh <- newCmdAndChannel(data, q.app.Name(), 0, ch)
+	return (<-ch).get()
+}
+
+func (q *qee) sendCmdToBee(bee uint64, data interface{}) (interface{}, error) {
+	ch := make(chan cmdResult)
+	q.ctrlCh <- newCmdAndChannel(data, q.app.Name(), bee, ch)
 	return (<-ch).get()
 }
 
@@ -209,7 +218,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		return
 
 	case cmdCreateBee:
-		b, err := q.newLocalBee()
+		b, err := q.newLocalBee(false)
 		if err != nil {
 			cc.ch <- cmdResult{Err: err}
 			glog.Error(err)
@@ -352,7 +361,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	bee, err := q.beeByCells(cells)
 	if err != nil {
-		lb, err := q.newLocalBee()
+		lb, err := q.newLocalBee(true)
 		if err != nil {
 			glog.Fatal(err)
 		}
@@ -370,9 +379,6 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 		if info.ID == lb.ID() {
 			lb.addMappedCells(cells)
-			if q.app.ReplicationFactor() > 1 {
-				panic("FIXME REFACTOR")
-			}
 			bee = lb
 		} else {
 			bee, err = q.beeByCells(cells)
@@ -541,6 +547,7 @@ func (q *qee) defaultLocalBee(id uint64) localBee {
 		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:      q.hive,
 		app:       q.app,
+		ticker:    time.NewTicker(defaultRaftTick),
 	}
 	b.setState(q.app.newState())
 	return b

@@ -12,14 +12,16 @@ import (
 	"github.com/soheilhy/beehive/connpool"
 )
 
-var client = &http.Client{
-	Transport: &http.Transport{
-		Dial: (&connpool.Dialer{
-			MaxConnPerAddr: 64,
-		}).Dial,
-		Proxy:               http.ProxyFromEnvironment,
-		MaxIdleConnsPerHost: 64,
-	},
+func newHttpClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Dial: (&connpool.Dialer{
+				MaxConnPerAddr: 64,
+			}).Dial,
+			Proxy:               http.ProxyFromEnvironment,
+			MaxIdleConnsPerHost: 64,
+		},
+	}
 }
 
 type proxyBee struct {
@@ -28,14 +30,16 @@ type proxyBee struct {
 }
 
 type proxy struct {
+	client  *http.Client
 	to      string
 	msgURL  string
 	cmdURL  string
 	raftURL string
 }
 
-func newProxyWithAddr(addr string) proxy {
+func newProxyWithAddr(client *http.Client, addr string) proxy {
 	p := proxy{
+		client:  client,
 		to:      addr,
 		msgURL:  fmt.Sprintf(serverV1MsgFormat, addr),
 		cmdURL:  fmt.Sprintf(serverV1CmdFormat, addr),
@@ -50,7 +54,7 @@ func (h *hive) newProxy(to uint64) (proxy, error) {
 		return proxy{}, err
 	}
 
-	return newProxyWithAddr(a), nil
+	return newProxyWithAddr(h.client, a), nil
 }
 
 func (p proxy) sendMsg(m *msg) error {
@@ -59,7 +63,7 @@ func (p proxy) sendMsg(m *msg) error {
 		return err
 	}
 
-	res, err := client.Post(p.msgURL, "application/x-gob", &data)
+	res, err := p.client.Post(p.msgURL, "application/x-gob", &data)
 	if err != nil {
 		return err
 	}
@@ -81,7 +85,7 @@ func (p proxy) sendCmd(c *cmd) (interface{}, error) {
 	}
 
 	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
-	pRes, err := client.Post(p.cmdURL, "application/x-gob", &data)
+	pRes, err := p.client.Post(p.cmdURL, "application/x-gob", &data)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +121,8 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 	}
 
 	glog.V(2).Infof("Proxy to %v sends raft %v", p.to, m)
-	r, err := client.Post(p.raftURL, "application/x-protobuf", bytes.NewBuffer(d))
+	r, err := p.client.Post(p.raftURL, "application/x-protobuf",
+		bytes.NewBuffer(d))
 	if err != nil {
 		return err
 	}
@@ -133,10 +138,10 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 
 // TODO(soheil): Maybe start should return an error.
 func (b *proxyBee) start() {
-	b.stopped = false
-	glog.V(2).Infof("Proxy started for %v", b)
+	b.status = beeStatusStarted
+	glog.V(2).Infof("%v started", b)
 
-	for !b.stopped {
+	for b.status == beeStatusStarted {
 		select {
 		case d, ok := <-b.dataCh:
 			if !ok {
@@ -151,4 +156,8 @@ func (b *proxyBee) start() {
 			b.handleCmd(c)
 		}
 	}
+}
+
+func (b *proxyBee) String() string {
+	return "proxy " + b.localBee.String()
 }

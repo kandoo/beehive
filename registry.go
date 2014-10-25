@@ -21,17 +21,17 @@ var (
 	ErrDuplicateBee       = errors.New("Duplicate bee")
 )
 
-// NoOp is a barrier: a registery request to make sure all the updates are
+// noOp is a barrier: a raft request to make sure all the updates are
 // applied to store.
-type NoOp struct{}
+type noOp struct{}
 
-// NewHiveID is the registry request to create a unique 64-bit hive ID.
-type NewHiveID struct {
+// newHiveID is the registry request to create a unique 64-bit hive ID.
+type newHiveID struct {
 	Addr string
 }
 
-// NewBeeID is the registry request to create a unique 64-bit bee ID.
-type NewBeeID struct{}
+// newBeeID is the registry request to create a unique 64-bit bee ID.
+type newBeeID struct{}
 
 // BeeInfo stores the metadata about a bee.
 type BeeInfo struct {
@@ -42,21 +42,21 @@ type BeeInfo struct {
 	Detached bool
 }
 
-// AddBee is the registery request to add a new bee.
-type AddBee BeeInfo
+// addBee is the registery request to add a new bee.
+type addBee BeeInfo
 
-// DelBee is the registery request to delete a bee.
-type DelBee uint64
+// delBee is the registery request to delete a bee.
+type delBee uint64
 
-// MoveBee is the registery request to move a bee from a hive to another hive.
-type MoveBee struct {
+// moveBee is the registery request to move a bee from a hive to another hive.
+type moveBee struct {
 	ID       uint64
 	FromHive uint64
 	ToHive   uint64
 }
 
 // Colony is a registery request to update a colony.
-type UpdateColony struct {
+type updateColony struct {
 	Old Colony
 	New Colony
 }
@@ -69,24 +69,24 @@ type LockMappedCell struct {
 }
 
 // TransferLocks transfers cells of a colony to another colony.
-type TransferCells struct {
+type transferCells struct {
 	From Colony
 	To   Colony
 }
 
 func init() {
-	gob.Register(NoOp{})
-	gob.Register(NewBeeID{})
-	gob.Register(NewHiveID{})
+	gob.Register(noOp{})
+	gob.Register(newBeeID{})
+	gob.Register(newHiveID{})
 	gob.Register(HiveInfo{})
 	gob.Register([]HiveInfo{})
 	gob.Register(BeeInfo{})
-	gob.Register(AddBee{})
-	gob.Register(DelBee(0))
-	gob.Register(UpdateColony{})
+	gob.Register(addBee{})
+	gob.Register(delBee(0))
+	gob.Register(updateColony{})
 	gob.Register(LockMappedCell{})
-	gob.Register(TransferCells{})
-	gob.Register(CellStore{})
+	gob.Register(transferCells{})
+	gob.Register(cellStore{})
 }
 
 type registry struct {
@@ -96,7 +96,7 @@ type registry struct {
 	BeeID  uint64
 	Hives  map[uint64]HiveInfo
 	Bees   map[uint64]BeeInfo
-	Store  CellStore
+	Store  cellStore
 }
 
 func newRegistry() *registry {
@@ -126,21 +126,21 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 	defer r.m.Unlock()
 
 	switch tr := req.(type) {
-	case NoOp:
+	case noOp:
 		return nil, nil
-	case NewHiveID:
+	case newHiveID:
 		return r.newHiveID(tr.Addr), nil
-	case NewBeeID:
+	case newBeeID:
 		return r.newBeeID(), nil
-	case AddBee:
+	case addBee:
 		return nil, r.addBee(BeeInfo(tr))
-	case DelBee:
+	case delBee:
 		return nil, r.delBee(uint64(tr))
-	case MoveBee:
+	case moveBee:
 		return nil, r.moveBee(tr)
 	case LockMappedCell:
 		return r.lock(tr)
-	case TransferCells:
+	case transferCells:
 		return nil, r.transfer(tr)
 	}
 
@@ -172,12 +172,13 @@ func (r *registry) newHiveID(addr string) uint64 {
 	if addr != "" {
 		r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
 	}
-	glog.V(2).Infof("Registry allocate new hive ID %v", r.HiveID)
+	glog.V(2).Infof("Registry allocates new hive ID %v", r.HiveID)
 	return r.HiveID
 }
 
 func (r *registry) newBeeID() uint64 {
 	r.BeeID++
+	glog.V(2).Infof("Registry allocates new bee ID %v", r.BeeID)
 	return r.BeeID
 }
 
@@ -202,7 +203,7 @@ func (r *registry) addBee(info BeeInfo) error {
 	if _, ok := r.Bees[info.ID]; ok {
 		return ErrDuplicateBee
 	}
-	if info.ID < r.HiveID {
+	if info.ID < r.BeeID {
 		glog.Fatalf("Invalid bee ID: %v < %v", info.ID, r.HiveID)
 	}
 	r.Bees[info.ID] = info
@@ -217,7 +218,7 @@ func (r *registry) delBee(id uint64) error {
 	return nil
 }
 
-func (r *registry) moveBee(m MoveBee) error {
+func (r *registry) moveBee(m moveBee) error {
 	b, ok := r.Bees[m.ID]
 	if !ok {
 		return ErrNoSuchBee
@@ -276,7 +277,7 @@ func (r *registry) lock(l LockMappedCell) (Colony, error) {
 	return l.Colony, nil
 }
 
-func (r *registry) transfer(t TransferCells) error {
+func (r *registry) transfer(t transferCells) error {
 	i, ok := r.Bees[t.From.Leader]
 	if !ok {
 		return ErrNoSuchBee

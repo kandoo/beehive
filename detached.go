@@ -8,27 +8,24 @@ type detachedBee struct {
 }
 
 func (b *detachedBee) start() {
-	b.stopped = false
-	glog.V(2).Infof("Detached %v started.", b)
-
+	b.status = beeStatusStarted
 	go b.h.Start(b)
 	defer b.h.Stop(b)
 
-	for !b.stopped {
+	glog.V(2).Infof("%v started", b)
+	for b.status == beeStatusStarted {
 		select {
-		case d, ok := <-b.dataCh:
-			if !ok {
-				return
-			}
+		case d := <-b.dataCh:
 			b.handleMsg(d)
 
-		case c, ok := <-b.ctrlCh:
-			if !ok {
-				return
-			}
+		case c := <-b.ctrlCh:
 			b.handleCmd(c)
 		}
 	}
+}
+
+func (b *detachedBee) String() string {
+	return "detached " + b.localBee.String()
 }
 
 func (b *detachedBee) handleMsg(mh msgAndHandler) {

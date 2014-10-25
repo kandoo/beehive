@@ -200,15 +200,15 @@ func (a *app) Flags() AppFlag {
 }
 
 func (a *app) Sticky() bool {
-	return a.flags&AppFlagSticky == AppFlagSticky
+	return a.flags&AppFlagSticky != 0
 }
 
 func (a *app) Persistent() bool {
-	return a.flags&AppFlagPersistent == AppFlagPersistent
+	return a.flags&AppFlagPersistent != 0
 }
 
 func (a *app) Transactional() bool {
-	return a.flags&AppFlagTransactional == AppFlagTransactional
+	return a.flags&AppFlagTransactional != 0
 }
 
 func (a *app) initQee() {
@@ -228,7 +228,7 @@ func (a *app) ReplicationFactor() int {
 }
 
 func (a *app) SetReplicationFactor(f int) {
-	a.SetFlags(AppFlagTransactional)
+	a.SetFlags(a.flags | AppFlagTransactional | AppFlagPersistent)
 	a.replFactor = f
 	if a.commitThresh == 0 {
 		a.commitThresh = f / 2
