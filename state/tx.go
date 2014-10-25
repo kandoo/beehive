@@ -48,6 +48,7 @@ func (t *Tx) Reset() {
 func (t *Tx) IsEmpty() bool {
 	return len(t.Ops) == 0
 }
+
 func (t Tx) String() string {
 	return fmt.Sprintf("Tx (ops: %d, open: %v)", len(t.Ops), t.Status == TxOpen)
 }
@@ -128,6 +129,21 @@ func (t *Transactional) Reset() {
 	if len(t.stage) != 0 {
 		t.stage = make(map[string]*TxDict)
 	}
+}
+
+func (t *Transactional) Apply(ops []Op) error {
+	if t.status == TxOpen {
+		return ErrOpenTx
+	}
+	for _, o := range ops {
+		switch o.T {
+		case Put:
+			t.Dict(o.D).Put(o.K, o.V)
+		case Del:
+			t.Dict(o.D).Del(o.K)
+		}
+	}
+	return nil
 }
 
 func (t *Transactional) Save() ([]byte, error) {
