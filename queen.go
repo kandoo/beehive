@@ -162,9 +162,20 @@ func (q *qee) stopBees() {
 
 func (q *qee) handleCmd(cc cmdAndChannel) {
 	if cc.cmd.To != 0 {
-		if bee, ok := q.idToBees[cc.cmd.To]; ok {
-			bee.enqueCmd(cc)
+		if b, ok := q.idToBees[cc.cmd.To]; ok {
+			b.enqueCmd(cc)
 			return
+		}
+
+		// If the bee is a proxy we should try to relay the message.
+		if info, err := q.hive.registry.bee(cc.cmd.To); err == nil &&
+			!q.isLocalBee(info) {
+
+			if b, err := q.newProxyBee(info); err == nil {
+				glog.Warningf("cannot create proxy to %#v", info)
+				b.enqueCmd(cc)
+				return
+			}
 		}
 
 		if cc.ch != nil {
