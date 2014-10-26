@@ -90,10 +90,9 @@ func (b *localBee) startNode() error {
 	if c.IsNil() {
 		return fmt.Errorf("%v is in no colony", b)
 	}
-	peers := make([]etcdraft.Peer, 0, len(c.Followers)+1)
-	peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
-	for _, f := range c.Followers {
-		peers = append(peers, raft.NodeInfo{ID: f}.Peer())
+	peers := make([]etcdraft.Peer, 0, 1)
+	if c.Leader == b.ID() {
+		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
 	b.node = raft.NewNode(b.beeID, peers, b.sendRaft, b.statePath(), b, 1024,
 		b.ticker.C)
@@ -554,6 +553,7 @@ func (b *localBee) replicate() error {
 	}
 
 	if n := len(b.colony().Followers) + 1; n < b.app.ReplicationFactor() {
+		// TODO(soheil): Maybe add more followers if we have a new live hive.
 		glog.Warningf("%v can replicate only on %v node(s)", b, n)
 	}
 
