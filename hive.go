@@ -244,7 +244,7 @@ func (h *hive) hiveAddr(id uint64) (string, error) {
 }
 
 func (h *hive) stopListener() {
-	glog.Infof("%v is stopping listener...", h)
+	glog.Infof("%v closes listener...", h)
 	if h.listener != nil {
 		h.listener.Close()
 	}
@@ -592,7 +592,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 				h.registry.m.RLock()
 				glog.Fatalf("cannot send message to itself %#v", h.registry.Hives)
 			}
-			glog.V(2).Infof("%v sending raft message %v to %v", h, m, a)
+			glog.V(2).Infof("%v sends raft message %v to %v", h, m, a)
 			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
 				glog.Errorf("Error in sending a raft message: %v", err)
 				return

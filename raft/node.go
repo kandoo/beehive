@@ -332,7 +332,7 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 }
 
 func (n *Node) Start() {
-	glog.V(2).Infof("Raft node %v started", n.id)
+	glog.V(2).Infof("raft node %v started", n.id)
 	var snapi, appliedi uint64
 	var nodes []uint64
 	for {
