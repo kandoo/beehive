@@ -52,6 +52,7 @@ func (i NodeInfo) MustEncode() []byte {
 }
 
 type Node struct {
+	name string
 	id   uint64
 	node etcdraft.Node
 	line line
@@ -69,18 +70,20 @@ type Node struct {
 }
 
 func (n *Node) String() string {
-	return fmt.Sprintf("node %v", n.id)
+	return fmt.Sprintf("node %v (%v)", n.id, n.name)
 }
 
-func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
-	store Store, snapCount uint64, ticker <-chan time.Time) *Node {
+func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
+	datadir string, store Store, snapCount uint64,
+	ticker <-chan time.Time) *Node {
 
 	gob.Register(NodeInfo{})
 	gob.Register(RequestID{})
 	gob.Register(Request{})
 	gob.Register(Response{})
 
-	glog.V(2).Infof("creating a new raft node %v with peers %v", id, peers)
+	glog.V(2).Infof("creating a new raft node %v (%v) with peers %v", id, name,
+		peers)
 
 	snapdir := path.Join(datadir, "snap")
 	if err := os.MkdirAll(snapdir, 0700); err != nil {
@@ -98,7 +101,7 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 			glog.Fatal("raft: node id cannot be 0")
 		}
 
-		glog.V(2).Infof("no WAL found for %v. starting new node", id)
+		glog.V(2).Infof("no WAL found for %v (%v). starting new node", id, name)
 		var err error
 		w, err = wal.Create(waldir, []byte(strconv.FormatUint(id, 10)))
 		if err != nil {
@@ -113,7 +116,7 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 		}
 
 		if snapshot != nil {
-			glog.Infof("Restarting from snapshot at index %d", snapshot.Index)
+			glog.Infof("restarting from snapshot at index %d", snapshot.Index)
 			store.Restore(snapshot.Data)
 			index = snapshot.Index
 		}
@@ -132,7 +135,7 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 		}
 
 		if walid != id {
-			glog.Fatal("ID in write-ahead-log is %v and different than %v", walid, id)
+			glog.Fatal("id in write-ahead-log is %v and different than %v", walid, id)
 		}
 
 		n = etcdraft.RestartNode(id, 10, 1, snapshot, st, ents)
@@ -140,6 +143,7 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 	}
 
 	node := &Node{
+		name:      name,
 		id:        id,
 		node:      n,
 		gen:       gen.NewSeqIDGen(lastIndex + 2*snapCount), // To avoid collisions.
@@ -237,7 +241,7 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 }
 
 func (n *Node) applyEntry(e raftpb.Entry) {
-	glog.V(2).Infof("node %v applies normal entry %v: %#v", n.id, e.Index, e)
+	glog.V(2).Infof("%v applies normal entry %v: %#v", n, e.Index, e)
 
 	if len(e.Data) == 0 {
 		glog.V(2).Infof("raft entry %v has no data", e.Index)

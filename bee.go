@@ -95,8 +95,8 @@ func (b *localBee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
-	b.node = raft.NewNode(b.beeID, peers, b.sendRaft, b.statePath(), b, 1024,
-		b.ticker.C)
+	b.node = raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b.statePath(),
+		b, 1024, b.ticker.C)
 	// This will act like a barrier.
 	if _, err := b.node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Errorf("%v cannot start raft: %v", b, err)

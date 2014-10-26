@@ -13,12 +13,12 @@ import (
 )
 
 var (
-	ErrUnsupportedRequest = errors.New("Unsupported request")
-	ErrInvalidParam       = errors.New("Invalid parameter")
-	ErrNoSuchHive         = errors.New("No such hive")
-	ErrDuplicateHive      = errors.New("Dupblicate hive")
-	ErrNoSuchBee          = errors.New("No such bee")
-	ErrDuplicateBee       = errors.New("Duplicate bee")
+	ErrUnsupportedRequest = errors.New("unsupported request")
+	ErrInvalidParam       = errors.New("invalid parameter")
+	ErrNoSuchHive         = errors.New("no such hive")
+	ErrDuplicateHive      = errors.New("dupblicate hive")
+	ErrNoSuchBee          = errors.New("no such bee")
+	ErrDuplicateBee       = errors.New("duplicate bee")
 )
 
 // noOp is a barrier: a raft request to make sure all the updates are
@@ -90,7 +90,8 @@ func init() {
 }
 
 type registry struct {
-	m sync.RWMutex
+	m    sync.RWMutex
+	name string
 
 	HiveID uint64
 	BeeID  uint64
@@ -99,8 +100,9 @@ type registry struct {
 	Store  cellStore
 }
 
-func newRegistry() *registry {
+func newRegistry(name string) *registry {
 	return &registry{
+		name:   name,
 		HiveID: 1, // We need to start from one to preserve the first hive's ID.
 		BeeID:  0,
 		Hives:  make(map[uint64]HiveInfo),
@@ -148,26 +150,31 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 		return nil, r.transfer(tr)
 	}
 
+	glog.Error("%v cannot handle %v", r, req)
 	return nil, ErrUnsupportedRequest
+}
+
+func (r *registry) String() string {
+	return fmt.Sprintf("registry for %v", r.name)
 }
 
 func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
 	n raft.NodeInfo) error {
 
-	glog.V(2).Infof("registry applying conf change %#v for %v", cc, n)
+	glog.V(2).Infof("%v applies conf change %#v for %v", r, cc, n)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
 		if n.ID != cc.NodeID {
-			glog.Fatalf("Invalid data in the config change: %v != %v", n, cc.NodeID)
+			glog.Fatalf("invalid data in the config change: %v != %v", n, cc.NodeID)
 		}
 		if n.Addr != "" {
 			r.addHive(HiveInfo(n))
 		}
-		glog.V(2).Infof("Hive added %v@%v", n.ID, n.Addr)
+		glog.V(2).Infof("%v adds hive %v@%v", r, n.ID, n.Addr)
 
 	case raftpb.ConfChangeRemoveNode:
 		r.delHive(cc.NodeID)
-		glog.V(2).Infof("Hive %v deleted", cc.NodeID)
+		glog.V(2).Infof("%v deletes hive %v", r, cc.NodeID)
 	}
 	return nil
 }
@@ -177,19 +184,19 @@ func (r *registry) newHiveID(addr string) uint64 {
 	if addr != "" {
 		r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
 	}
-	glog.V(2).Infof("Registry allocates new hive ID %v", r.HiveID)
+	glog.V(2).Infof("%v allocates new hive ID %v", r, r.HiveID)
 	return r.HiveID
 }
 
 func (r *registry) newBeeID() uint64 {
 	r.BeeID++
-	glog.V(2).Infof("Registry allocates new bee ID %v", r.BeeID)
+	glog.V(2).Infof("%v allocates new bee ID %v", r, r.BeeID)
 	return r.BeeID
 }
 
 func (r *registry) delHive(id uint64) error {
 	if _, ok := r.Hives[id]; !ok {
-		return fmt.Errorf("No such hive %v", id)
+		return fmt.Errorf("no such hive %v", id)
 	}
 	delete(r.Hives, id)
 	return nil
@@ -208,11 +215,11 @@ func (r *registry) initHives(hives map[uint64]HiveInfo) error {
 }
 
 func (r *registry) addHive(info HiveInfo) error {
-	glog.V(2).Infof("hive %v's address is set to %v", info.ID, info.Addr)
+	glog.V(2).Infof("%v sets hive %v's address to %v", r, info.ID, info.Addr)
 	for _, h := range r.Hives {
 		if h.Addr == info.Addr && h.ID != info.ID {
-			glog.Fatalf("duplicate address %v for hives %v and %v", info.Addr,
-				info.ID, h.ID)
+			glog.Fatalf("%v has duplicate address %v for hives %v and %v", r,
+				info.Addr, info.ID, h.ID)
 		}
 	}
 	r.Hives[info.ID] = info
@@ -224,7 +231,7 @@ func (r *registry) addBee(info BeeInfo) error {
 		return ErrDuplicateBee
 	}
 	if info.ID < r.BeeID {
-		glog.Fatalf("Invalid bee ID: %v < %v", info.ID, r.HiveID)
+		glog.Fatalf("%v has invalid bee ID: %v < %v", r, info.ID, r.HiveID)
 	}
 	r.Bees[info.ID] = info
 	return nil
@@ -262,7 +269,7 @@ func (r *registry) updateColony(up updateColony) error {
 		return ErrInvalidParam
 	}
 
-	glog.V(2).Infof("registry updates %v with %v", up.Old, up.New)
+	glog.V(2).Infof("%v updates %v with %v", r, up.Old, up.New)
 	b := r.mustFindBee(up.New.Leader)
 	if err := r.Store.updateColony(b.App, up.New, up.Old); err != nil {
 		return err

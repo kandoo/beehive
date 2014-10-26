@@ -89,7 +89,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		client: newHttpClient(),
 	}
 
-	h.registry = newRegistry()
+	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
 
 	gob.Register(Colony{})
@@ -395,8 +395,8 @@ func (h *hive) startRaftNode() {
 	} else {
 		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
-	h.node = raft.NewNode(h.id, peers, h.sendRaft, h.config.StatePath,
-		h.registry, 1024, h.ticker.C)
+	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft,
+		h.config.StatePath, h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
 	if err := h.raftBarrier(); err != nil {
 		glog.Fatalf("error when joining the cluster: %v", err)
