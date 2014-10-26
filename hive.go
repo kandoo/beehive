@@ -407,7 +407,7 @@ func (h *hive) startRaftNode() {
 func (h *hive) reloadState() {
 	for _, b := range h.registry.beesOfHive(h.id) {
 		if b.Detached {
-			glog.Warningf("%v will not reload detached bee %v", h, b.ID)
+			glog.V(1).Infof("%v will not reload detached bee %v", h, b.ID)
 			continue
 		}
 		a, ok := h.app(b.App)

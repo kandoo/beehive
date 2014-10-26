@@ -167,17 +167,20 @@ func TestHiveFailure(t *testing.T) {
 	waitTilStareted(h3)
 
 	h1.Stop()
+	time.Sleep(30 * defaultRaftTick)
 
 	for {
 		if _, err := h2.(*hive).processCmd(cmdSync{}); err == nil {
 			break
 		}
+		t.Logf("cannot sync %v, retrying", h2)
 		time.Sleep(10 * defaultRaftTick)
 	}
 	for {
 		if _, err := h3.(*hive).processCmd(cmdSync{}); err == nil {
 			break
 		}
+		t.Logf("cannot sync %v, retrying", h3)
 		time.Sleep(10 * defaultRaftTick)
 	}
 
