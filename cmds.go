@@ -1,9 +1,6 @@
 package beehive
 
-import (
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/raft"
-)
+import "github.com/soheilhy/beehive/raft"
 
 type cmdStop struct{}
 
@@ -37,23 +34,11 @@ type cmdJoinColony struct {
 	Colony Colony
 }
 
-type cmdProcessRaft struct {
-	raftpb.Message
-}
-
-func (cmd *cmdProcessRaft) GobEncode() ([]byte, error) {
-	return cmd.Message.Marshal()
-}
-
-func (cmd *cmdProcessRaft) GobDecode(b []byte) error {
-	return cmd.Message.Unmarshal(b)
-}
-
-// FIXME REFACTOR
 type cmdStartDetached struct {
 	Handler DetachedHandler
 }
 
+// FIXME REFACTOR
 //type bufferTxCmd struct {
 //Tx Tx
 //}

@@ -114,15 +114,13 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 	}
 }
 
-func (p proxy) sendRaft(m raftpb.Message) error {
+func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 	d, err := m.Marshal()
 	if err != nil {
 		glog.Fatalf("cannot marshal raft message")
 	}
 
-	glog.V(2).Infof("proxy to %v sends raft %v", p.to, m)
-	r, err := p.client.Post(p.raftURL, "application/x-protobuf",
-		bytes.NewBuffer(d))
+	r, err := p.client.Post(url, "application/x-protobuf", bytes.NewBuffer(d))
 	if err != nil {
 		return err
 	}
@@ -134,6 +132,17 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 		return errors.New(string(b.Bytes()))
 	}
 	return nil
+}
+
+func (p proxy) sendRaft(m raftpb.Message) error {
+	glog.V(2).Infof("proxy to %v sends raft message %v", p.to, m)
+	return p.doSendRaft(p.raftURL, m)
+}
+
+func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
+	glog.V(2).Infof("proxy to %v sends bee raft message %v", p.to, m)
+	url := fmt.Sprintf(serverV1BeeRaftFormat, p.to, app, b)
+	return p.doSendRaft(url, m)
 }
 
 // TODO(soheil): Maybe start should return an error.

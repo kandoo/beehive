@@ -352,6 +352,20 @@ func (r *registry) bee(id uint64) (BeeInfo, error) {
 	return i, nil
 }
 
+func (r *registry) beeAndHive(id uint64) (BeeInfo, HiveInfo, error) {
+	r.m.RLock()
+	defer r.m.RUnlock()
+	bi, ok := r.Bees[id]
+	if !ok {
+		return bi, HiveInfo{}, ErrNoSuchBee
+	}
+	hi, ok := r.Hives[bi.Hive]
+	if !ok {
+		return bi, hi, ErrNoSuchHive
+	}
+	return bi, hi, nil
+}
+
 func (r *registry) beeForCells(app string, cells MappedCells) (info BeeInfo,
 	hasAll bool, err error) {
 

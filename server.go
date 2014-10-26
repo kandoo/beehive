@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
@@ -15,12 +16,14 @@ import (
 )
 
 const (
-	serverV1MsgPath    = "/hive/v1/msg"
-	serverV1MsgFormat  = "http://%s" + serverV1MsgPath
-	serverV1CmdPath    = "/hive/v1/cmd"
-	serverV1CmdFormat  = "http://%s" + serverV1CmdPath
-	serverV1RaftPath   = "/hive/v1/raft"
-	serverV1RaftFormat = "http://%s" + serverV1RaftPath
+	serverV1MsgPath       = "/hive/v1/msg"
+	serverV1MsgFormat     = "http://%s" + serverV1MsgPath
+	serverV1CmdPath       = "/hive/v1/cmd"
+	serverV1CmdFormat     = "http://%s" + serverV1CmdPath
+	serverV1RaftPath      = "/hive/v1/raft"
+	serverV1RaftFormat    = "http://%s" + serverV1RaftPath
+	serverV1BeeRaftPath   = serverV1RaftPath + "/{app}/{id}"
+	serverV1BeeRaftFormat = "http://%s" + serverV1BeeRaftPath + "%s/%v"
 )
 
 // server is the HTTP server that act as the remote endpoint for Beehive.
@@ -46,6 +49,7 @@ func (h *v1Handler) Install(r *mux.Router) {
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
 	r.HandleFunc(serverV1CmdPath, h.handleCmd)
 	r.HandleFunc(serverV1RaftPath, h.handleRaft)
+	r.HandleFunc(serverV1RaftPath, h.handleBeeRaft)
 }
 
 func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +126,53 @@ func (h *v1Handler) handleRaft(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = h.srv.hive.processRaft(context.TODO(), msg); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	a, ok := h.srv.hive.app(vars["app"])
+	if !ok {
+		http.Error(w, fmt.Sprintf("cannot find app %s", a), http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.ParseUint(vars["id"], 10, 64)
+	if err != nil {
+		glog.Errorf("cannot parse id %v: %v", vars["id"], err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	b, ok := a.qee.beeByID(id)
+	if !ok {
+		glog.Errorf("%v cannot find bee %v", h.srv.hive, id)
+		http.Error(w, fmt.Sprintf("cannot find bee %v", id), http.StatusBadRequest)
+		return
+	}
+
+	lb, ok := b.(*localBee)
+	if !ok {
+		glog.Errorf("%v is not local to %v", b, h.srv.hive)
+		http.Error(w, fmt.Sprintf("not local bee %v", id), http.StatusBadRequest)
+		return
+	}
+
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	var msg raftpb.Message
+	if err = msg.Unmarshal(buf); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err = lb.processRaft(msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

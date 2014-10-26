@@ -15,7 +15,7 @@ import (
 // An applictaion's queen bee is the light weight thread that routes messags
 // through the bees of that application.
 type qee struct {
-	mutex sync.Mutex
+	sync.RWMutex
 
 	hive *hive
 	app  *app
@@ -26,8 +26,7 @@ type qee struct {
 
 	state State
 
-	idToBees   map[uint64]bee
-	cellToBees map[CellKey]bee
+	bees map[uint64]bee
 }
 
 func (q *qee) start() {
@@ -68,8 +67,19 @@ func (q *qee) App() string {
 }
 
 func (q *qee) beeByID(id uint64) (b bee, ok bool) {
-	b, ok = q.idToBees[id]
+	q.RLock()
+	defer q.RUnlock()
+
+	b, ok = q.bees[id]
 	return b, ok
+}
+
+func (q *qee) addBee(b bee) {
+	q.Lock()
+	defer q.Unlock()
+
+	// TODO(soheil): should we validate the map first?
+	q.bees[b.ID()] = b
 }
 
 func (q *qee) allocateNewBeeID() (BeeInfo, error) {
@@ -106,7 +116,7 @@ func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
 			Leader: info.ID,
 		}
 	}
-	q.idToBees[info.ID] = &b
+	q.addBee(&b)
 	go b.start()
 	return &b, nil
 }
@@ -125,9 +135,7 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 		localBee: q.defaultLocalBee(info.ID, false),
 		proxy:    p,
 	}
-	// FIXME REFACTOR
-	//startHeartbeatBee(id, q.hive)
-	q.idToBees[info.ID] = b
+	q.addBee(b)
 	go b.start()
 	return b, nil
 }
@@ -146,7 +154,7 @@ func (q *qee) newDetachedBee(h DetachedHandler) (*detachedBee, error) {
 	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
-	q.idToBees[d.ID()] = d
+	q.addBee(d)
 	go d.start()
 	return d, nil
 }
@@ -175,9 +183,11 @@ func (q *qee) sendCmdToBee(bee uint64, data interface{}) (interface{}, error) {
 }
 
 func (q *qee) stopBees() {
+	q.RLock()
+	defer q.RUnlock()
 	stopCh := make(chan cmdResult)
 	stopCmd := newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
-	for id, b := range q.idToBees {
+	for id, b := range q.bees {
 		glog.V(2).Infof("Stopping bee: %v", id)
 		b.enqueCmd(stopCmd)
 
@@ -190,7 +200,7 @@ func (q *qee) stopBees() {
 
 func (q *qee) handleCmd(cc cmdAndChannel) {
 	if cc.cmd.To != 0 {
-		if b, ok := q.idToBees[cc.cmd.To]; ok {
+		if b, ok := q.beeByID(cc.cmd.To); ok {
 			b.enqueCmd(cc)
 			return
 		}
@@ -226,7 +236,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 
 	case cmdFindBee:
 		id := cmd.ID
-		r, ok := q.idToBees[id]
+		r, ok := q.beeByID(id)
 		if ok {
 			cc.ch <- cmdResult{Data: r}
 			return
@@ -303,7 +313,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 
 func (q *qee) reloadBee(id uint64) (bee, error) {
 	b := q.defaultLocalBee(id, false)
-	q.idToBees[id] = &b
+	q.addBee(&b)
 	go b.start()
 	return &b, nil
 }
@@ -363,15 +373,16 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	}
 
 	if cells.LocalBroadcast() {
+		q.RLock()
+		defer q.RUnlock()
 		glog.V(2).Infof("%v sends a message to all local bees: %v", q, mh.msg)
-		for id, bee := range q.idToBees {
+		for id, bee := range q.bees {
 			if _, ok := bee.(*localBee); !ok {
 				continue
 			}
-			if bee.colony().Leader == id {
+			if bee.colony().Leader != id {
 				continue
 			}
-
 			bee.enqueMsg(mh)
 		}
 		return

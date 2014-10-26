@@ -597,10 +597,10 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 			}
 			glog.V(2).Infof("%v sends raft message %v to %v", h, m, a)
 			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
-				glog.Errorf("Error in sending a raft message: %v", err)
+				glog.Errorf("error in sending a raft message: %v", err)
 				return
 			}
-			glog.V(2).Infof("Raft message sucessfully sent to %v", m.To)
+			glog.V(2).Infof("raft message sucessfully sent to %v", m.To)
 		}(m)
 	}
 }

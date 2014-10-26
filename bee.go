@@ -107,12 +107,21 @@ func (b *localBee) startNode() error {
 }
 
 func (b *localBee) sendRaft(msgs []raftpb.Message) {
+	var bi BeeInfo
+	var hi HiveInfo
+	var err error
 	for _, m := range msgs {
 		// TODO(soheil): Maybe launch goroutines in parallel.
-		cmd := cmdProcessRaft{Message: m}
-		if _, err := b.qee.sendCmdToBee(m.To, cmd); err != nil {
+		if bi, hi, err = b.hive.registry.beeAndHive(m.To); err != nil {
+			glog.Errorf("cannot find bee for raft message to %v: %v", m.To, err)
+			continue
+		}
+		if err = newProxyWithAddr(b.hive.client, hi.Addr).sendBeeRaft(bi.App, m.To,
+			m); err != nil {
+
 			glog.Errorf("cannot send raft message to %v: %v", m.To, err)
 		}
+		glog.V(2).Infof("%v successfully sent raft message %v to %v", m.Index, m.To)
 	}
 }
 
@@ -256,9 +265,6 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{}
 		glog.V(2).Infof("%v started", b)
 
-	case cmdProcessRaft:
-		b.node.Step(context.TODO(), cmd.Message)
-
 	// FIXME REFACTOR
 	//case addMappedCells:
 	//b.addMappedCells(cmd.Cells)
@@ -353,6 +359,10 @@ func (b *localBee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
 	b.ctrlCh <- newCmdAndChannel(data, b.app.Name(), b.ID(), ch)
 	return (<-ch).get()
+}
+
+func (b *localBee) processRaft(msg raftpb.Message) error {
+	return b.node.Step(context.TODO(), msg)
 }
 
 func (b *localBee) mappedCells() MappedCells {
