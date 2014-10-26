@@ -190,11 +190,26 @@ func (r *registry) delHive(id uint64) error {
 	return nil
 }
 
-func (r *registry) addHive(info HiveInfo) error {
-	if r.HiveID < info.ID {
-		//glog.Fatalf("Hive ID %v is after allocated hive id", r.HiveID, info.ID)
+func (r *registry) initHives(hives map[uint64]HiveInfo) error {
+	r.m.Lock()
+	defer r.m.Unlock()
+
+	for _, h := range hives {
+		if err := r.addHive(h); err != nil {
+			return err
+		}
 	}
-	glog.V(2).Infof("Hive %v's address is set to %v", info.ID, info.Addr)
+	return nil
+}
+
+func (r *registry) addHive(info HiveInfo) error {
+	glog.V(2).Infof("hive %v's address is set to %v", info.ID, info.Addr)
+	for _, h := range r.Hives {
+		if h.Addr == info.Addr && h.ID != info.ID {
+			glog.Fatalf("duplicate address %v for hives %v and %v", info.Addr,
+				info.ID, h.ID)
+		}
+	}
 	r.Hives[info.ID] = info
 	return nil
 }
@@ -295,7 +310,7 @@ func (r *registry) transfer(t transferCells) error {
 func (r *registry) hives() []HiveInfo {
 	r.m.RLock()
 	defer r.m.RUnlock()
-	hives := make([]HiveInfo, len(r.Hives))
+	hives := make([]HiveInfo, 0, len(r.Hives))
 	for _, h := range r.Hives {
 		hives = append(hives, h)
 	}

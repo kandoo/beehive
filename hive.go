@@ -390,16 +390,17 @@ func (h *hive) startQees() {
 }
 
 func (h *hive) startRaftNode() {
-	peers := make([]etcdraft.Peer, 0, len(h.meta.Peers)+1)
-	for _, p := range h.meta.Peers {
-		peers = append(peers, raft.NodeInfo(p).Peer())
+	peers := make([]etcdraft.Peer, 0, 1)
+	if len(h.meta.Peers) != 0 {
+		h.registry.initHives(h.meta.Peers)
+	} else {
+		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
-	peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	h.node = raft.NewNode(h.id, peers, h.sendRaft, h.config.StatePath,
 		h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
-	if _, err := h.node.Process(context.TODO(), noOp{}); err != nil {
-		glog.Fatalf("Error when joining the cluster: %v", err)
+	if err := h.raftBarrier(); err != nil {
+		glog.Fatalf("error when joining the cluster: %v", err)
 	}
 	glog.V(2).Infof("%v is in sync with the cluster", h)
 }

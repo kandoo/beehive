@@ -14,12 +14,12 @@ type HiveInfo raft.NodeInfo
 
 type hiveMeta struct {
 	Hive  HiveInfo
-	Peers []HiveInfo
+	Peers map[uint64]HiveInfo
 }
 
-func peersInfo(addrs []string) []HiveInfo {
+func peersInfo(addrs []string) map[uint64]HiveInfo {
 	if len(addrs) == 0 {
-		return []HiveInfo{}
+		return nil
 	}
 
 	ch := make(chan []HiveInfo, len(addrs))
@@ -36,7 +36,11 @@ func peersInfo(addrs []string) []HiveInfo {
 	// Return the first one that returns.
 	hives := <-ch
 	glog.V(2).Infof("found live hives: %v", hives)
-	return hives
+	infos := make(map[uint64]HiveInfo)
+	for _, h := range hives {
+		infos[h.ID] = h
+	}
+	return infos
 }
 
 func hiveIDFromPeers(addr string, paddrs []string) uint64 {
