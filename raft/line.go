@@ -33,3 +33,10 @@ func (l *line) call(r Response) {
 		ch <- r
 	}
 }
+
+func (l *line) cancel(id RequestID) {
+	l.Lock()
+	defer l.Unlock()
+
+	delete(l.list, id)
+}
