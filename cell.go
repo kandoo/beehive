@@ -78,3 +78,16 @@ func (s *cellStore) cells(bee uint64) MappedCells {
 	}
 	return c
 }
+
+func (s *cellStore) updateColony(app string, oldc Colony, newc Colony) error {
+	bcells := s.BeeCells[oldc.Leader]
+	if oldc.Leader != newc.Leader {
+		s.BeeCells[newc.Leader] = bcells
+		delete(s.BeeCells, oldc.Leader)
+	}
+	acells := s.CellBees[app]
+	for c := range bcells {
+		acells[c] = newc
+	}
+	return nil
+}

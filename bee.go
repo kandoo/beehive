@@ -86,7 +86,7 @@ func (b *localBee) setColony(c Colony) {
 }
 
 func (b *localBee) startNode() error {
-	// restart if needed.
+	// TODO(soheil): restart if needed.
 	c := b.colony()
 	if c.IsNil() {
 		return fmt.Errorf("%v is in no colony", b)
@@ -112,16 +112,26 @@ func (b *localBee) sendRaft(msgs []raftpb.Message) {
 	var err error
 	for _, m := range msgs {
 		// TODO(soheil): Maybe launch goroutines in parallel.
+		if m.To == b.ID() {
+			glog.Fatalf("%v sends raft message to itself", b)
+		}
 		if bi, hi, err = b.hive.registry.beeAndHive(m.To); err != nil {
 			glog.Errorf("cannot find bee for raft message to %v: %v", m.To, err)
 			continue
 		}
+		if bi.ID != m.To {
+			glog.Fatalf("%v receives invalid info for %v: %#v", b, m.To, bi)
+		}
+		glog.V(2).Infof("%v tries to send bee raft message to %v@%v", b, bi.ID,
+			hi.Addr)
 		if err = newProxyWithAddr(b.hive.client, hi.Addr).sendBeeRaft(bi.App, m.To,
 			m); err != nil {
 
-			glog.Errorf("cannot send raft message to %v: %v", m.To, err)
+			glog.Errorf("cannot send bee raft message to %v: %v", m.To, err)
+			continue
 		}
-		glog.V(2).Infof("%v successfully sent raft message %v to %v", m.Index, m.To)
+		glog.V(2).Infof("%v successfully sent bee raft message %v to %v", b,
+			m.Index, m.To)
 	}
 }
 
@@ -146,6 +156,11 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 		New: newc,
 	}
 	if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+		glog.Errorf("%v cannot update its colony: %v", b, err)
+		return err
+	}
+
+	if err := b.node.AddNode(context.TODO(), bid, ""); err != nil {
 		return err
 	}
 
@@ -162,11 +177,7 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 		return err
 	}
 
-	if err = b.node.AddNode(context.TODO(), bid, ""); err != nil {
-		return err
-	}
 	b.setColony(newc)
-
 	return nil
 }
 
@@ -176,33 +187,19 @@ func (b *localBee) setState(s state.State) {
 
 func (b *localBee) start() {
 	if !b.colony().IsNil() && b.app.Persistent() {
-		b.status = beeStatusJoining
-		go func() {
-			if err := b.startNode(); err != nil {
-				glog.Errorf("%v cannot start raft: %v", err)
-				b.processCmd(cmdStop{})
-				return
-			}
-			b.processCmd(cmdStart{})
-		}()
-	} else {
-		b.status = beeStatusStarted
+		if err := b.startNode(); err != nil {
+			glog.Errorf("%v cannot start raft: %v", err)
+			return
+		}
 	}
+	b.status = beeStatusStarted
+	for b.status == beeStatusStarted {
+		select {
+		case d := <-b.dataCh:
+			b.handleMsg(d)
 
-	for b.status != beeStatusStopped {
-		if b.status == beeStatusJoining {
-			select {
-			case c := <-b.ctrlCh:
-				b.handleCmd(c)
-			}
-		} else {
-			select {
-			case d := <-b.dataCh:
-				b.handleMsg(d)
-
-			case c := <-b.ctrlCh:
-				b.handleCmd(c)
-			}
+		case c := <-b.ctrlCh:
+			b.handleCmd(c)
 		}
 	}
 }
@@ -236,7 +233,7 @@ func (b *localBee) callRcv(mh msgAndHandler) {
 }
 
 func (b *localBee) handleMsg(mh msgAndHandler) {
-	glog.V(2).Infof("%v handles a message: %v", b, mh.msg)
+	glog.V(2).Infof("%v handles message %v", b, mh.msg)
 
 	if b.app.Transactional() {
 		b.BeginTx()
@@ -265,15 +262,29 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{}
 		glog.V(2).Infof("%v started", b)
 
+	case cmdSync:
+		_, err := b.node.Process(context.TODO(), noOp{})
+		cc.ch <- cmdResult{Err: err}
+
+	case cmdJoinColony:
+		if !cmd.Colony.Contains(b.ID()) {
+			cc.ch <- cmdResult{
+				Err: fmt.Errorf("%v is not in this colony %v", b, cmd.Colony),
+			}
+		}
+		if !b.colony().IsNil() {
+			cc.ch <- cmdResult{
+				Err: fmt.Errorf("%v is already in colony %v", b, b.colony()),
+			}
+		}
+		b.setColony(cmd.Colony)
+		b.startNode()
+		cc.ch <- cmdResult{}
+
 	// FIXME REFACTOR
 	//case addMappedCells:
 	//b.addMappedCells(cmd.Cells)
 	//lcmd.ch <- cmdResult{}
-
-	//case joinColonyCmd:
-	//if cmd.Colony.Contains(b.beeID) {
-	//b.setColony(cmd.Colony)
-	//cc.ch <- cmdResult{}
 
 	//switch {
 	//case b.colony().IsSlave(b.beeID):
@@ -564,8 +575,10 @@ func (b *localBee) replicate() error {
 	}
 
 	if n := len(b.colony().Followers) + 1; n < b.app.ReplicationFactor() {
-		// TODO(soheil): Maybe add more followers if we have a new live hive.
-		glog.Warningf("%v can replicate only on %v node(s)", b, n)
+		newf := b.recruiteFollowers()
+		if newf+n < b.app.ReplicationFactor() {
+			glog.Warningf("%v can replicate only on %v node(s)", b, n)
+		}
 	}
 
 	_, err := b.node.Process(context.TODO(), commitTx(tx))
@@ -575,6 +588,60 @@ func (b *localBee) replicate() error {
 		glog.V(2).Infof("%v cannot replicate the transaction: %v", b, err)
 	}
 	return err
+}
+
+func (b *localBee) recruiteFollowers() (recruited int) {
+	c := b.colony()
+	r := b.app.ReplicationFactor() - len(c.Followers)
+	if r == 1 {
+		return 0
+	}
+
+	blacklist := []uint64{b.hive.ID()}
+	for _, f := range b.colony().Followers {
+		fb, err := b.hive.registry.bee(f)
+		if err != nil {
+			glog.Fatalf("%v cannot find the hive of follower %v", b, fb)
+		}
+		blacklist = append(blacklist, fb.Hive)
+	}
+	for r != 1 {
+		// TODO(soheil): We can try to select multiple hives at once.
+		hives := b.hive.replStrategy.selectHives(blacklist, 1)
+		if len(hives) == 0 {
+			glog.Warningf("can only find %v hives to create followers for %v",
+				len(b.colony().Followers), b)
+			break
+		}
+
+		prx, err := b.hive.newProxy(hives[0])
+		if err != nil {
+			blacklist = append(blacklist, hives[0])
+			continue
+		}
+		glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
+			hives[0])
+		res, err := prx.sendCmd(&cmd{
+			App:  b.app.Name(),
+			Data: cmdCreateBee{},
+		})
+		if err != nil {
+			glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
+			blacklist = append(blacklist, hives[0])
+			continue
+		}
+		fid := res.(uint64)
+		if err = b.addFollower(fid, hives[0]); err != nil {
+			glog.Errorf("%v cannot add %v as a follower: %v", b, fid, err)
+			blacklist = append(blacklist, hives[0])
+			continue
+		}
+		recruited++
+		r--
+	}
+
+	glog.V(2).Infof("%v recruited %d followers", b, recruited)
+	return recruited
 }
 
 func (b *localBee) tx() Tx {

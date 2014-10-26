@@ -187,13 +187,13 @@ func (q *qee) stopBees() {
 	defer q.RUnlock()
 	stopCh := make(chan cmdResult)
 	stopCmd := newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
-	for id, b := range q.bees {
-		glog.V(2).Infof("Stopping bee: %v", id)
+	for _, b := range q.bees {
+		glog.V(2).Infof("%v is stopping %v", q, b)
 		b.enqueCmd(stopCmd)
 
 		_, err := (<-stopCh).get()
 		if err != nil {
-			glog.Errorf("Error in stopping a bee: %v", err)
+			glog.Errorf("%v cannot stop %v: %v", q, b, err)
 		}
 	}
 }
@@ -229,7 +229,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		q.stopped = true
-		glog.V(3).Infof("Stopping bees of %p", q)
+		glog.V(3).Infof("stopping bees of %p", q)
 		q.stopBees()
 		cc.ch <- cmdResult{}
 		return
@@ -254,7 +254,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 			return
 		}
 		cc.ch <- cmdResult{Data: b.ID()}
-		glog.V(2).Infof("Created a new local bee %v", b)
+		glog.V(2).Infof("created a new local bee %v", b)
 		return
 
 	case cmdReloadBee:
@@ -343,15 +343,15 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		if !ok {
 			info, err := q.hive.registry.bee(mh.msg.To())
 			if err != nil {
-				glog.Errorf("Cannot find bee %v", mh.msg.To())
+				glog.Errorf("cannot find bee %v", mh.msg.To())
 			}
 
 			if q.isLocalBee(info) {
-				glog.Fatalf("Cannot find a local bee %v", mh.msg.To())
+				glog.Fatalf("cannot find a local bee %v", mh.msg.To())
 			}
 
 			if bee, ok = q.beeByID(info.ID); !ok {
-				glog.Errorf("Cannnot find the remote bee %v", mh.msg.To())
+				glog.Errorf("cannnot find the remote bee %v", mh.msg.To())
 				return
 			}
 		}
@@ -403,7 +403,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		}
 
 		if info, err = q.lock(info, cells); err != nil {
-			glog.Fatalf("Error in locking the cells: %v", err)
+			glog.Fatalf("error in locking the cells: %v", err)
 		}
 
 		if info.ID == lb.ID() {
@@ -412,11 +412,11 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		} else {
 			bee, err = q.beeByCells(cells)
 			if err != nil {
-				glog.Fatalf("Neither can lock a cell nor can find its bee")
+				glog.Fatalf("neither can lock a cell nor can find its bee")
 			}
 		}
 	}
-	glog.V(2).Infof("Message sent to bee %v: %v", bee, mh.msg)
+	glog.V(2).Infof("message sent to bee %v: %v", bee, mh.msg)
 	bee.enqueMsg(mh)
 }
 
@@ -438,7 +438,7 @@ func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
 	info, err := q.hive.registry.bee(col.Leader)
 	if err != nil {
 		// TODO(soheil): Should we be graceful here?
-		glog.Fatalf("Cannot find bee %v: %v", col.Leader, err)
+		glog.Fatalf("cannot find bee %v: %v", col.Leader, err)
 	}
 	return info, nil
 }
@@ -569,15 +569,14 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 
 func (q *qee) defaultLocalBee(id uint64, detached bool) localBee {
 	b := localBee{
-		qee:       q,
-		beeID:     id,
-		beeColony: Colony{Leader: id},
-		detached:  detached,
-		dataCh:    make(chan msgAndHandler, cap(q.dataCh)),
-		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
-		hive:      q.hive,
-		app:       q.app,
-		ticker:    time.NewTicker(defaultRaftTick),
+		qee:      q,
+		beeID:    id,
+		detached: detached,
+		dataCh:   make(chan msgAndHandler, cap(q.dataCh)),
+		ctrlCh:   make(chan cmdAndChannel, cap(q.ctrlCh)),
+		hive:     q.hive,
+		app:      q.app,
+		ticker:   time.NewTicker(defaultRaftTick),
 	}
 	b.setState(q.app.newState())
 	return b

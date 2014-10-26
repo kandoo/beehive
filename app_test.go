@@ -36,26 +36,30 @@ func TestPersistentApp(t *testing.T) {
 	h.Stop()
 }
 
-func TestReplicatedApp(t *testing.T) {
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = "127.0.0.1:7767"
-	defer removeState(cfg1)
-	h1 := NewHiveWithConfig(cfg1)
-	app := h1.NewApp("persistent")
+func registerPersistentApp(h Hive, ch chan struct{}) {
+	app := h.NewApp("persistent")
 	app.SetFlags(AppFlagTransactional | AppFlagPersistent)
 	app.SetReplicationFactor(3)
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return ctx.LocalMappedCells()
 	}
-	ch := make(chan struct{})
 	rf := func(msg Msg, ctx RcvContext) error {
 		ctx.Dict("Test").Put("K", []byte{})
 		ch <- struct{}{}
 		return nil
 	}
 	app.HandleFunc(AppTestMsg(0), mf, rf)
+}
 
+func TestReplicatedApp(t *testing.T) {
+	ch := make(chan struct{})
+
+	cfg1 := DefaultCfg
+	cfg1.StatePath = "/tmp/bhtest1"
+	cfg1.Addr = "127.0.0.1:7767"
+	defer removeState(cfg1)
+	h1 := NewHiveWithConfig(cfg1)
+	registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
@@ -65,6 +69,7 @@ func TestReplicatedApp(t *testing.T) {
 	cfg2.PeerAddrs = []string{"127.0.0.1:7767"}
 	defer removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
+	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
@@ -74,6 +79,7 @@ func TestReplicatedApp(t *testing.T) {
 	cfg3.PeerAddrs = []string{"127.0.0.1:7767"}
 	defer removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
+	registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
 

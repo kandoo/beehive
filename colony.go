@@ -1,6 +1,9 @@
 package beehive
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 const (
 	Nil uint64 = 0
@@ -10,6 +13,10 @@ const (
 type Colony struct {
 	Leader    uint64   `json:"leader"`
 	Followers []uint64 `json:"followers"`
+}
+
+func (c Colony) String() string {
+	return fmt.Sprintf("colony(leader=%v, followers=%+v)", c.Leader, c.Followers)
 }
 
 func (c Colony) IsNil() bool {

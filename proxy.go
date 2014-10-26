@@ -140,8 +140,8 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 }
 
 func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
-	glog.V(2).Infof("proxy to %v sends bee raft message %v", p.to, m)
 	url := fmt.Sprintf(serverV1BeeRaftFormat, p.to, app, b)
+	glog.V(2).Infof("proxy to %v sends bee raft message %v", url, m)
 	return p.doSendRaft(url, m)
 }
 

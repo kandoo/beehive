@@ -23,7 +23,7 @@ const (
 	serverV1RaftPath      = "/hive/v1/raft"
 	serverV1RaftFormat    = "http://%s" + serverV1RaftPath
 	serverV1BeeRaftPath   = serverV1RaftPath + "/{app}/{id}"
-	serverV1BeeRaftFormat = "http://%s" + serverV1BeeRaftPath + "%s/%v"
+	serverV1BeeRaftFormat = "http://%s" + serverV1RaftPath + "/%s/%v"
 )
 
 // server is the HTTP server that act as the remote endpoint for Beehive.
@@ -48,8 +48,8 @@ type v1Handler struct {
 func (h *v1Handler) Install(r *mux.Router) {
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
 	r.HandleFunc(serverV1CmdPath, h.handleCmd)
+	r.HandleFunc(serverV1BeeRaftPath, h.handleBeeRaft)
 	r.HandleFunc(serverV1RaftPath, h.handleRaft)
-	r.HandleFunc(serverV1RaftPath, h.handleBeeRaft)
 }
 
 func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {

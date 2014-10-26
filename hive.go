@@ -55,10 +55,6 @@ type Hive interface {
 	// only on messages that have no active handler. Such messages are almost
 	// always replies to some detached handler.
 	RegisterMsg(msg interface{})
-
-	// ReplicationStrategy returns the registered replication strategy for this
-	// hive.
-	//ReplicationStrategy() ReplicationStrategy
 }
 
 // Configuration of a hive.
@@ -94,18 +90,22 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	}
 
 	h.registry = newRegistry()
+	h.replStrategy = newRndReplication(h)
+
 	gob.Register(Colony{})
 	gob.Register(msg{})
 	gob.Register(cmd{})
 	gob.Register(cmdResult{})
 	gob.Register(cmdStop{})
 	gob.Register(cmdStart{})
+	gob.Register(cmdSync{})
 	gob.Register(cmdFindBee{})
 	gob.Register(cmdNewHiveID{})
 	gob.Register(cmdAddHive{})
 	gob.Register(cmdCreateBee{})
 	gob.Register(cmdReloadBee{})
 	gob.Register(cmdLiveHives{})
+	gob.Register(cmdJoinColony{})
 	gob.Register(bhgob.GobError{})
 	gob.Register(commitTx{})
 
@@ -207,9 +207,9 @@ type hive struct {
 	listener net.Listener
 	client   *http.Client
 
+	replStrategy replicationStrategy
 	// FIXME REFACTOR
 	//collector statCollector
-	//replStrategy ReplicationStrategy
 }
 
 func (h *hive) ID() uint64 {
@@ -339,7 +339,7 @@ func (h *hive) processRaft(ctx context.Context, msg raftpb.Message) error {
 }
 
 func (h *hive) raftBarrier() error {
-	ctx, _ := context.WithTimeout(context.Background(), defaultRaftTick*30)
+	ctx, _ := context.WithTimeout(context.Background(), defaultRaftTick*300)
 	_, err := h.node.Process(ctx, noOp{})
 	return err
 }
@@ -526,11 +526,6 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	h.emitMsg(newMsgFromData(replyData, 0, m.From()))
 	return nil
 }
-
-// FIXME REFACTOR
-//func (h *hive) ReplicationStrategy() ReplicationStrategy {
-//return h.replStrategy
-//}
 
 func (s *hive) registerSignals() {
 	s.sigCh = make(chan os.Signal, 1)

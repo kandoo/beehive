@@ -140,6 +140,8 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 		return nil, r.delBee(uint64(tr))
 	case moveBee:
 		return nil, r.moveBee(tr)
+	case updateColony:
+		return nil, r.updateColony(tr)
 	case LockMappedCell:
 		return r.lock(tr)
 	case transferCells:
@@ -255,6 +257,56 @@ func (r *registry) moveBee(m moveBee) error {
 	return nil
 }
 
+func (r *registry) updateColony(up updateColony) error {
+	if up.New.IsNil() || up.Old.IsNil() {
+		return ErrInvalidParam
+	}
+
+	glog.V(2).Infof("registry updates %v with %v", up.Old, up.New)
+	b := r.mustFindBee(up.New.Leader)
+	if err := r.Store.updateColony(b.App, up.New, up.Old); err != nil {
+		return err
+	}
+
+	if up.Old.Leader != up.New.Leader {
+		b = r.mustFindBee(up.Old.Leader)
+		if up.New.Contains(up.Old.Leader) {
+			b.Colony = up.New
+		} else {
+			b.Colony = Colony{}
+		}
+		r.Bees[up.Old.Leader] = b
+	}
+
+	for _, f := range up.Old.Followers {
+		if !up.New.Contains(f) {
+			b = r.mustFindBee(f)
+			b.Colony = Colony{}
+			r.Bees[f] = b
+		}
+	}
+
+	for _, f := range up.New.Followers {
+		b = r.mustFindBee(f)
+		b.Colony = up.New
+		r.Bees[f] = b
+	}
+
+	b = r.mustFindBee(up.New.Leader)
+	b.Colony = up.New
+	r.Bees[up.New.Leader] = b
+
+	return nil
+}
+
+func (r *registry) mustFindBee(id uint64) BeeInfo {
+	info, ok := r.Bees[id]
+	if !ok {
+		glog.Fatalf("cannot find bee %v", id)
+	}
+	return info
+}
+
 func (r *registry) lock(l LockMappedCell) (Colony, error) {
 	if l.Colony.Leader == 0 {
 		return Colony{}, ErrInvalidParam
@@ -359,6 +411,11 @@ func (r *registry) beeAndHive(id uint64) (BeeInfo, HiveInfo, error) {
 	if !ok {
 		return bi, HiveInfo{}, ErrNoSuchBee
 	}
+
+	if bi.ID != id {
+		glog.Fatalf("bee %v has invalid info: %#v", id, bi)
+	}
+
 	hi, ok := r.Hives[bi.Hive]
 	if !ok {
 		return bi, hi, ErrNoSuchHive
