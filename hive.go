@@ -299,6 +299,10 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 	case cmdPingHive:
 		cc.ch <- cmdResult{}
 
+	case cmdSync:
+		err := h.raftBarrier()
+		cc.ch <- cmdResult{Err: err}
+
 	case cmdNewHiveID:
 		r, err := h.node.Process(context.TODO(), newHiveID{d.Addr})
 		cc.ch <- cmdResult{
@@ -324,8 +328,20 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 	}
 }
 
+func (h *hive) processCmd(data interface{}) (interface{}, error) {
+	ch := make(chan cmdResult)
+	h.ctrlCh <- newCmdAndChannel(data, "", 0, ch)
+	return (<-ch).get()
+}
+
 func (h *hive) processRaft(ctx context.Context, msg raftpb.Message) error {
 	return h.node.Step(ctx, msg)
+}
+
+func (h *hive) raftBarrier() error {
+	ctx, _ := context.WithTimeout(context.Background(), defaultRaftTick*30)
+	_, err := h.node.Process(ctx, noOp{})
+	return err
 }
 
 func (h *hive) registerApp(a *app) {
