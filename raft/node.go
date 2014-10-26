@@ -349,7 +349,7 @@ func (n *Node) Start() {
 			n.send(rd.Messages)
 
 			if len(rd.CommittedEntries) > 0 {
-				glog.V(2).Infof("Raft update on node %v", n.id)
+				glog.V(2).Infof("raft update on node %v", n.id)
 			}
 
 			for _, e := range rd.CommittedEntries {
