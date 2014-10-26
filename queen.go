@@ -96,7 +96,7 @@ func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
 		return nil, fmt.Errorf("Bee %v already exists", info.ID)
 	}
 
-	b := q.defaultLocalBee(info.ID)
+	b := q.defaultLocalBee(info.ID, false)
 	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 	}
 
 	b := &proxyBee{
-		localBee: q.defaultLocalBee(info.ID),
+		localBee: q.defaultLocalBee(info.ID, false),
 		proxy:    p,
 	}
 	// FIXME REFACTOR
@@ -130,6 +130,25 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 	q.idToBees[info.ID] = b
 	go b.start()
 	return b, nil
+}
+
+func (q *qee) newDetachedBee(h DetachedHandler) (*detachedBee, error) {
+	info, err := q.allocateNewBeeID()
+	if err != nil {
+		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
+	}
+	info.Detached = true
+	glog.V(2).Infof("%v starts detached bee %v for app %v", q, info.ID, info.App)
+	d := &detachedBee{
+		localBee: q.defaultLocalBee(info.ID, true),
+		h:        h,
+	}
+	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
+		return nil, err
+	}
+	q.idToBees[d.ID()] = d
+	go d.start()
+	return d, nil
 }
 
 // FIXME REFACTOR
@@ -233,6 +252,14 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{Err: err}
 		return
 
+	case cmdStartDetached:
+		b, err := q.newDetachedBee(cmd.Handler)
+		if cc.ch != nil {
+			cc.ch <- cmdResult{
+				Data: b.ID(),
+				Err:  err,
+			}
+		}
 	// FIXME REFACTOR
 	//case migrateBeeCmd:
 	//q.migrate(cmd.From, cmd.To, cc.ch)
@@ -264,15 +291,6 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 	//q.lockLocally(bee, cmd.MappedCells...)
 	//cc.ch <- cmdResult{id, nil}
 
-	//case startDetachedCmd:
-	//b := q.newDetachedBee(cmd.Handler)
-	//q.idToBees[b.ID()] = b
-	//go b.start()
-
-	//if cc.ch != nil {
-	//cc.ch <- cmdResult{Data: b.id()}
-	//}
-
 	default:
 		if cc.ch != nil {
 			glog.Errorf("Unknown bee command %v", cmd)
@@ -284,7 +302,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 }
 
 func (q *qee) reloadBee(id uint64) (bee, error) {
-	b := q.defaultLocalBee(id)
+	b := q.defaultLocalBee(id, false)
 	q.idToBees[id] = &b
 	go b.start()
 	return &b, nil
@@ -538,11 +556,12 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 	return q.hive.ID() == info.Hive
 }
 
-func (q *qee) defaultLocalBee(id uint64) localBee {
+func (q *qee) defaultLocalBee(id uint64, detached bool) localBee {
 	b := localBee{
 		qee:       q,
 		beeID:     id,
 		beeColony: Colony{Leader: id},
+		detached:  detached,
 		dataCh:    make(chan msgAndHandler, cap(q.dataCh)),
 		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:      q.hive,
@@ -597,15 +616,6 @@ func (q *qee) defaultLocalBee(id uint64) localBee {
 //panic("Cannot create local bee")
 //}
 //return b
-//}
-
-//func (q *qee) newDetachedBee(h DetachedHandler) *detachedBee {
-//id := q.nextBeeID(true)
-//d := &detachedBee{
-//localBee: q.defaultLocalBee(id),
-//h:        h,
-//}
-//return d
 //}
 
 // FIXME REFACTOR

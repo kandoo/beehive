@@ -42,6 +42,7 @@ type localBee struct {
 
 	beeID     uint64
 	beeColony Colony
+	detached  bool
 	status    beeStatus
 	qee       *qee
 	app       *app
@@ -583,7 +584,7 @@ func (b *localBee) CommitTx() error {
 	defer b.resetTx()
 
 	// No need to update sequences.
-	if !b.app.Persistent() {
+	if !b.app.Persistent() || b.detached {
 		b.doCommitTx()
 		return nil
 	}

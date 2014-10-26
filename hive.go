@@ -360,7 +360,6 @@ func (h *hive) registerHandler(t string, q *qee, l Handler) {
 }
 
 func (h *hive) bee(id uint64) (BeeInfo, error) {
-	// FIXME REFACTOR we should cache this info.
 	return h.registry.bee(id)
 }
 
@@ -369,11 +368,11 @@ func (h *hive) handleMsg(m *msg) {
 	case m.IsUnicast():
 		i, err := h.bee(m.MsgTo)
 		if err != nil {
-			glog.Errorf("No such bee %v", m.MsgTo)
+			glog.Errorf("no such bee %v", m.MsgTo)
 		}
 		a, ok := h.app(i.App)
 		if !ok {
-			glog.Fatalf("Application not found: %s", i.App)
+			glog.Fatalf("no such application %s", i.App)
 		}
 		a.qee.dataCh <- msgAndHandler{m, a.handler(m.Type())}
 	default:
@@ -407,9 +406,13 @@ func (h *hive) startRaftNode() {
 
 func (h *hive) reloadState() {
 	for _, b := range h.registry.beesOfHive(h.id) {
+		if b.Detached {
+			glog.Warningf("%v will not reload detached bee %v", h, b.ID)
+			continue
+		}
 		a, ok := h.app(b.App)
 		if !ok {
-			glog.Errorf("Found a bee for app %v, which is not registered")
+			glog.Errorf("app %v is not registered but has a bee", b.App)
 			continue
 		}
 		_, err := a.qee.processCmd(cmdReloadBee{ID: b.ID})
@@ -423,13 +426,13 @@ func (h *hive) reloadState() {
 func (h *hive) Start() error {
 	h.status = hiveStarted
 	h.registerSignals()
-	h.startQees()
 	if err := h.listen(); err != nil {
 		glog.Errorf("%v cannot start listener: %v", err)
 		h.Stop()
 		return err
 	}
 	h.startRaftNode()
+	h.startQees()
 	h.reloadState()
 
 	glog.V(2).Infof("%v starts message loop", h)

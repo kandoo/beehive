@@ -1,4 +1,4 @@
-package bh
+package beehive
 
 import (
 	"testing"
@@ -55,7 +55,7 @@ func TestDetached(t *testing.T) {
 		select {
 		case <-msgCh:
 		case <-time.After(2 * time.Second):
-			t.Errorf("Did not receive any message on the channel.")
+			t.Errorf("did not receive any message on the channel.")
 		}
 	}
 
