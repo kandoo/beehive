@@ -147,24 +147,24 @@ func NewHive() Hive {
 
 func init() {
 	flag.StringVar(&DefaultCfg.Addr, "laddr", "localhost:7767",
-		"The listening address used to communicate with other nodes.")
+		"The listening address used to communicate with other nodes")
 	flag.Var(&bhflag.CSV{&DefaultCfg.PeerAddrs}, "paddrs",
 		"Address of peers. Seperate entries with a comma")
 	flag.Var(&bhflag.CSV{&DefaultCfg.RegAddrs}, "raddrs",
 		"Address of etcd machines. Separate entries with a comma ','")
 	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
-		"Buffer size of data channels.")
+		"Buffer size of data channels")
 	flag.IntVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
-		"Buffer size of command channels.")
+		"Buffer size of command channels")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
-		"Whether to insturment apps.")
+		"Whether to insturment apps")
 	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
-		"Where to store persistent state data.")
+		"Where to store persistent state data")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
-		100*time.Millisecond, "Heartbeat interval.")
+		100*time.Millisecond, "Heartbeat interval")
 	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout",
 		300*time.Millisecond,
-		"The timeout after which a non-responsive bee is announced dead.")
+		"The timeout after which a non-responsive bee is announced dead")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
 		10*time.Millisecond, "Timeout to retry locking an entry in the registry")
 	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
@@ -244,14 +244,14 @@ func (h *hive) hiveAddr(id uint64) (string, error) {
 }
 
 func (h *hive) stopListener() {
-	glog.Info("Stopping listener...")
+	glog.Infof("%v is stopping listener...", h)
 	if h.listener != nil {
 		h.listener.Close()
 	}
 }
 
 func (h *hive) stopQees() {
-	glog.Info("Stopping qees...")
+	glog.Infof("%v is stopping qees...", h)
 	qs := make(map[*qee]bool)
 	for _, mhs := range h.qees {
 		for _, mh := range mhs {
@@ -414,7 +414,7 @@ func (h *hive) reloadState() {
 		}
 		_, err := a.qee.processCmd(cmdReloadBee{ID: b.ID})
 		if err != nil {
-			glog.Errorf("Cannot reload bee %v on %v", b.ID, h.id)
+			glog.Errorf("cannot reload bee %v on %v", b.ID, h.id)
 			continue
 		}
 	}
@@ -432,7 +432,7 @@ func (h *hive) Start() error {
 	h.startRaftNode()
 	h.reloadState()
 
-	glog.V(2).Infof("%v starts message loop %v %p", h, h.ctrlCh, h)
+	glog.V(2).Infof("%v starts message loop", h)
 	for h.status == hiveStarted {
 		select {
 		case msg := <-h.dataCh:
@@ -455,11 +455,11 @@ func (h *hive) info() HiveInfo {
 
 func (h *hive) Stop() error {
 	if h.ctrlCh == nil {
-		return errors.New("Control channel is closed.")
+		return errors.New("control channel is closed")
 	}
 
 	if h.status == hiveStopped {
-		return errors.New("Hive is already stopped.")
+		return errors.New("hive is already stopped")
 	}
 
 	_, err := h.sendCmd(cmdStop{})
@@ -517,7 +517,7 @@ func (h *hive) SendToBee(msgData interface{}, to uint64) {
 func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
 	if m.NoReply() {
-		return errors.New("Cannot reply to this message.")
+		return errors.New("cannot reply to this message")
 	}
 
 	h.emitMsg(newMsgFromData(replyData, 0, m.From()))
@@ -585,10 +585,14 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 		go func(m raftpb.Message) {
 			a, err := h.hiveAddr(m.To)
 			if err != nil {
-				glog.Errorf("No addresses for %v", m.To)
+				glog.Errorf("%v has no address for node %v", h, m.To)
 				return
 			}
-			glog.V(2).Infof("Sending raft message %v", m)
+			if a == h.config.Addr {
+				h.registry.m.RLock()
+				glog.Fatalf("cannot send message to itself %#v", h.registry.Hives)
+			}
+			glog.V(2).Infof("%v sending raft message %v to %v", h, m, a)
 			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
 				glog.Errorf("Error in sending a raft message: %v", err)
 				return

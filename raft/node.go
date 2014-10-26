@@ -80,6 +80,8 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 	gob.Register(Request{})
 	gob.Register(Response{})
 
+	glog.V(2).Infof("creating a new raft node %v with peers %v", id, peers)
+
 	snapdir := path.Join(datadir, "snap")
 	if err := os.MkdirAll(snapdir, 0700); err != nil {
 		glog.Fatal("raft: cannot create snapshot directory")
@@ -96,6 +98,7 @@ func NewNode(id uint64, peers []etcdraft.Peer, send SendFunc, datadir string,
 			glog.Fatal("raft: node id cannot be 0")
 		}
 
+		glog.V(2).Infof("no WAL found for %v. starting new node", id)
 		var err error
 		w, err = wal.Create(waldir, []byte(strconv.FormatUint(id, 10)))
 		if err != nil {
@@ -234,9 +237,10 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 }
 
 func (n *Node) applyEntry(e raftpb.Entry) {
-	glog.V(2).Infof("Node %v receives a raft entry %#v", n.id, e)
+	glog.V(2).Infof("node %v applies normal entry %v: %#v", n.id, e.Index, e)
 
 	if len(e.Data) == 0 {
+		glog.V(2).Infof("raft entry %v has no data", e.Index)
 		return
 	}
 
@@ -290,7 +294,7 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
 	}
 
-	glog.V(2).Infof("Node %v receives a conf change %#v", n.id, cc)
+	glog.V(2).Infof("node %v applies conf change %v: %#v", n.id, e.Index, cc)
 
 	if err := n.validConfChange(cc, nodes); err != nil {
 		glog.V(2).Infof("Received an invalid conf change for node %v: %v",

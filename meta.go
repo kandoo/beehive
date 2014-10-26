@@ -51,7 +51,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	ch := make(chan uint64, len(paddrs))
 	client := newHttpClient()
 	for _, a := range paddrs {
-		glog.V(2).Infof("Requesting hive ID from %v", a)
+		glog.V(2).Infof("requesting hive ID from %v", a)
 		go func(a string) {
 			p := newProxyWithAddr(client, a)
 			id, err := p.sendCmd(&cmd{Data: cmdNewHiveID{Addr: addr}})
@@ -81,7 +81,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 		}
 	}
 
-	glog.Fatalf("Cannot get a new hive ID from peers")
+	glog.Fatalf("cannot get a new hive ID from peers")
 	return 1
 }
 
@@ -122,12 +122,12 @@ func saveMeta(m hiveMeta, cfg HiveConfig) {
 	metafile := path.Join(cfg.StatePath, "meta")
 	f, err := os.OpenFile(metafile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0700)
 	if err != nil {
-		glog.Fatalf("Cannot open meta file: %v", err)
+		glog.Fatalf("cannot open meta file: %v", err)
 	}
 
 	enc := gob.NewEncoder(f)
 	if err := enc.Encode(&m); err != nil {
-		glog.Fatalf("Cannot encode meta: %v", err)
+		glog.Fatalf("cannot encode meta: %v", err)
 	}
 
 	f.Close()

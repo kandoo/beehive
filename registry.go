@@ -112,12 +112,14 @@ func newRegistry() *registry {
 func (r *registry) Save() ([]byte, error) {
 	r.m.RLock()
 	defer r.m.RUnlock()
+	glog.V(2).Info("registry saved")
 	return bhgob.Encode(r)
 }
 
 func (r *registry) Restore(b []byte) error {
 	r.m.Lock()
 	defer r.m.Unlock()
+	glog.V(2).Info("registry restored")
 	return bhgob.Decode(r, b)
 }
 
@@ -150,6 +152,7 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
 	n raft.NodeInfo) error {
 
+	glog.V(2).Infof("registry applying conf change %#v for %v", cc, n)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
 		if n.ID != cc.NodeID {

@@ -110,17 +110,17 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("Proxy %v sends msg %v", b, mh.msg)
 	if err := b.proxy.sendMsg(mh.msg); err != nil {
-		glog.Errorf("Cannot send message %v to %v: %v", mh.msg, b, err)
+		glog.Errorf("cannot send message %v to %v: %v", mh.msg, b, err)
 	}
 }
 
 func (p proxy) sendRaft(m raftpb.Message) error {
 	d, err := m.Marshal()
 	if err != nil {
-		glog.Fatalf("Cannot marshal raft message")
+		glog.Fatalf("cannot marshal raft message")
 	}
 
-	glog.V(2).Infof("Proxy to %v sends raft %v", p.to, m)
+	glog.V(2).Infof("proxy to %v sends raft %v", p.to, m)
 	r, err := p.client.Post(p.raftURL, "application/x-protobuf",
 		bytes.NewBuffer(d))
 	if err != nil {
