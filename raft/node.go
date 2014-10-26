@@ -182,7 +182,7 @@ func (n *Node) Process(ctx context.Context, req interface{}) (interface{},
 		glog.V(2).Infof("%v wakes up for raft request %v", n, r.ID)
 		return res.Data, res.Err
 	case <-ctx.Done():
-		n.line.call(Response{ID: r.ID})
+		n.line.cancel(r.ID)
 		return nil, ctx.Err()
 	case <-n.done:
 		return nil, ErrStopped
@@ -226,7 +226,7 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 	case res := <-ch:
 		return res.Err
 	case <-ctx.Done():
-		n.line.call(Response{ID: r.ID})
+		n.line.cancel(r.ID)
 		return ctx.Err()
 	case <-n.done:
 		return ErrStopped
