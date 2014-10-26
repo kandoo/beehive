@@ -69,10 +69,6 @@ type Node struct {
 	done   chan struct{}
 }
 
-func (n *Node) String() string {
-	return fmt.Sprintf("node %v (%v)", n.id, n.name)
-}
-
 func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 	datadir string, store Store, snapCount uint64,
 	ticker <-chan time.Time) *Node {
@@ -402,7 +398,12 @@ func (n *Node) snapshot(snapi uint64, snapnodes []uint64) {
 	n.wal.Cut()
 }
 
+func (n *Node) String() string {
+	return fmt.Sprintf("node %v (%v)", n.id, n.name)
+}
+
 func (n *Node) Stop() {
+	n.node.Stop()
 	close(n.done)
 }
 

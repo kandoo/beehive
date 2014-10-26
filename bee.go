@@ -254,6 +254,9 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		b.status = beeStatusStopped
+		if b.node != nil {
+			b.node.Stop()
+		}
 		cc.ch <- cmdResult{}
 		glog.V(2).Infof("%v stopped", b)
 
