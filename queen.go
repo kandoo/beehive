@@ -103,19 +103,19 @@ func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
 	}
 
 	if _, ok := q.beeByID(info.ID); ok {
-		return nil, fmt.Errorf("Bee %v already exists", info.ID)
+		return nil, fmt.Errorf("bee %v already exists", info.ID)
 	}
 
 	b := q.defaultLocalBee(info.ID, false)
+	if withInitColony {
+		c := Colony{Leader: info.ID}
+		info.Colony = c
+		b.beeColony = c
+	}
 	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
 
-	if withInitColony {
-		b.beeColony = Colony{
-			Leader: info.ID,
-		}
-	}
 	q.addBee(&b)
 	go b.start()
 	return &b, nil
@@ -270,7 +270,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		return
 
 	case cmdReloadBee:
-		_, err := q.reloadBee(cmd.ID)
+		_, err := q.reloadBee(cmd.ID, cmd.Colony)
 		cc.ch <- cmdResult{Err: err}
 		return
 
@@ -301,8 +301,13 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 	}
 }
 
-func (q *qee) reloadBee(id uint64) (bee, error) {
+func (q *qee) reloadBee(id uint64, col Colony) (bee, error) {
+	info, err := q.hive.bee(id)
+	if err != nil {
+		return nil, err
+	}
 	b := q.defaultLocalBee(id, false)
+	b.setColony(info.Colony)
 	q.addBee(&b)
 	go b.start()
 	return &b, nil
@@ -398,7 +403,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			Hive:   q.hive.ID(),
 			App:    q.app.Name(),
 			ID:     lb.ID(),
-			Colony: lb.colony(),
+			Colony: lb.colony().DeepCopy(),
 		}
 
 		if info, err = q.lock(info, cells); err != nil {

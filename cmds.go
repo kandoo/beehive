@@ -23,7 +23,10 @@ type cmdMigrate struct {
 }
 type cmdNewHiveID struct{ Addr string }
 type cmdPing struct{}
-type cmdReloadBee struct{ ID uint64 }
+type cmdReloadBee struct {
+	ID     uint64
+	Colony Colony
+}
 type cmdStart struct{}
 type cmdStartDetached struct{ Handler DetachedHandler }
 type cmdStop struct{}

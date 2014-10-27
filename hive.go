@@ -374,7 +374,7 @@ func (h *hive) reloadState() {
 			glog.Errorf("app %v is not registered but has a bee", b.App)
 			continue
 		}
-		_, err := a.qee.processCmd(cmdReloadBee{ID: b.ID})
+		_, err := a.qee.processCmd(cmdReloadBee{ID: b.ID, Colony: b.Colony})
 		if err != nil {
 			glog.Errorf("cannot reload bee %v on %v", b.ID, h.id)
 			continue
