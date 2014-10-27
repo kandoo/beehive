@@ -395,7 +395,7 @@ func (h *hive) startRaftNode() {
 	} else {
 		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
-	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft,
+	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
 		h.config.StatePath, h.registry, 1024, h.ticker.C)
 	// This will act like a barrier.
 	if err := h.raftBarrier(); err != nil {
@@ -420,6 +420,16 @@ func (h *hive) reloadState() {
 			glog.Errorf("cannot reload bee %v on %v", b.ID, h.id)
 			continue
 		}
+	}
+}
+
+func (h *hive) ProcessStatusChange(sch interface{}) {
+	switch ev := sch.(type) {
+	case raft.LeaderChanged:
+		if ev.New != h.ID() {
+			return
+		}
+		glog.V(2).Infof("%v is the new leader", h)
 	}
 }
 
@@ -592,7 +602,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 			}
 			glog.V(2).Infof("%v sends raft message %v to %v", h, m, a)
 			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
-				glog.Errorf("error in sending a raft message: %v", err)
+				glog.Errorf("error in sending a raft message to %v: %v", a, err)
 				return
 			}
 			glog.V(2).Infof("raft message sucessfully sent to %v", m.To)

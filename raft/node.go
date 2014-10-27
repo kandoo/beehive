@@ -58,6 +58,7 @@ type Node struct {
 	line line
 	gen  gen.IDGenerator
 
+	listener  StatusListener
 	store     Store
 	wal       *wal.WAL
 	snap      *snap.Snapshotter
@@ -70,7 +71,7 @@ type Node struct {
 }
 
 func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
-	datadir string, store Store, snapCount uint64,
+	listener StatusListener, datadir string, store Store, snapCount uint64,
 	ticker <-chan time.Time) *Node {
 
 	gob.Register(NodeInfo{})
@@ -143,6 +144,7 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 		id:        id,
 		node:      n,
 		gen:       gen.NewSeqIDGen(lastIndex + 2*snapCount), // To avoid collisions.
+		listener:  listener,
 		store:     store,
 		wal:       w,
 		snap:      ss,
@@ -270,7 +272,7 @@ func containsNode(nodes []uint64, node uint64) bool {
 
 func (n *Node) validConfChange(cc raftpb.ConfChange, nodes []uint64) error {
 	if cc.NodeID == etcdraft.None {
-		return errors.New("NodeID is nil")
+		return errors.New("node id is nil")
 	}
 
 	switch cc.Type {
@@ -283,7 +285,7 @@ func (n *Node) validConfChange(cc raftpb.ConfChange, nodes []uint64) error {
 			return fmt.Errorf("No such node", cc.NodeID)
 		}
 	default:
-		glog.Fatalf("Invalid ConfChange type %v", cc.Type)
+		glog.Fatalf("invalid ConfChange type %v", cc.Type)
 	}
 	return nil
 }
@@ -294,11 +296,11 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
 	}
 
-	glog.V(2).Infof("node %v applies conf change %v: %#v", n.id, e.Index, cc)
+	glog.V(2).Infof("%v applies conf change %v: %#v", n, e.Index, cc)
 
 	if err := n.validConfChange(cc, nodes); err != nil {
-		glog.V(2).Infof("Received an invalid conf change for node %v: %v",
-			cc.NodeID, err)
+		glog.V(2).Infof("%v received an invalid conf change for node %v: %v",
+			n, cc.NodeID, err)
 		cc.NodeID = etcdraft.None
 		n.node.ApplyConfChange(cc)
 		return
@@ -313,7 +315,7 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 	var info NodeInfo
 	if err := bhgob.Decode(&info, cc.Context); err == nil {
 		if info.ID != cc.NodeID {
-			glog.Fatalf("Invalid config change: %v != %v", info.ID, cc.NodeID)
+			glog.Fatalf("invalid config change: %v != %v", info.ID, cc.NodeID)
 		}
 		n.store.ApplyConfChange(cc, info)
 		return
@@ -332,16 +334,24 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 }
 
 func (n *Node) Start() {
-	glog.V(2).Infof("raft node %v started", n.id)
+	glog.V(2).Infof("%v started", n)
 	var snapi, appliedi uint64
 	var nodes []uint64
+	var prevss *etcdraft.SoftState
 	for {
 		select {
 		case <-n.ticker:
 			n.node.Tick()
 		case rd := <-n.node.Ready():
 			if rd.SoftState != nil {
+				if prevss != nil && prevss.Lead != rd.SoftState.Lead {
+					n.listener.ProcessStatusChange(LeaderChanged{
+						Old: prevss.Lead,
+						New: rd.SoftState.Lead,
+					})
+				}
 				nodes = rd.SoftState.Nodes
+				prevss = rd.SoftState
 			}
 
 			n.wal.Save(rd.HardState, rd.Entries)
@@ -349,7 +359,7 @@ func (n *Node) Start() {
 			n.send(rd.Messages)
 
 			if len(rd.CommittedEntries) > 0 {
-				glog.V(2).Infof("raft update on node %v", n.id)
+				glog.V(2).Infof("%v receives raft update", n)
 			}
 
 			for _, e := range rd.CommittedEntries {

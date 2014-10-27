@@ -95,8 +95,8 @@ func (b *localBee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
-	b.node = raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b.statePath(),
-		b, 1024, b.ticker.C)
+	b.node = raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
+		b.statePath(), b, 1024, b.ticker.C)
 	// This will act like a barrier.
 	if _, err := b.node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Errorf("%v cannot start raft: %v", b, err)
@@ -104,6 +104,39 @@ func (b *localBee) startNode() error {
 	}
 	glog.V(2).Infof("%v started its raft node", b)
 	return nil
+}
+
+func (b *localBee) ProcessStatusChange(sch interface{}) {
+	switch ev := sch.(type) {
+	case raft.LeaderChanged:
+		glog.V(2).Infof("%v recevies leader changed event %#v", b, ev)
+		if ev.New != b.ID() {
+			return
+		}
+		oldc := b.colony()
+		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
+		if oldc.Leader == b.ID() || oldc.IsNil() {
+			glog.V(2).Infof("%v has no need to change %v", b, oldc)
+			return
+		}
+
+		newc := oldc.DeepCopy()
+		newc.DelFollower(b.ID())
+		newc.Leader = b.ID()
+		if oldc.Leader != Nil {
+			newc.AddFollower(oldc.Leader)
+		}
+		up := updateColony{
+			Old: oldc,
+			New: newc,
+		}
+		if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+			glog.Errorf("%v cannot update its colony: %v", b, err)
+			return
+		}
+		b.setColony(newc)
+		// FIXME(soheil): Add health checks here and recruite if needed.
+	}
 }
 
 func (b *localBee) sendRaft(msgs []raftpb.Message) {
@@ -127,7 +160,7 @@ func (b *localBee) sendRaft(msgs []raftpb.Message) {
 		if err = newProxyWithAddr(b.hive.client, hi.Addr).sendBeeRaft(bi.App, m.To,
 			m); err != nil {
 
-			glog.Errorf("cannot send bee raft message to %v: %v", m.To, err)
+			glog.Errorf("%v cannot send bee raft message to %v: %v", b, m.To, err)
 			continue
 		}
 		glog.V(2).Infof("%v successfully sent bee raft message %v to %v", b,
@@ -145,7 +178,7 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 	if oldc.Leader != b.beeID {
 		return fmt.Errorf("%v is not the leader", b)
 	}
-	newc := oldc
+	newc := oldc.DeepCopy()
 	if !newc.AddFollower(bid) {
 		return ErrDuplicateBee
 	}

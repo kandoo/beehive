@@ -271,7 +271,7 @@ func (r *registry) updateColony(up updateColony) error {
 
 	glog.V(2).Infof("%v updates %v with %v", r, up.Old, up.New)
 	b := r.mustFindBee(up.New.Leader)
-	if err := r.Store.updateColony(b.App, up.New, up.Old); err != nil {
+	if err := r.Store.updateColony(b.App, up.Old, up.New); err != nil {
 		return err
 	}
 
@@ -446,6 +446,9 @@ func (r *registry) beeForCells(app string, cells MappedCells) (info BeeInfo,
 
 		if info.ID == 0 {
 			info = r.Bees[col.Leader]
+			if info.ID != col.Leader {
+				glog.Fatalf("bee %b has an invalid info %#v", col.Leader, info)
+			}
 		} else if info.ID != col.Leader {
 			// Incosistencies should be handled by consensus.
 			hasAll = false

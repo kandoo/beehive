@@ -39,23 +39,23 @@ func TestPersistentApp(t *testing.T) {
 	h.Stop()
 }
 
-func registerPersistentApp(h Hive, ch chan struct{}) {
+func registerPersistentApp(h Hive, ch chan uint64) {
 	app := h.NewApp("persistent")
 	app.SetFlags(AppFlagTransactional | AppFlagPersistent)
 	app.SetReplicationFactor(3)
 	mf := func(msg Msg, ctx MapContext) MappedCells {
-		return ctx.LocalMappedCells()
+		return MappedCells{{"D", "0"}}
 	}
 	rf := func(msg Msg, ctx RcvContext) error {
 		ctx.Dict("Test").Put("K", []byte{})
-		ch <- struct{}{}
+		ch <- ctx.ID()
 		return nil
 	}
 	app.HandleFunc(AppTestMsg(0), mf, rf)
 }
 
 func TestReplicatedApp(t *testing.T) {
-	ch := make(chan struct{})
+	ch := make(chan uint64)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -97,7 +97,7 @@ func TestReplicatedApp(t *testing.T) {
 }
 
 func TestReplicatedAppFailure(t *testing.T) {
-	ch := make(chan struct{})
+	ch := make(chan uint64)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -149,6 +149,14 @@ func TestReplicatedAppFailure(t *testing.T) {
 		}
 		t.Logf("cannot sync %v, retrying", h3)
 		time.Sleep(10 * defaultRaftTick)
+	}
+
+	h2.Emit(AppTestMsg(0))
+	id1 := <-ch
+	h3.Emit(AppTestMsg(0))
+	id2 := <-ch
+	if id1 != id2 {
+		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
 	h2.Stop()

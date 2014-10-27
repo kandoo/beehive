@@ -127,7 +127,7 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 	}
 
 	p, err := q.hive.newProxy(info.Hive)
-	if err == nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -321,12 +321,12 @@ func (q *qee) reloadBee(id uint64) (bee, error) {
 func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 	defer func() {
 		if r := recover(); r != nil {
-			glog.Errorf("Error in map of %s: %v", q.app.Name(), r)
+			glog.Errorf("error in map of %s: %v", q.app.Name(), r)
 			ms = nil
 		}
 	}()
 
-	glog.V(2).Infof("Invoking the map function of %v for %v", q, mh.msg)
+	glog.V(2).Infof("%v invokes map for %v", q, mh.msg)
 	return mh.handler.Map(mh.msg, q)
 }
 
@@ -336,9 +336,19 @@ func (q *qee) isDetached(id uint64) bool {
 	return err == nil && b.Detached
 }
 
+func (q *qee) isDetachedBee(b bee) bool {
+	_, ok := b.(*detachedBee)
+	return ok
+}
+
+func (q *qee) isProxyBee(b bee) bool {
+	_, ok := b.(*proxyBee)
+	return ok
+}
+
 func (q *qee) handleMsg(mh msgAndHandler) {
 	if mh.msg.IsUnicast() {
-		glog.V(2).Infof("Unicast msg: %v", mh.msg)
+		glog.V(2).Infof("unicast msg: %v", mh.msg)
 		bee, ok := q.beeByID(mh.msg.To())
 		if !ok {
 			info, err := q.hive.registry.bee(mh.msg.To())
@@ -347,28 +357,28 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			}
 
 			if q.isLocalBee(info) {
-				glog.Fatalf("cannot find a local bee %v", mh.msg.To())
+				glog.Fatalf("%v cannot find a local bee %v", q, mh.msg.To())
 			}
 
 			if bee, ok = q.beeByID(info.ID); !ok {
-				glog.Errorf("cannnot find the remote bee %v", mh.msg.To())
+				glog.Errorf("%v cannnot find the remote bee %v", q, mh.msg.To())
 				return
 			}
 		}
 
-		if mh.handler == nil && !q.isDetached(mh.msg.To()) {
-			glog.Fatalf("Handler cannot be nil for bees %v", mh.msg)
+		if mh.handler == nil && !q.isDetachedBee(bee) && !q.isProxyBee(bee) {
+			glog.Fatalf("handler is nil for message %v", mh.msg)
 		}
 
 		bee.enqueMsg(mh)
 		return
 	}
 
-	glog.V(2).Infof("Broadcast msg: %v", mh.msg)
+	glog.V(2).Infof("%v broadcasts message %v", q, mh.msg)
 
 	cells := q.invokeMap(mh)
 	if cells == nil {
-		glog.V(2).Infof("Message dropped: %v", mh.msg)
+		glog.V(2).Infof("%v drops message %v", q, mh.msg)
 		return
 	}
 
@@ -416,6 +426,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			}
 		}
 	}
+
 	glog.V(2).Infof("message sent to bee %v: %v", bee, mh.msg)
 	bee.enqueMsg(mh)
 }
@@ -466,7 +477,11 @@ func (q *qee) beeByCells(cells MappedCells) (bee, error) {
 		glog.Fatalf("%v cannot find local bee %v", q, info.ID)
 	}
 
-	return q.newProxyBee(info)
+	b, err = q.newProxyBee(info)
+	if b == nil || err != nil {
+		glog.Errorf("%v cannot create proxy to %v", q, info.ID)
+	}
+	return b, err
 }
 
 // FIXME REFACTOR
