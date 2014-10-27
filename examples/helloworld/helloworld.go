@@ -32,8 +32,8 @@ func main() {
 	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
 	app.HandleFunc(string(""), mapf, rcvf)
 
-	name1 := "1st Name"
-	name2 := "2nd Name"
+	name1 := "1st name"
+	name2 := "2nd name"
 	for i := 0; i < 3; i++ {
 		go bh.Emit(name1)
 		go bh.Emit(name2)
