@@ -396,7 +396,7 @@ func (h *hive) Start() error {
 	h.status = hiveStarted
 	h.registerSignals()
 	if err := h.listen(); err != nil {
-		glog.Errorf("%v cannot start listener: %v", err)
+		glog.Errorf("%v cannot start listener: %v", h, err)
 		h.Stop()
 		return err
 	}
