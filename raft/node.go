@@ -417,6 +417,10 @@ func (n *Node) Stop() {
 	close(n.done)
 }
 
+func (n *Node) Campaign(ctx context.Context) error {
+	return n.node.Campaign(ctx)
+}
+
 func (n *Node) Step(ctx context.Context, msg raftpb.Message) error {
 	return n.node.Step(ctx, msg)
 }
