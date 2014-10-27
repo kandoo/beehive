@@ -70,14 +70,16 @@ type Node struct {
 	done   chan struct{}
 }
 
-func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
-	listener StatusListener, datadir string, store Store, snapCount uint64,
-	ticker <-chan time.Time) *Node {
-
+func init() {
 	gob.Register(NodeInfo{})
 	gob.Register(RequestID{})
 	gob.Register(Request{})
 	gob.Register(Response{})
+}
+
+func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
+	listener StatusListener, datadir string, store Store, snapCount uint64,
+	ticker <-chan time.Time) *Node {
 
 	glog.V(2).Infof("creating a new raft node %v (%v) with peers %v", id, name,
 		peers)
