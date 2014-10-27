@@ -1,4 +1,4 @@
-package bh
+package beehive
 
 //DefaultHive is the hive used by Start() and NewApp().
 var DefaultHive Hive
@@ -10,7 +10,7 @@ func Start() {
 }
 
 // NewApp creates a new application on the DefaultHive.
-func NewApp(name AppName) App {
+func NewApp(name string) App {
 	maybeInitDefaultHive()
 	return DefaultHive.NewApp(name)
 }
