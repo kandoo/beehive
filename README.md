@@ -176,6 +176,8 @@ The output of this application will be (or with a slightly different
 order and with an occasional raft logs ;) ):
 
 ```
+# go run helloworld.go
+
 2> hello 2nd name (1)!
 2> hello 2nd name (2)!
 1> hello 1st name (1)!
@@ -184,7 +186,28 @@ order and with an occasional raft logs ;) ):
 1> hello 1st name (3)!
 ```
 
-Note that "First" and "Second" are handled by different bees.
+Note that "1st name" and "2nd name" are handled by different bees.
+
+In our example, we made the application persisent and transactional:
+```go
+app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
+```
+
+This means that any update to the state will be written to disk,
+if the message handler successfully processes the message.
+If you re-run the program (you can exit with `ctrl+c`), 
+you see that the counts are preserved!
+
+```
+# go run helloworld.go
+
+2> hello 2nd name (4)!
+2> hello 2nd name (5)!
+2> hello 2nd name (6)!
+1> hello 1st name (4)!
+1> hello 1st name (5)!
+1> hello 1st name (6)!
+```
 
 You can find the complete code on
 [the Hello World example](https://github.com/kandoo/beehive/tree/master/examples/helloworld/helloworld.go)
