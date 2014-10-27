@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
 )
@@ -44,4 +45,8 @@ func newCmdAndChannel(d interface{}, a string, to uint64,
 		},
 		ch: ch,
 	}
+}
+
+func init() {
+	gob.Register(cmd{})
 }

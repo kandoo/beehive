@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 )
@@ -98,14 +99,6 @@ func (c Colony) Equal(thatC Colony) bool {
 	return true
 }
 
-//func (c *Colony) FollowerHives() []HiveID {
-//f:= make([]HiveID, 0, len(c.Followers))
-//for _, s := range c.Followers {
-//f= append(f, s.HiveID)
-//}
-//return f
-//}
-
 func (c *Colony) Bytes() ([]byte, error) {
 	j, err := json.Marshal(c)
 	if err != nil {
@@ -118,4 +111,8 @@ func ColonyFromBytes(b []byte) (Colony, error) {
 	c := Colony{}
 	err := json.Unmarshal(b, &c)
 	return c, err
+}
+
+func init() {
+	gob.Register(Colony{})
 }

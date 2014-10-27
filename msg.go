@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"fmt"
 	"reflect"
 )
@@ -90,4 +91,8 @@ type msgAndHandler struct {
 
 type Emitter interface {
 	Emit(msgData interface{})
+}
+
+func init() {
+	gob.Register(msg{})
 }

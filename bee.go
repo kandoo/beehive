@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"path"
@@ -171,6 +172,10 @@ func (b *localBee) sendRaft(msgs []raftpb.Message) {
 func (b *localBee) statePath() string {
 	return path.Join(b.hive.config.StatePath, b.app.Name(),
 		fmt.Sprintf("%016X", b.ID()))
+}
+
+func (b *localBee) isLeader() bool {
+	return b.beeColony.Leader == b.beeID
 }
 
 func (b *localBee) addFollower(bid uint64, hid uint64) error {
@@ -870,8 +875,9 @@ func (b *localBee) ApplyConfChange(cc raftpb.ConfChange,
 	return nil
 }
 
-func (b *localBee) isLeader() bool {
-	return b.beeColony.Leader == b.beeID
-}
-
+// bee raft commands
 type commitTx Tx
+
+func init() {
+	gob.Register(commitTx{})
+}

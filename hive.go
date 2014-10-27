@@ -18,7 +18,6 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhflag "github.com/kandoo/beehive/flag"
-	bhgob "github.com/kandoo/beehive/gob"
 	"github.com/kandoo/beehive/raft"
 )
 
@@ -91,26 +90,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
-
-	gob.Register(Colony{})
-	gob.Register(msg{})
-	gob.Register(cmd{})
-	gob.Register(bhgob.GobError{})
-	gob.Register(commitTx{})
-
-	// FIXME REFACTOR
-	//gob.Register(joinColonyCmd{})
-	//gob.Register(bufferTxCmd{})
-	//gob.Register(commitTxCmd{})
-	//gob.Register(getTxInfoCmd{})
-	//gob.Register(getTx{})
-	//gob.Register(migrateBeeCmd{})
-	//gob.Register(replaceBeeCmd{})
-	//gob.Register(lockMappedCellsCmd{})
-	//gob.Register(getColonyCmd{})
-	//gob.Register(addSlaveCmd{})
-	//gob.Register(delSlaveCmd{})
-	//gob.Register(addMappedCells{})
 
 	//if h.config.Instrument {
 	//h.collector = newAppStatCollector(h)
