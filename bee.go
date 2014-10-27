@@ -337,69 +337,6 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 			Err:  err,
 		}
 	}
-	// FIXME REFACTOR
-	//case addMappedCells:
-	//b.addMappedCells(cmd.Cells)
-	//lcmd.ch <- cmdResult{}
-
-	//switch {
-	//case b.colony().IsSlave(b.beeID):
-	//startHeartbeatBee(b.colony().Master, b.hive)
-
-	//case b.colony().IsMaster(b.beeID):
-	//for _, s := range b.colony().Slaves {
-	//startHeartbeatBee(s, b.hive)
-	//}
-	//}
-
-	//return
-	//}
-
-	//cc.ch <- cmdResult{
-	//Err: fmt.Errorf("Bee %v is not in this colony %v", bee, cmd.Colony),
-	//}
-
-	//case getColonyCmd:
-	//cc.ch <- cmdResult{Data: b.colony()}
-
-	//case addSlaveCmd:
-	//var err error
-	//slaveID := cmd.BeeID
-	//if ok := b.addSlave(slaveID); !ok {
-	//err = fmt.Errorf("Slave %v already exists", cmd.BeeID)
-	//}
-	//cc.ch <- cmdResult{Err: err}
-
-	//case delSlaveCmd:
-	//var err error
-	//slaveID := cmd.BeeID
-	//if ok := b.delSlave(slaveID); !ok {
-	//err = fmt.Errorf("Slave %v already exists", cmd.BeeID)
-	//}
-	//cc.ch <- cmdResult{Err: err}
-
-	//case bufferTxCmd:
-	//b.txBuf = append(b.txBuf, cmd.Tx)
-	//glog.V(2).Infof("Buffered transaction %v in %v", cmd.Tx, bee)
-	//cc.ch <- cmdResult{}
-
-	//case commitTxCmd:
-	//seq := cmd.Seq
-	//for i, tx := range b.txBuf {
-	//if seq == tx.Seq {
-	//b.txBuf[i].Status = TxCommitted
-	//glog.V(2).Infof("Committed buffered transaction #%d in %v", tx.Seq, bee)
-	//cc.ch <- cmdResult{}
-	//return
-	//}
-	//}
-
-	//cc.ch <- cmdResult{Err: fmt.Errorf("Transaction #%d not found.", seq)}
-
-	//case getTxInfoCmd:
-	//cc.ch <- cmdResult{
-	//Data: b.getTxInfo(),
-	//}
 }
 
 func (b *localBee) enqueMsg(mh msgAndHandler) {
@@ -539,13 +476,6 @@ func (b *localBee) ReplyTo(msg Msg, reply interface{}) error {
 }
 
 func (b *localBee) Lock(keys []CellKey) error {
-	// FIXME REFACTOR
-	//cmd := lockMappedCellsCmd{
-	//Keys:   keys,
-	//Colony: b.colony(),
-	//}
-	//_, err := b.sendCmdToQee(cmd)
-	//return err
 	panic("error FIXME bee.LOCK")
 	return nil
 }
