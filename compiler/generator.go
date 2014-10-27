@@ -68,7 +68,7 @@ func generateMapFromRcv(h *Handler) *Handler {
 	}
 
 	h.Map = m
-	h.Imports = []string{"github.com/soheilhy/beehive/bh"}
+	h.Imports = []string{"github.com/kandoo/beehive/bh"}
 	return h
 }
 

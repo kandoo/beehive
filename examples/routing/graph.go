@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 // Node represents a vertex in the graph.

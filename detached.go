@@ -1,6 +1,6 @@
 package beehive
 
-import "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
+import "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 
 type detachedBee struct {
 	localBee

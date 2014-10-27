@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
-	etcdraft "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
-	bhflag "github.com/soheilhy/beehive/flag"
-	bhgob "github.com/soheilhy/beehive/gob"
-	"github.com/soheilhy/beehive/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
+	bhflag "github.com/kandoo/beehive/flag"
+	bhgob "github.com/kandoo/beehive/gob"
+	"github.com/kandoo/beehive/raft"
 )
 
 const (

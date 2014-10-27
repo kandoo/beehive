@@ -1,6 +1,6 @@
 package beehive
 
-import "github.com/soheilhy/beehive/state"
+import "github.com/kandoo/beehive/state"
 
 // State is the storage for a collection of dictionaries.
 type State interface {

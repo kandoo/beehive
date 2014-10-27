@@ -3,7 +3,7 @@ package beehive
 import (
 	"time"
 
-	"github.com/soheilhy/beehive/state"
+	"github.com/kandoo/beehive/state"
 )
 
 type Context interface {

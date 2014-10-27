@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
-	bhgob "github.com/soheilhy/beehive/gob"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
+	bhgob "github.com/kandoo/beehive/gob"
 )
 
 const (

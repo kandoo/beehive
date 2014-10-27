@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 const (

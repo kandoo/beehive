@@ -1,6 +1,6 @@
 package raft
 
-import "github.com/soheilhy/beehive/gob"
+import "github.com/kandoo/beehive/gob"
 
 // RequestID represents a unique request throughout the cluster.
 type RequestID struct {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 const (

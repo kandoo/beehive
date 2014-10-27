@@ -8,8 +8,8 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/soheilhy/beehive/bh"
-	"github.com/soheilhy/beehive/examples/routing"
+	"github.com/kandoo/beehive/bh"
+	"github.com/kandoo/beehive/examples/routing"
 )
 
 // emitPod emits discovery messages for the links of a pod p in a k-ary fat-tree

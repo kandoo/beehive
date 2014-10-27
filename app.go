@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/state"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/state"
 )
 
 type AppFlag uint64

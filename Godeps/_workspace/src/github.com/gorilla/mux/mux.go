@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"path"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/gorilla/context"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/context"
 )
 
 // NewRouter returns a new router instance.

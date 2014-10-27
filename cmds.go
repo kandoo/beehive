@@ -1,6 +1,6 @@
 package beehive
 
-import "github.com/soheilhy/beehive/raft"
+import "github.com/kandoo/beehive/raft"
 
 type cmdStop struct{}
 

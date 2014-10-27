@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
-	etcdraft "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/raft"
-	"github.com/soheilhy/beehive/state"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/raft"
+	"github.com/kandoo/beehive/state"
 )
 
 type bee interface {

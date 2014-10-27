@@ -3,7 +3,7 @@ package beehive
 import (
 	"fmt"
 
-	"github.com/soheilhy/beehive/state"
+	"github.com/kandoo/beehive/state"
 )
 
 // tx represents the side effects of an operation: messages emitted during the

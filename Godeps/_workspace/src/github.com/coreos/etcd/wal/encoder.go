@@ -22,8 +22,8 @@ import (
 	"hash"
 	"io"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/crc"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/crc"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
 )
 
 type encoder struct {

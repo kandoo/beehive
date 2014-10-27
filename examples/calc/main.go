@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 // Binary operator.

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 type IPV4 uint32

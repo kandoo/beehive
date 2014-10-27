@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	bhgob "github.com/soheilhy/beehive/gob"
-	"github.com/soheilhy/beehive/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	bhgob "github.com/kandoo/beehive/gob"
+	"github.com/kandoo/beehive/raft"
 )
 
 var (

@@ -9,14 +9,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
-	etcdraft "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/gen"
-	bhgob "github.com/soheilhy/beehive/gob"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/gen"
+	bhgob "github.com/kandoo/beehive/gob"
 )
 
 // Most of this code is adapted from etcd/etcdserver/server.go.

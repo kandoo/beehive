@@ -5,7 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/golang/glog"
-	"github.com/soheilhy/beehive/bh"
+	"github.com/kandoo/beehive/bh"
 )
 
 type FlowStat struct {

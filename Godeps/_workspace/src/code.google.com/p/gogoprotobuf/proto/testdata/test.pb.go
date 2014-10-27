@@ -36,7 +36,7 @@ It has these top-level messages:
 */
 package testdata
 
-import proto "github.com/soheilhy/beehive/Godeps/_workspace/src/code.google.com/p/gogoprotobuf/proto"
+import proto "github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/gogoprotobuf/proto"
 import json "encoding/json"
 import math "math"
 

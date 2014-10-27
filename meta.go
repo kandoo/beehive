@@ -6,8 +6,8 @@ import (
 	"path"
 	"time"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/soheilhy/beehive/raft"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/raft"
 )
 
 type HiveInfo raft.NodeInfo

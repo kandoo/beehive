@@ -25,7 +25,7 @@ import (
 	"sort"
 	"testing"
 
-	pb "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	pb "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 )
 
 // nextEnts returns the appliable entries and updates the applied index

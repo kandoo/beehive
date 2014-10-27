@@ -1,6 +1,6 @@
 package raft
 
-import "github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+import "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 
 // Persistent wraps the two save and recover method.
 type Persistent interface {

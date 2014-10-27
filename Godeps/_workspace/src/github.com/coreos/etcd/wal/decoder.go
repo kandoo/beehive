@@ -22,10 +22,10 @@ import (
 	"hash"
 	"io"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/crc"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/crc"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
 )
 
 type decoder struct {

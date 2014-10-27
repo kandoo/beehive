@@ -24,7 +24,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/soheilhy/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
 )
 
 var (
