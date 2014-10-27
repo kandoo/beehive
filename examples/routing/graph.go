@@ -5,8 +5,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-
-	"github.com/kandoo/beehive/bh"
 )
 
 // Node represents a vertex in the graph.
@@ -20,8 +18,8 @@ func (n Node) String() string {
 }
 
 // Key returns the beehive key representing this node.
-func (n Node) Key() bh.Key {
-	return bh.Key(n.String())
+func (n Node) Key() string {
+	return n.String()
 }
 
 // Edge represents a driected edge between two nodes.

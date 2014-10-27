@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 type IPV4 uint32
@@ -18,8 +18,8 @@ func (s Switch) String() string {
 	return strconv.FormatUint(uint64(s), 10)
 }
 
-func (s Switch) Key() bh.Key {
-	return bh.Key(s.String())
+func (s Switch) Key() string {
+	return s.String()
 }
 
 type Flow struct {
@@ -159,7 +159,7 @@ type SwitchJoinHandler struct {
 }
 
 func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
-	if m.From().AppName == "" {
+	if m.NoReply() {
 		return nil
 	}
 

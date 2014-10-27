@@ -8,7 +8,7 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/examples/routing"
 )
 
@@ -116,7 +116,7 @@ func main() {
 		return nil
 	}
 	mapF := func(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
-		return ctx.LocalCells()
+		return ctx.LocalMappedCells()
 	}
 	chrono.HandleFunc(routing.Advertisement{}, mapF, rcvF)
 

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 // InstallRouting installs the routing application on bh.DefaultHive.
@@ -203,7 +203,7 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 		ctx.SetBeeLocal(false)
 
-		ctx.Dict(routeDict).ForEach(func(k bh.Key, v bh.Value) {
+		ctx.Dict(routeDict).ForEach(func(k string, v []byte) {
 			var tbl RoutingTable
 			if err := tbl.Decode(v); err != nil {
 				return

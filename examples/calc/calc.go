@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 // Binary operator.
@@ -38,9 +38,7 @@ type Calculator struct{}
 // all handled on the same stage, and so are subtractions.
 func (c *Calculator) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	op := msg.Data().(Op)
-	return bh.MappedCells{
-		{"Op", bh.Key(strconv.Itoa(int(op.OpT)))},
-	}
+	return bh.MappedCells{{"Op", strconv.Itoa(int(op.OpT))}}
 }
 
 func (c *Calculator) Rcv(msg bh.Msg, ctx bh.RcvContext) error {

@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/golang/glog"
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 const (
@@ -12,7 +12,7 @@ const (
 type UpdateHandler struct{}
 
 func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
-	if m.From().AppName == "" {
+	if m.NoReply() {
 		return nil
 	}
 
@@ -24,8 +24,8 @@ func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 
 func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	return bh.MappedCells{
-		{matrixDict, bh.Key("0")},
-		{topologyDict, bh.Key("0")},
+		{matrixDict, "0"},
+		{topologyDict, "0"},
 	}
 }
 
@@ -36,5 +36,5 @@ func (t *TopologyHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 }
 
 func (t *TopologyHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
-	return bh.MappedCells{{topologyDict, bh.Key("0")}}
+	return bh.MappedCells{{topologyDict, "0"}}
 }

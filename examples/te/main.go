@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 const (
@@ -91,7 +91,7 @@ func main() {
 
 	config := bh.DefaultCfg
 	for h := 0; h < *nhives; h++ {
-		config.HiveAddr = fmt.Sprintf(lAddr, port)
+		config.Addr = fmt.Sprintf(lAddr, port)
 		port++
 
 		jCh := make(chan bool)

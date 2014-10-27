@@ -5,7 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/golang/glog"
-	"github.com/kandoo/beehive/bh"
+	bh "github.com/kandoo/beehive"
 )
 
 type FlowStat struct {
@@ -52,7 +52,7 @@ func (d *Driver) Stop(ctx bh.RcvContext) {
 }
 
 func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
-	if m.From().AppName == "" {
+	if m.NoReply() {
 		return nil
 	}
 
@@ -78,7 +78,7 @@ func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 }
 
 func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
-	var k bh.Key
+	var k string
 	switch d := m.Data().(type) {
 	case StatQuery:
 		k = d.Switch.Key()
