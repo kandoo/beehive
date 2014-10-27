@@ -57,22 +57,23 @@ multiple hives.
 In addition to the `rcv` function that basically processes
 the message, a message handler has a `map` function that maps
 the incoming message to keys in application dictionaries,
-or as we call it the _mapped cells_ of the incoming message.
+or as we call it, to the _mapped cells_ of the incoming message.
+
 When a message enters a hive, we first pass that message
 to the `map` function of the registered message handlers.
-Then, we relay the message to hive that has all the keys
+Then, we relay the message to the hive that has all the keys
 in the mapped cell and that hive in return calls the `rcv`
 function of that message handler.
+If there is no such hive, we elect one and relay the message.
 
 Internally, each hive has a set of go-routines called _bees_.
 Each bee exclusively owns a set of cells. These cells are
-the cells that must be collocated to preserve application's
+the cells that must be collocated to preserve state
 consistency. Cells are locked by bees using the internal
-distributed consensus mechanism. Bees are persistent and
+distributed consensus mechanism. Bees can be persistent and
 fault-tolerant. When a hive crashes, we reload all the bees.
 And when a bee fails, we hand its cells and workload to other
 bees in the cluster.
-
 Moreover, for replicated applications the main bee will form
 a colony of bees (itself and some other bees on other hives)
 and will consistently replicate its cells.
@@ -92,24 +93,24 @@ Beehive is:
 
 ## Installation
 
-To install Beehive, you need to install go (preferably version 1.2+).
+_Prerequisite_ you need to install go (preferably version 1.2+) and set up your GOPATH.
 
-After you install go and set up your GOPATH, just run:
+To install Beehive, run:
 
 ```
 # go get github.com/kandoo/beehive
 ```
 
-To test your setup, enter beehive's root directory and run:
+To test your setup, enter Beehive's root directory and run:
 ```
 # go build
 ```
 
 ## Hello World!
-Let's write an application that says hello to a person
+Let's write an application that prints hello to a given name
 and counts the number of hellos it has said to that name.
-To implement that, we first need a message handler: a rcv
-function and map function:
+To implement that, we first need a message handler, a rcv
+function and a map function:
 
 ```go
 func mapf(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
@@ -117,8 +118,8 @@ func mapf(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 }
 ```
 
-Here, we map the message based on the string in the message data
-(the name in our example). This ensures that all messages
+Here, we map an incoming message based on the string in its data
+(i.e., the name in our example). This ensures that all messages
 with that name will be processed by the same bee.
 
 ```go
@@ -126,13 +127,11 @@ func rcvf(msg bh.Msg, ctx bh.RcvContext) error {
 	name := msg.Data().(string)
 	v, err := ctx.Dict(helloDict).Get(name)
 	if err != nil {
-		fmt.Printf("%v> Hello %s!\n", ctx.ID(), name)
-		ctx.Dict(helloDict).Put(name, []byte{1})
-		return nil
+		v = []byte{0}
 	}
 
 	cnt := v[0] + 1
-	fmt.Printf("%v> hello %s for the %d'th time!\n", ctx.ID(), name, cnt)
+	fmt.Printf("%v> hello %s (%d)!\n", ctx.ID(), name, cnt)
 	ctx.Dict(helloDict).Put(name, []byte{cnt})
 	return nil
 }
@@ -141,9 +140,8 @@ func rcvf(msg bh.Msg, ctx bh.RcvContext) error {
 In the receive function, we simply lookup the name in the
 hello dictionary and find out how many times we have said
 hello for this name. Then we say hello accordingly!
-Note that `ctx.ID()` prints the bee ID for us.
-Later we see that two different names will be handled by two
-different bees.
+Note that `ctx.ID()` prints the bee ID for us. Later, we will
+see that two different names will be handled by two different bees.
 
 To use these functions, one needs to create an application
 and register these functions as a handler for type `string`.
@@ -151,6 +149,7 @@ and register these functions as a handler for type `string`.
 ```go
 func main() {
 	app := bh.NewApp("HelloWorld")
+	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
 	app.HandleFunc(string(""), mapf, rcvf)
 	...
 }
@@ -160,31 +159,29 @@ After that, she needs to start the hive and emit messages:
 
 ```go
 func main() {
-func main() {
 	app := bh.NewApp("HelloWorld")
+	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
 	app.HandleFunc(string(""), mapf, rcvf)
-	name1 := "First"
-	name2 := "Second"
-	go bh.Emit(name1)
-	go bh.Emit(name2)
-	go bh.Emit(name1)
-	go bh.Emit(name1)
-	go bh.Emit(name2)
-	go bh.Emit(name1)
+	name1 := "1st name"
+	name2 := "2nd name"
+	for i := 0; i < 3; i++ {
+		go bh.Emit(name1)
+		go bh.Emit(name2)
+	}
 	bh.Start()
 }
 ```
 
 The output of this application will be (or with a slightly different
-order and btw lets ignore the typo in 2'th and 3'th ;) ):
+order and with an occasional raft logs ;) ):
 
 ```
-1> Hello First!
-2> Hello Second!
-2> hello Second for the 2'th time!
-1> hello First for the 2'th time!
-1> hello First for the 3'th time!
-1> hello First for the 4'th time!
+2> hello 2nd name (1)!
+2> hello 2nd name (2)!
+1> hello 1st name (1)!
+2> hello 2nd name (3)!
+1> hello 1st name (2)!
+1> hello 1st name (3)!
 ```
 
 Note that "First" and "Second" are handled by different bees.
