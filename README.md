@@ -1,10 +1,4 @@
 # Beehive
-Beehive is an easy to program distributed message processing platform.
-
-# Examples
-https://github.com/kandoo/beehive/blob/master/examples/
-
-# Beehive
 A distributed messaging platform focused on simplicity. Our goal
 is to create a programming model that is almost identical to a
 centralized application yet can be automatically distribute and
