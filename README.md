@@ -196,7 +196,7 @@ order and btw lets ignore the typo in 2'th and 3'th ;) ):
 Note that "First" and "Second" are handled by different bees.
 
 You can find the complete code on
-[the Hello World example](https://github.com/kandoo/beehive/tree/master/examples/helloworld)
+[the Hello World example](https://github.com/kandoo/beehive/tree/master/examples/helloworld/helloworld.go)
 
 ## More Examples
 - [Calculator](https://github.com/kandoo/beehive/tree/master/examples/calc)
