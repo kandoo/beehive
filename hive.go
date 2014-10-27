@@ -95,18 +95,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	gob.Register(Colony{})
 	gob.Register(msg{})
 	gob.Register(cmd{})
-	gob.Register(cmdResult{})
-	gob.Register(cmdStop{})
-	gob.Register(cmdStart{})
-	gob.Register(cmdSync{})
-	gob.Register(cmdCampaign{})
-	gob.Register(cmdFindBee{})
-	gob.Register(cmdNewHiveID{})
-	gob.Register(cmdAddHive{})
-	gob.Register(cmdCreateBee{})
-	gob.Register(cmdReloadBee{})
-	gob.Register(cmdLiveHives{})
-	gob.Register(cmdJoinColony{})
 	gob.Register(bhgob.GobError{})
 	gob.Register(commitTx{})
 
@@ -297,7 +285,7 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		h.node.Stop()
 		cc.ch <- cmdResult{}
 
-	case cmdPingHive:
+	case cmdPing:
 		cc.ch <- cmdResult{}
 
 	case cmdSync:
@@ -481,7 +469,7 @@ func (h *hive) Stop() error {
 }
 
 func (h *hive) waitUntilStarted() {
-	h.sendCmd(cmdPingHive{})
+	h.sendCmd(cmdPing{})
 }
 
 func (h *hive) sendCmd(cmd interface{}) (interface{}, error) {

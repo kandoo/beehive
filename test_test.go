@@ -14,7 +14,7 @@ func waitTilStareted(h Hive) {
 }
 
 func pingHive(h Hive) {
-	h.(*hive).sendCmd(cmdPingHive{})
+	h.(*hive).sendCmd(cmdPing{})
 }
 
 var (
