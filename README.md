@@ -1,7 +1,7 @@
 # Beehive
 A distributed messaging platform focused on simplicity. Our goal
 is to create a programming model that is almost identical to a
-centralized application yet can be automatically distribute and
+centralized application yet can be automatically distributed and
 optimized. Beehive comes with built-in support for transactions,
 replication, fault-tolerance, runtime instrumentation, and optimized
 placement.
