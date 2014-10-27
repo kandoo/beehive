@@ -150,7 +150,7 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 		return nil, r.transfer(tr)
 	}
 
-	glog.Error("%v cannot handle %v", r, req)
+	glog.Errorf("%v cannot handle %v", r, req)
 	return nil, ErrUnsupportedRequest
 }
 

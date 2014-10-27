@@ -212,7 +212,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
 	if id1 != 3 {
-		t.Errorf("different bees want=3 given=%v", id1, id2)
+		t.Errorf("different bees want=3 given=%v", id1)
 	}
 	if id1 != id2 {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
@@ -272,7 +272,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
 	if id1 != 3 {
-		t.Errorf("different bees want=3 given=%v", id1, id2)
+		t.Errorf("different bees want=3 given=%v", id1)
 	}
 	if id1 != id2 {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
@@ -342,7 +342,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
 	if id1 != 4 {
-		t.Errorf("different bees want=4 given=%v", id1, id2)
+		t.Errorf("different bees want=4 given=%v", id1)
 	}
 	if id1 != id2 {
 		t.Errorf("different bees want=%v given=%v", id1, id2)

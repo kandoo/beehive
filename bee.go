@@ -226,7 +226,7 @@ func (b *localBee) setState(s state.State) {
 func (b *localBee) start() {
 	if !b.colony().IsNil() && b.app.Persistent() {
 		if err := b.startNode(); err != nil {
-			glog.Errorf("%v cannot start raft: %v", err)
+			glog.Errorf("%v cannot start raft: %v", b, err)
 			return
 		}
 	}
@@ -477,7 +477,6 @@ func (b *localBee) ReplyTo(msg Msg, reply interface{}) error {
 
 func (b *localBee) Lock(keys []CellKey) error {
 	panic("error FIXME bee.LOCK")
-	return nil
 }
 
 func (b *localBee) SetBeeLocal(d interface{}) {
@@ -664,60 +663,6 @@ func (b *localBee) CommitTx() error {
 	}
 
 	return b.replicate()
-
-	//b.tx.Ops = b.txState().Tx()
-	//if b.tx.IsEmpty() {
-	//b.tx.Seq--
-	//return b.doCommitTx()
-	//}
-
-	//colony := b.colony()
-	//if len(colony.Slaves) < b.app.CommitThreshold() {
-	//if err := b.tryToRecruitSlaves(); err != nil {
-	//glog.Errorf("Cannot create enough slaves to commit the transaction: %v",
-	//err)
-	//b.AbortTx()
-	//return fmt.Errorf("Not enough slaves to commit the transaction: %v", err)
-	//}
-	//}
-
-	//b.tx.Generation = colony.Generation
-
-	//retries := 5
-	//for {
-	//lives, deads := b.replicateTxOnAllSlaves(b.tx)
-	//if len(lives) >= b.app.CommitThreshold() {
-	//break
-	//}
-
-	//glog.Warningf("Replicated less than commit threshold %v", len(lives))
-
-	//if retries == 0 {
-	//// TODO(soheil): Should we really fail here?
-	//b.AbortTx()
-	//return fmt.Errorf("Can only replicate to %v slaves", len(lives))
-	//}
-	//retries--
-	//time.Sleep(5 * time.Millisecond)
-	//for _, s := range deads {
-	//glog.V(2).Infof("Trying to replace slave %v", s)
-	//b.handleSlaveFailure(s)
-	//}
-	//glog.V(2).Infof("Allocated new slaves will retry")
-	//}
-
-	//if err := b.doCommitTx(); err != nil {
-	//glog.Fatalf("Error in committing the transaction: %v", err)
-	//}
-
-	//b.txBuf = append(b.txBuf, b.tx)
-
-	//if err := b.sendCommitToAllSlaves(b.tx.Seq); err != nil {
-	//glog.Errorf("Cannot notify all salves about transaction: %v", err)
-	//}
-
-	//glog.V(2).Infof("Bee %v committed tx #%v", b, b.tx.Seq)
-	return nil
 }
 
 func (b *localBee) AbortTx() error {

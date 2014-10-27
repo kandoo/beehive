@@ -95,7 +95,7 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		case res := <-ch:
 			if res.Err != nil {
 				glog.Errorf("Error in running the remote command: %v", res.Err)
-				res.Err = bhgob.GobError{res.Err.Error()}
+				res.Err = bhgob.GobError{Err: res.Err.Error()}
 			}
 
 			if err := gob.NewEncoder(w).Encode(res); err != nil {
@@ -135,7 +135,8 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	a, ok := h.srv.hive.app(vars["app"])
 	if !ok {
-		http.Error(w, fmt.Sprintf("cannot find app %s", a), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("cannot find app %s", a.Name()),
+			http.StatusBadRequest)
 		return
 	}
 

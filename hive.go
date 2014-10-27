@@ -113,9 +113,9 @@ func NewHive() Hive {
 func init() {
 	flag.StringVar(&DefaultCfg.Addr, "laddr", "localhost:7767",
 		"The listening address used to communicate with other nodes")
-	flag.Var(&bhflag.CSV{&DefaultCfg.PeerAddrs}, "paddrs",
+	flag.Var(&bhflag.CSV{S: &DefaultCfg.PeerAddrs}, "paddrs",
 		"Address of peers. Seperate entries with a comma")
-	flag.Var(&bhflag.CSV{&DefaultCfg.RegAddrs}, "raddrs",
+	flag.Var(&bhflag.CSV{S: &DefaultCfg.RegAddrs}, "raddrs",
 		"Address of etcd machines. Separate entries with a comma ','")
 	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
 		"Buffer size of data channels")

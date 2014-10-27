@@ -522,7 +522,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 
 handoff:
 	if _, err = oldb.processCmd(cmdHandoff{To: newb}); err != nil {
-		glog.Errorf("%v cannot handoff to %v: %v", oldb, newb)
+		glog.Errorf("%v cannot handoff to %v: %v", oldb, newb, err)
 	}
 	return newb, err
 }
