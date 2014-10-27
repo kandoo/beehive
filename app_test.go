@@ -10,7 +10,7 @@ type AppTestMsg int
 func TestPersistentApp(t *testing.T) {
 	cfg := DefaultCfg
 	cfg.StatePath = "/tmp/bhtest"
-	cfg.Addr = "127.0.0.1:7767"
+	cfg.Addr = newHiveAddrForTest()
 	defer removeState(cfg)
 	h := NewHiveWithConfig(cfg)
 
@@ -59,7 +59,7 @@ func TestReplicatedApp(t *testing.T) {
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = "127.0.0.1:7767"
+	cfg1.Addr = newHiveAddrForTest()
 	defer removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
@@ -68,8 +68,8 @@ func TestReplicatedApp(t *testing.T) {
 
 	cfg2 := DefaultCfg
 	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = "127.0.0.1:7777"
-	cfg2.PeerAddrs = []string{"127.0.0.1:7767"}
+	cfg2.Addr = newHiveAddrForTest()
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	defer removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
@@ -78,8 +78,8 @@ func TestReplicatedApp(t *testing.T) {
 
 	cfg3 := DefaultCfg
 	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = "127.0.0.1:7787"
-	cfg3.PeerAddrs = []string{"127.0.0.1:7767"}
+	cfg3.Addr = newHiveAddrForTest()
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	defer removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
@@ -101,7 +101,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = "127.0.0.1:7767"
+	cfg1.Addr = newHiveAddrForTest()
 	defer removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
@@ -110,8 +110,8 @@ func TestReplicatedAppFailure(t *testing.T) {
 
 	cfg2 := DefaultCfg
 	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = "127.0.0.1:7777"
-	cfg2.PeerAddrs = []string{"127.0.0.1:7767"}
+	cfg2.Addr = newHiveAddrForTest()
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	defer removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
@@ -120,8 +120,8 @@ func TestReplicatedAppFailure(t *testing.T) {
 
 	cfg3 := DefaultCfg
 	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = "127.0.0.1:7787"
-	cfg3.PeerAddrs = []string{"127.0.0.1:7767"}
+	cfg3.Addr = newHiveAddrForTest()
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	defer removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)

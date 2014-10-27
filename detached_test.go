@@ -36,6 +36,8 @@ func (d *testDetachedHandler) Rcv(msg Msg, ctx RcvContext) error {
 }
 
 func TestDetached(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.Addr = newHiveAddrForTest()
 	h := NewHive()
 	app := h.NewApp("TestDetached")
 
