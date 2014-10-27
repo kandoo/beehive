@@ -16,6 +16,12 @@ type cmdNewHiveID struct {
 
 type cmdSync struct{}
 
+type cmdCampaign struct{}
+
+type cmdHandoff struct {
+	To uint64
+}
+
 type cmdAddHive struct {
 	Info raft.NodeInfo
 }

@@ -283,40 +283,51 @@ func (b *localBee) handleMsg(mh msgAndHandler) {
 
 func (b *localBee) handleCmd(cc cmdAndChannel) {
 	glog.V(2).Infof("%v handles command %v", b, cc.cmd)
-
+	var err error
+	var data interface{}
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		b.status = beeStatusStopped
 		if b.node != nil {
 			b.node.Stop()
 		}
-		cc.ch <- cmdResult{}
 		glog.V(2).Infof("%v stopped", b)
 
 	case cmdStart:
 		b.status = beeStatusStarted
-		cc.ch <- cmdResult{}
 		glog.V(2).Infof("%v started", b)
 
 	case cmdSync:
-		_, err := b.node.Process(context.TODO(), noOp{})
-		cc.ch <- cmdResult{Err: err}
+		_, err = b.node.Process(context.TODO(), noOp{})
+
+	case cmdCampaign:
+		err = b.node.Campaign(context.TODO())
+
+	case cmdHandoff:
+		err = b.handoff(cmd.To)
 
 	case cmdJoinColony:
 		if !cmd.Colony.Contains(b.ID()) {
-			cc.ch <- cmdResult{
-				Err: fmt.Errorf("%v is not in this colony %v", b, cmd.Colony),
-			}
+			err = fmt.Errorf("%v is not in this colony %v", b, cmd.Colony)
 		}
 		if !b.colony().IsNil() {
-			cc.ch <- cmdResult{
-				Err: fmt.Errorf("%v is already in colony %v", b, b.colony()),
-			}
+			err = fmt.Errorf("%v is already in colony %v", b, b.colony())
+			break
 		}
 		b.setColony(cmd.Colony)
 		b.startNode()
-		cc.ch <- cmdResult{}
 
+	default:
+		err = fmt.Errorf("Unknown bee command %#v", cmd)
+		glog.Error(err.Error())
+	}
+
+	if cc.ch != nil {
+		cc.ch <- cmdResult{
+			Data: data,
+			Err:  err,
+		}
+	}
 	// FIXME REFACTOR
 	//case addMappedCells:
 	//b.addMappedCells(cmd.Cells)
@@ -380,16 +391,6 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 	//cc.ch <- cmdResult{
 	//Data: b.getTxInfo(),
 	//}
-
-	default:
-		if cc.ch != nil {
-			err := fmt.Errorf("Unknown bee command %#v", cmd)
-			glog.Error(err.Error())
-			cc.ch <- cmdResult{
-				Err: err,
-			}
-		}
-	}
 }
 
 func (b *localBee) enqueMsg(mh msgAndHandler) {
@@ -650,9 +651,9 @@ func (b *localBee) recruiteFollowers() (recruited int) {
 			break
 		}
 
+		blacklist = append(blacklist, hives[0])
 		prx, err := b.hive.newProxy(hives[0])
 		if err != nil {
-			blacklist = append(blacklist, hives[0])
 			continue
 		}
 		glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
@@ -663,13 +664,11 @@ func (b *localBee) recruiteFollowers() (recruited int) {
 		})
 		if err != nil {
 			glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
-			blacklist = append(blacklist, hives[0])
 			continue
 		}
 		fid := res.(uint64)
 		if err = b.addFollower(fid, hives[0]); err != nil {
 			glog.Errorf("%v cannot add %v as a follower: %v", b, fid, err)
-			blacklist = append(blacklist, hives[0])
 			continue
 		}
 		recruited++
@@ -678,6 +677,29 @@ func (b *localBee) recruiteFollowers() (recruited int) {
 
 	glog.V(2).Infof("%v recruited %d followers", b, recruited)
 	return recruited
+}
+
+func (b *localBee) handoff(to uint64) error {
+	if !b.colony().IsFollower(to) {
+		return fmt.Errorf("%v is not a follower of %v", to, b)
+	}
+
+	if _, err := b.qee.sendCmdToBee(to, cmdSync{}); err != nil {
+		return err
+	}
+	b.node.Stop()
+
+	ch := make(chan error)
+	go func() {
+		_, err := b.qee.sendCmdToBee(to, cmdCampaign{})
+		ch <- err
+	}()
+
+	time.Sleep(10 * defaultRaftTick)
+	if err := b.startNode(); err != nil {
+		glog.Fatalf("%v cannot restart node: %v", b, err)
+	}
+	return <-ch
 }
 
 func (b *localBee) tx() Tx {

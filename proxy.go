@@ -114,6 +114,18 @@ func (b *proxyBee) handleMsg(mh msgAndHandler) {
 	}
 }
 
+func (b *proxyBee) handleCmd(cc cmdAndChannel) {
+	switch cc.cmd.Data.(type) {
+	case cmdStop, cmdStart:
+		b.localBee.handleCmd(cc)
+	default:
+		d, err := b.proxy.sendCmd(&cc.cmd)
+		if cc.ch != nil {
+			cc.ch <- cmdResult{Data: d, Err: err}
+		}
+	}
+}
+
 func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 	d, err := m.Marshal()
 	if err != nil {

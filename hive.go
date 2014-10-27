@@ -99,6 +99,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	gob.Register(cmdStop{})
 	gob.Register(cmdStart{})
 	gob.Register(cmdSync{})
+	gob.Register(cmdCampaign{})
 	gob.Register(cmdFindBee{})
 	gob.Register(cmdNewHiveID{})
 	gob.Register(cmdAddHive{})

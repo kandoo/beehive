@@ -210,9 +210,10 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 			!q.isLocalBee(info) {
 
 			if b, err := q.newProxyBee(info); err == nil {
-				glog.Warningf("cannot create proxy to %#v", info)
 				b.enqueCmd(cc)
 				return
+			} else {
+				glog.Warningf("cannot create proxy to %#v", info)
 			}
 		}
 
