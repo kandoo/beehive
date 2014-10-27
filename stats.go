@@ -1,22 +1,30 @@
-package bh
+package beehive
 
 import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"strconv"
 	"time"
 
-	"github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/state"
 )
 
 type statCollector interface {
-	collect(from, to BeeID, msg Msg)
+	collect(from, to uint64, msg Msg, emitted []Msg)
 }
 
 type dummyStatCollector struct{}
 
-func (c *dummyStatCollector) collect(from, to BeeID, msg Msg) {}
-func (c *dummyStatCollector) init(h Hive)                     {}
+func (c *dummyStatCollector) collect(from, to uint64, msg Msg, emitted []Msg) {}
+
+const (
+	appStatCollectorName = "BeehiveStatCollector"
+	localStatDict        = "LocalStatDict"
+	aggrStatDict         = "AggrStatDict"
+	aggrHeatDict         = "AggrHeatDict"
+)
 
 type appStatCollector struct {
 	hive Hive
@@ -24,44 +32,39 @@ type appStatCollector struct {
 
 func newAppStatCollector(h Hive) statCollector {
 	c := &appStatCollector{hive: h}
-	a := h.NewApp("StatCollector")
+	a := h.NewApp(appStatCollectorName)
 	a.Handle(localStatUpdate{}, &localStatCollector{})
-	a.Handle(migrateBeeCmd{}, &localStatCollector{})
+	a.Handle(cmdMigrate{}, &localStatCollector{})
 	a.Handle(aggrStatUpdate{}, &optimizer{})
-	glog.V(1).Infof("App stat collector is registered.")
+	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
 }
 
-func (c *appStatCollector) collect(from, to BeeID, msg Msg) {
+func (c *appStatCollector) collect(from, to uint64, msg Msg, emitted []Msg) {
 	switch msg.Data().(type) {
-	case localStatUpdate, aggrStatUpdate, heartbeatReq, heartbeatRes:
+	case localStatUpdate, aggrStatUpdate:
 		return
 	}
 
-	if from.IsNil() || to.IsNil() {
+	if from == Nil || to == Nil {
 		return
 	}
 
-	glog.V(3).Infof("Stat collector collects a new message from: %+v --> %+v",
-		from, to)
+	glog.V(3).Infof("Stat collector collects new %v message from %v --> %v",
+		msg.Type(), from, to)
+	// TODO(soheil): We should batch here.
 	c.hive.Emit(localStatUpdate{from, to, 1})
 }
 
-const (
-	localStatDict = "LocalStatistics"
-	aggrStatDict  = "AggregatedStatDict"
-	aggrHeatDict  = "AggregatedHeapDict"
-)
-
 type localStatUpdate struct {
-	From  BeeID
-	To    BeeID
+	From  uint64
+	To    uint64
 	Count uint64
 }
 
 type communicationStat struct {
-	From      BeeID
-	To        BeeID
+	From      uint64
+	To        uint64
 	Count     uint64
 	LastCount uint64
 	LastEvent time.Time
@@ -95,7 +98,7 @@ func (s *communicationStat) add(count uint64) {
 }
 
 func (s *communicationStat) toAggrStat() aggrStatUpdate {
-	if s.From.IsNil() {
+	if s.From == Nil {
 		panic(s)
 	}
 	u := aggrStatUpdate{s.From, s.To, s.Count}
@@ -114,12 +117,8 @@ func (s *communicationStat) timeSinceLastEvent() time.Duration {
 
 type localStatCollector struct{}
 
-func (u *localStatUpdate) Key() Key {
-	return Key(fmt.Sprintf("%#v-%#v", u.From, u.To))
-}
-
-func (u *localStatUpdate) localCommunication() bool {
-	return u.From.HiveID == u.To.HiveID
+func (u *localStatUpdate) key() string {
+	return fmt.Sprintf("%#v-%#v", u.From, u.To)
 }
 
 func (u *localStatUpdate) selfCommunication() bool {
@@ -128,14 +127,18 @@ func (u *localStatUpdate) selfCommunication() bool {
 
 func (c *localStatCollector) Map(msg Msg, ctx MapContext) MappedCells {
 	u := msg.Data().(localStatUpdate)
-	return MappedCells{{localStatDict, u.Key()}}
+	return MappedCells{{localStatDict, u.key()}}
+}
+
+func beeInfoFromContext(ctx RcvContext, bid uint64) (BeeInfo, error) {
+	return ctx.Hive().(*hive).registry.bee(bid)
 }
 
 func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 	switch m := msg.Data().(type) {
 	case localStatUpdate:
 		d := ctx.Dict(localStatDict)
-		k := m.Key()
+		k := m.key()
 		v, err := d.Get(k)
 		var s communicationStat
 		if err == nil {
@@ -147,22 +150,26 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 		s.add(m.Count)
 
 		if s.countSinceLastEvent() < 10 || s.timeSinceLastEvent() < 1*time.Second {
-			d.Put(k, Value(s.Bytes()))
+			d.Put(k, s.Bytes())
 			return nil
 		}
 
 		ctx.Emit(s.toAggrStat())
-		d.Put(k, Value(s.Bytes()))
+		d.Put(k, s.Bytes())
 
-	case migrateBeeCmd:
-		a, ok := ctx.(*localBee).hive.app(m.From.AppName)
-		if !ok {
-			return fmt.Errorf("Cannot find app for migrate command: %+v", m)
+	case cmdMigrate:
+		cmd := cmd{
+			App:  ctx.App(),
+			Data: m,
 		}
-
-		resCh := make(chan CmdResult)
-		a.qee.ctrlCh <- NewLocalCmd(m, BeeID{}, resCh)
-		<-resCh
+		q := ctx.(*localBee).qee
+		_, err := q.processCmd(cmd)
+		if err != nil {
+			glog.Errorf(
+				"%v cannot migrate bee %v to %v as instructed by the optimizer", c,
+				m.Bee, m.To)
+		}
+		return err
 		// TODO(soheil): Maybe handle errors.
 	}
 
@@ -171,17 +178,17 @@ func (c *localStatCollector) Rcv(msg Msg, ctx RcvContext) error {
 
 type aggrStatUpdate localStatUpdate
 
-func (a *aggrStatUpdate) Key() Key {
-	return a.To.Key()
+func (a *aggrStatUpdate) key() string {
+	return strconv.FormatUint(a.To, 10)
 }
 
-func (a *aggrStatUpdate) ReverseKey() Key {
-	return a.From.Key()
+func (a *aggrStatUpdate) reverseKey() string {
+	return strconv.FormatUint(a.From, 10)
 }
 
 type aggrStat struct {
 	Migrated bool
-	Matrix   map[HiveID]uint64
+	Matrix   map[uint64]uint64
 }
 
 func aggrStatFromBytes(b []byte) aggrStat {
@@ -201,18 +208,18 @@ func (s *aggrStat) Bytes() []byte {
 
 type optimizer struct{}
 
-func (o *optimizer) stat(id BeeID, dict Dict) aggrStat {
-	v, err := dict.Get(id.Key())
+func (o *optimizer) stat(to string, dict state.Dict) aggrStat {
+	v, err := dict.Get(to)
 	if err != nil {
 		return aggrStat{
-			Matrix: make(map[HiveID]uint64),
+			Matrix: make(map[uint64]uint64),
 		}
 	}
 
 	return aggrStatFromBytes([]byte(v))
 }
 
-type HiveIDSlice []HiveID
+type HiveIDSlice []uint64
 
 func (s HiveIDSlice) Len() int           { return len(s) }
 func (s HiveIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
@@ -221,50 +228,58 @@ func (s HiveIDSlice) Less(i, j int) bool { return s[i] < s[j] }
 func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	glog.V(3).Infof("Received stat update: %+v", msg.Data())
 	update := msg.Data().(aggrStatUpdate)
-	if update.To.Detached {
+	tob, err := beeInfoFromContext(ctx, update.To)
+	if err != nil {
+		return err
+	}
+
+	if tob.Detached {
 		return nil
 	}
 
 	dict := ctx.Dict(aggrStatDict)
-	stat := o.stat(update.To, dict)
-	if stat.Migrated || o.stat(update.From, dict).Migrated {
+	stat := o.stat(update.key(), dict)
+	if stat.Migrated || o.stat(update.reverseKey(), dict).Migrated {
 		return nil
 	}
 
-	stat.Matrix[update.From.HiveID] += update.Count
-	defer func() {
-		dict.Put(update.To.Key(), stat.Bytes())
-	}()
+	fromb, err := beeInfoFromContext(ctx, update.From)
+	if err != nil {
+		return err
+	}
 
-	a, ok := ctx.Hive().(*hive).app(update.To.AppName)
+	stat.Matrix[fromb.Hive] += update.Count
+	defer dict.Put(update.key(), stat.Bytes())
+
+	a, ok := ctx.Hive().(*hive).app(tob.App)
 	if !ok {
-		return fmt.Errorf("App not found: %s", update.To.AppName)
+		return fmt.Errorf("%v does not have app %s", ctx.Hive(), tob.App)
 	}
 
 	if a.Sticky() {
 		return nil
 	}
 
-	max := uint64(0)
-	maxHive := HiveID("")
+	var max uint64
+	maxHive := Nil
 	for id, cnt := range stat.Matrix {
 		if max < cnt {
 			max = cnt
 			maxHive = id
 		}
 
-		if max == cnt && update.To.HiveID == id {
+		if max == cnt && tob.Hive == id {
 			max = cnt
 			maxHive = id
 		}
 	}
 
-	if maxHive == "" || update.To.HiveID == maxHive {
+	if maxHive == Nil || maxHive == tob.Hive {
 		return nil
 	}
 
-	glog.Infof("Initiating a migration: %+v", update)
-	ctx.SendToBee(migrateBeeCmd{update.To, maxHive}, msg.From())
+	glog.Infof("%v initiates migration of %v to %v", ctx, update.To, maxHive)
+	ctx.SendToBee(cmdMigrate{update.To, maxHive}, msg.From())
 
 	stat.Migrated = true
 	return nil

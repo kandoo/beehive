@@ -91,14 +91,11 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
 
-	//if h.config.Instrument {
-	//h.collector = newAppStatCollector(h)
-	//} else {
-	//h.collector = &dummyStatCollector{}
-	//}
-	//startHeartbeatHandler(h)
-	//h.replStrategy = newRndReplication(h)
-
+	if h.config.Instrument {
+		h.collector = newAppStatCollector(h)
+	} else {
+		h.collector = &dummyStatCollector{}
+	}
 	return h
 }
 
@@ -176,8 +173,7 @@ type hive struct {
 	client   *http.Client
 
 	replStrategy replicationStrategy
-	// FIXME REFACTOR
-	//collector statCollector
+	collector    statCollector
 }
 
 func (h *hive) ID() uint64 {
@@ -195,11 +191,6 @@ func (h *hive) Config() HiveConfig {
 func (h *hive) RegisterMsg(msg interface{}) {
 	gob.Register(msg)
 }
-
-// FIXME REFACTOR
-//func (h *hive) isolated() bool {
-//return !h.registry.connected()
-//}
 
 func (h *hive) app(name string) (*app, bool) {
 	a, ok := h.apps[name]

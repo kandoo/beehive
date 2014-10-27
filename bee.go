@@ -268,6 +268,9 @@ func (b *localBee) callRcv(mh msgAndHandler) {
 		b.recoverFromError(mh, err, false)
 		return
 	}
+
+	// FIXME(soheil): Provenence works when the application is transactional.
+	b.hive.collector.collect(mh.msg.MsgFrom, b.beeID, mh.msg, b.bufferedMsgs)
 }
 
 func (b *localBee) handleMsg(mh msgAndHandler) {
@@ -282,8 +285,6 @@ func (b *localBee) handleMsg(mh msgAndHandler) {
 	if err := b.CommitTx(); err != nil && b.app.Transactional() {
 		glog.Errorf("%v cannot commit a transaction : %v", b, err)
 	}
-	// FIXME REFACTOR
-	// b.hive.collector.collect(mh.msg.MsgFrom, b.beeID, mh.msg)
 }
 
 func (b *localBee) handleCmd(cc cmdAndChannel) {
