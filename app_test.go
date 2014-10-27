@@ -218,6 +218,137 @@ func TestReplicatedAppHandoff(t *testing.T) {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
+	h1.Stop()
+	h2.Stop()
+	h3.Stop()
+}
+
+func TestReplicatedAppMigrateToFollower(t *testing.T) {
+	ch := make(chan uint64)
+
+	cfg1 := DefaultCfg
+	cfg1.StatePath = "/tmp/bhtest1"
+	cfg1.Addr = newHiveAddrForTest()
+	defer removeState(cfg1)
+	h1 := NewHiveWithConfig(cfg1)
+	app1 := registerPersistentApp(h1, ch)
+	go h1.Start()
+	waitTilStareted(h1)
+
+	cfg2 := DefaultCfg
+	cfg2.StatePath = "/tmp/bhtest2"
+	cfg2.Addr = newHiveAddrForTest()
+	cfg2.PeerAddrs = []string{cfg1.Addr}
+	defer removeState(cfg2)
+	h2 := NewHiveWithConfig(cfg2)
+	registerPersistentApp(h2, ch)
+	go h2.Start()
+	waitTilStareted(h2)
+
+	cfg3 := DefaultCfg
+	cfg3.StatePath = "/tmp/bhtest3"
+	cfg3.Addr = newHiveAddrForTest()
+	cfg3.PeerAddrs = []string{cfg1.Addr}
+	defer removeState(cfg3)
+	h3 := NewHiveWithConfig(cfg3)
+	registerPersistentApp(h3, ch)
+	go h3.Start()
+	waitTilStareted(h3)
+
+	h1.Emit(AppTestMsg(0))
+	<-ch
+	h1.Emit(AppTestMsg(0))
+	id0 := <-ch
+
+	_, err := app1.(*app).qee.processCmd(cmdMigrate{
+		Bee: id0,
+		To:  h3.ID(),
+	})
+	if err != nil {
+		t.Errorf("cannot handoff bee: %v", err)
+	}
+	h2.Emit(AppTestMsg(0))
+	id1 := <-ch
+	h3.Emit(AppTestMsg(0))
+	id2 := <-ch
+	if id1 != 3 {
+		t.Errorf("different bees want=3 given=%v", id1, id2)
+	}
+	if id1 != id2 {
+		t.Errorf("different bees want=%v given=%v", id1, id2)
+	}
+
+	h1.Stop()
+	h2.Stop()
+	h3.Stop()
+}
+
+func TestReplicatedAppMigrateToNewHive(t *testing.T) {
+	ch := make(chan uint64)
+
+	cfg1 := DefaultCfg
+	cfg1.StatePath = "/tmp/bhtest1"
+	cfg1.Addr = newHiveAddrForTest()
+	defer removeState(cfg1)
+	h1 := NewHiveWithConfig(cfg1)
+	app1 := registerPersistentApp(h1, ch)
+	go h1.Start()
+	waitTilStareted(h1)
+
+	cfg2 := DefaultCfg
+	cfg2.StatePath = "/tmp/bhtest2"
+	cfg2.Addr = newHiveAddrForTest()
+	cfg2.PeerAddrs = []string{cfg1.Addr}
+	defer removeState(cfg2)
+	h2 := NewHiveWithConfig(cfg2)
+	registerPersistentApp(h2, ch)
+	go h2.Start()
+	waitTilStareted(h2)
+
+	cfg3 := DefaultCfg
+	cfg3.StatePath = "/tmp/bhtest3"
+	cfg3.Addr = newHiveAddrForTest()
+	cfg3.PeerAddrs = []string{cfg1.Addr}
+	defer removeState(cfg3)
+	h3 := NewHiveWithConfig(cfg3)
+	registerPersistentApp(h3, ch)
+	go h3.Start()
+	waitTilStareted(h3)
+
+	h1.Emit(AppTestMsg(0))
+	<-ch
+	h1.Emit(AppTestMsg(0))
+	id0 := <-ch
+
+	cfg4 := DefaultCfg
+	cfg4.StatePath = "/tmp/bhtest4"
+	cfg4.Addr = newHiveAddrForTest()
+	cfg4.PeerAddrs = []string{cfg1.Addr}
+	defer removeState(cfg4)
+	h4 := NewHiveWithConfig(cfg4)
+	registerPersistentApp(h4, ch)
+	go h4.Start()
+	waitTilStareted(h4)
+
+	_, err := app1.(*app).qee.processCmd(cmdMigrate{
+		Bee: id0,
+		To:  h4.ID(),
+	})
+	if err != nil {
+		t.Errorf("cannot handoff bee: %v", err)
+	}
+	h2.Emit(AppTestMsg(0))
+	id1 := <-ch
+	h3.Emit(AppTestMsg(0))
+	id2 := <-ch
+	if id1 != 4 {
+		t.Errorf("different bees want=4 given=%v", id1, id2)
+	}
+	if id1 != id2 {
+		t.Errorf("different bees want=%v given=%v", id1, id2)
+	}
+
+	h1.Stop()
 	h2.Stop()
 	h3.Stop()
 }

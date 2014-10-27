@@ -317,6 +317,9 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 		b.setColony(cmd.Colony)
 		b.startNode()
 
+	case cmdAddFollower:
+		err = b.addFollower(cmd.Bee, cmd.Hive)
+
 	default:
 		err = fmt.Errorf("Unknown bee command %#v", cmd)
 		glog.Error(err.Error())

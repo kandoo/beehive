@@ -176,10 +176,32 @@ func (q *qee) processCmd(data interface{}) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (q *qee) sendCmdToBee(bee uint64, data interface{}) (interface{}, error) {
-	ch := make(chan cmdResult)
-	q.ctrlCh <- newCmdAndChannel(data, q.app.Name(), bee, ch)
-	return (<-ch).get()
+func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
+	if b, ok := q.beeByID(bid); ok {
+		ch := make(chan cmdResult)
+		b.enqueCmd(newCmdAndChannel(data, q.app.Name(), bid, ch))
+		return (<-ch).get()
+	}
+
+	info, err := q.hive.registry.bee(bid)
+	if err != nil {
+		return nil, err
+	}
+
+	if q.isLocalBee(info) {
+		glog.Fatalf("%v cannot find local bee %v", q, bid)
+	}
+
+	prx, err := q.hive.newProxy(info.Hive)
+	if err != nil {
+		return nil, err
+	}
+
+	return prx.sendCmd(&cmd{
+		To:   bid,
+		App:  q.app.Name(),
+		Data: data,
+	})
 }
 
 func (q *qee) stopBees() {
@@ -271,11 +293,16 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 				Err:  err,
 			}
 		}
-	// FIXME REFACTOR
-	//case migrateBeeCmd:
-	//q.migrate(cmd.From, cmd.To, cc.ch)
-	//return
 
+	case cmdMigrate:
+		bid, err := q.migrate(cmd.Bee, cmd.To)
+		cc.ch <- cmdResult{
+			Data: bid,
+			Err:  err,
+		}
+		return
+
+	// FIXME REFACTOR
 	//case replaceBeeCmd:
 	//q.replaceBee(cmd, cc.ch)
 	//return
@@ -483,6 +510,60 @@ func (q *qee) beeByCells(cells MappedCells) (bee, error) {
 		glog.Errorf("%v cannot create proxy to %v", q, info.ID)
 	}
 	return b, err
+}
+
+func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
+	if q.isDetached(bid) {
+		return Nil, fmt.Errorf("cannot migrate a detached: %#v", bid)
+	}
+
+	glog.V(2).Infof("%v starts to migrate %v to %v", q, bid, to)
+
+	var prx proxy
+	var res interface{}
+
+	b, ok := q.beeByID(bid)
+	if !ok {
+		return Nil, fmt.Errorf("%v cannot find %v", q, bid)
+	}
+
+	oldb, ok := b.(*localBee)
+	if !ok {
+		return Nil, fmt.Errorf("%v cannot migrate nonlocal bee %v", q, bid)
+	}
+
+	oldc := oldb.colony()
+	for _, f := range oldc.Followers {
+		if info, err := q.hive.bee(f); err == nil && info.Hive == to {
+			glog.V(2).Infof("%v found follower %v on %v, will hand off", q, f, to)
+			newb = f
+			goto handoff
+		}
+	}
+
+	if prx, err = q.hive.newProxy(to); err != nil {
+		return Nil, err
+	}
+
+	res, err = prx.sendCmd(&cmd{
+		App:  q.app.Name(),
+		Data: cmdCreateBee{},
+	})
+	if err != nil {
+		return Nil, err
+	}
+
+	newb = res.(uint64)
+	if _, err = oldb.processCmd(cmdAddFollower{Hive: to, Bee: newb}); err != nil {
+		// TODO(soheil): Maybe stop newb?
+		return Nil, err
+	}
+
+handoff:
+	if _, err = oldb.processCmd(cmdHandoff{To: newb}); err != nil {
+		glog.Errorf("%v cannot handoff to %v: %v", oldb, newb)
+	}
+	return newb, err
 }
 
 // FIXME REFACTOR
@@ -725,114 +806,6 @@ func (q *qee) defaultLocalBee(id uint64, detached bool) localBee {
 //}
 //}
 //return mc
-//}
-
-//func (q *qee) migrate(bee uint64, to uint64, ch chan cmdResult) {
-//if beeID.Detached {
-//err := fmt.Errorf("Cannot migrate a detached: %#v", beeID)
-//resCh <- cmdResult{Err: err}
-//return
-//}
-
-//prx, err := q.hive.newProxy(to)
-//if err != nil {
-//resCh <- cmdResult{Err: err}
-//return
-//}
-
-//glog.V(2).Infof("Migrating %v to %v", beeID, to)
-//oldBee, ok := q.beeByID(beeID)
-//if !ok {
-//err := fmt.Errorf("Bee not found: %v", beeID)
-//resCh <- cmdResult{Err: err}
-//return
-//}
-
-//slaves := oldBee.slaves()
-
-//stopCh := make(chan cmdResult)
-//oldBee.enqueCmd(NewLocalCmd(stopCmd{}, BeeID{}, stopCh))
-//if _, err = (<-stopCh).get(); err != nil {
-//resCh <- cmdResult{Err: err}
-//return
-//}
-
-//glog.V(2).Infof("Bee %v is stopped for migration", oldBee)
-
-//// TODO(soheil): There is a possibility of a deadlock. If the number of
-//// migrrations pass the control channel's buffer size.
-
-//oldColony := Colony{
-//Master: oldBee.id(),
-//Slaves: slaves,
-//}
-
-//newColony := Colony{
-//Slaves: slaves,
-//}
-
-//for _, s := range slaves {
-//if s.HiveID == to {
-//newColony.Master = s
-//newColony.DelSlave(s)
-//break
-//}
-//}
-
-//if newColony.Master.IsNil() {
-//newColony.Master = BeeID{HiveID: to, AppName: beeID.AppName}
-
-//cmd := NewRemoteCmd(createBeeCmd{}, newColony.Master)
-//data, err := prx.sendCmd(&cmd)
-//if err != nil {
-//glog.Errorf("Error in creating a new bee: %s", err)
-//resCh <- cmdResult{nil, err}
-//return
-//}
-
-//newColony.Master = data.(BeeID)
-//} else {
-//newSlave := q.newLocalBee()
-//newSlave.setState(oldBee.txState())
-//newSlave.setTxBuffer(oldBee.txBuffer())
-//newColony.AddSlave(newSlave.id())
-//}
-
-//glog.V(2).Infof("Created a new bee for migration: %v", newColony.Master)
-
-//newBee, err := q.proxyFromLocal(newColony.Master, oldBee.(*localBee))
-//if err != nil {
-//resCh <- cmdResult{nil, err}
-//return
-//}
-//mappedCells := q.mappedCellsOfBee(oldBee.id())
-//q.lockLocally(newBee, mappedCells...)
-
-//go newBee.start()
-
-//glog.V(2).Infof("Local bee is converted to proxy %v", newBee)
-
-//cmd := RemoteCmd{
-//CmdTo: newColony.Master.queen(),
-//Cmd: replaceBeeCmd{
-//OldBees:     oldColony,
-//NewBees:     newColony,
-//State:       oldBee.txState().(*inMemoryState),
-//TxBuf:       oldBee.txBuffer(),
-//MappedCells: mappedCells,
-//},
-//}
-//_, err = prx.sendCmd(&cmd)
-//if err != nil {
-//glog.Errorf("Error in replacing the bee: %s", err)
-//return
-//}
-
-//for _, s := range newColony.Slaves {
-//q.sendJoinColonyCmd(newColony, s)
-//}
-
-//resCh <- cmdResult{newBee, nil}
 //}
 
 //func (q *qee) replaceBee(cmd replaceBeeCmd, resCh chan cmdResult) {

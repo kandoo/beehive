@@ -6,7 +6,10 @@ import (
 	"github.com/kandoo/beehive/raft"
 )
 
-type cmdAddFollower struct{ Hive uint64 }
+type cmdAddFollower struct {
+	Hive uint64
+	Bee  uint64
+}
 type cmdAddHive struct{ Info raft.NodeInfo }
 type cmdCampaign struct{}
 type cmdCreateBee struct{}
