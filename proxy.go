@@ -38,12 +38,13 @@ type proxy struct {
 }
 
 func newProxyWithAddr(client *http.Client, addr string) proxy {
+	// TODO(soheil): add scheme.
 	p := proxy{
 		client:  client,
 		to:      addr,
-		msgURL:  fmt.Sprintf(serverV1MsgFormat, addr),
-		cmdURL:  fmt.Sprintf(serverV1CmdFormat, addr),
-		raftURL: fmt.Sprintf(serverV1RaftFormat, addr),
+		msgURL:  buildURL("http", addr, serverV1MsgPath),
+		cmdURL:  buildURL("http", addr, serverV1CmdPath),
+		raftURL: buildURL("http", addr, serverV1RaftPath),
 	}
 	return p
 }
@@ -152,7 +153,8 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 }
 
 func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
-	url := fmt.Sprintf(serverV1BeeRaftFormat, p.to, app, b)
+	url := buildURL("http", p.to,
+		fmt.Sprintf("%s/%s/%v", serverV1RaftPath, app, b))
 	glog.V(2).Infof("proxy to %v sends bee raft message %v", url, m)
 	return p.doSendRaft(url, m)
 }
