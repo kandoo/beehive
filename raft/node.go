@@ -29,8 +29,8 @@ type SendFunc func(m []raftpb.Message)
 
 // NodeInfo stores the ID and the address of a hive.
 type NodeInfo struct {
-	ID   uint64
-	Addr string
+	ID   uint64 `json:"id"`
+	Addr string `json:"addr"`
 }
 
 // Peer returns a peer which stores the binary representation of the hive info

@@ -3,6 +3,7 @@ package beehive
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,21 +31,23 @@ type proxyBee struct {
 }
 
 type proxy struct {
-	client  *http.Client
-	to      string
-	msgURL  string
-	cmdURL  string
-	raftURL string
+	client   *http.Client
+	to       string
+	stateURL string
+	msgURL   string
+	cmdURL   string
+	raftURL  string
 }
 
 func newProxyWithAddr(client *http.Client, addr string) proxy {
 	// TODO(soheil): add scheme.
 	p := proxy{
-		client:  client,
-		to:      addr,
-		msgURL:  buildURL("http", addr, serverV1MsgPath),
-		cmdURL:  buildURL("http", addr, serverV1CmdPath),
-		raftURL: buildURL("http", addr, serverV1RaftPath),
+		client:   client,
+		to:       addr,
+		stateURL: buildURL("http", addr, serverV1StatePath),
+		msgURL:   buildURL("http", addr, serverV1MsgPath),
+		cmdURL:   buildURL("http", addr, serverV1CmdPath),
+		raftURL:  buildURL("http", addr, serverV1RaftPath),
 	}
 	return p
 }
@@ -157,6 +160,25 @@ func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
 		fmt.Sprintf("%s/%s/%v", serverV1RaftPath, app, b))
 	glog.V(2).Infof("proxy to %v sends bee raft message %v", url, m)
 	return p.doSendRaft(url, m)
+}
+
+func (p proxy) state() (hiveState, error) {
+	s := hiveState{}
+	r, err := p.client.Get(p.stateURL)
+	if err != nil {
+		return s, err
+	}
+
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		var b bytes.Buffer
+		b.ReadFrom(r.Body)
+		return s, errors.New(string(b.Bytes()))
+	}
+
+	dec := json.NewDecoder(r.Body)
+	err = dec.Decode(&s)
+	return s, err
 }
 
 // TODO(soheil): Maybe start should return an error.

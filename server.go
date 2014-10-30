@@ -3,6 +3,7 @@ package beehive
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -16,8 +17,10 @@ import (
 	bhgob "github.com/kandoo/beehive/gob"
 )
 
+// state is served as json while other endpoints serve gob. The reason is that
+// state should be human readable.
 const (
-	serverV1StatusPath  = "/api/v1/status"
+	serverV1StatePath   = "/api/v1/state"
 	serverV1MsgPath     = "/api/v1/msg"
 	serverV1CmdPath     = "/api/v1/cmd"
 	serverV1RaftPath    = "/api/v1/raft"
@@ -53,6 +56,7 @@ type v1Handler struct {
 }
 
 func (h *v1Handler) Install(r *mux.Router) {
+	r.HandleFunc(serverV1StatePath, h.handleHiveState)
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
 	r.HandleFunc(serverV1CmdPath, h.handleCmd)
 	r.HandleFunc(serverV1BeeRaftPath, h.handleBeeRaft)
@@ -184,4 +188,26 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+type hiveState struct {
+	Id    uint64     `json:"id"`
+	Addr  string     `json:"addr"`
+	Peers []HiveInfo `json:"peers"`
+}
+
+func (h *v1Handler) handleHiveState(w http.ResponseWriter, r *http.Request) {
+	s := hiveState{
+		Id:    h.srv.hive.ID(),
+		Addr:  h.srv.hive.config.Addr,
+		Peers: h.srv.hive.registry.hives(),
+	}
+
+	j, err := json.Marshal(s)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(j)
 }
