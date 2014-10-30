@@ -27,8 +27,8 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 	for _, a := range addrs {
 		go func(a string) {
 			p := newProxyWithAddr(client, a)
-			if d, err := p.sendCmd(&cmd{Data: cmdLiveHives{}}); err == nil {
-				ch <- d.([]HiveInfo)
+			if s, err := p.state(); err == nil {
+				ch <- s.Peers
 			}
 		}(a)
 	}
