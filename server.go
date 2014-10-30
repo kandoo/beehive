@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"bytes"
 	"encoding/gob"
 	"fmt"
 	"io/ioutil"
@@ -16,15 +17,21 @@ import (
 )
 
 const (
-	serverV1MsgPath       = "/hive/v1/msg"
-	serverV1MsgFormat     = "http://%s" + serverV1MsgPath
-	serverV1CmdPath       = "/hive/v1/cmd"
-	serverV1CmdFormat     = "http://%s" + serverV1CmdPath
-	serverV1RaftPath      = "/hive/v1/raft"
-	serverV1RaftFormat    = "http://%s" + serverV1RaftPath
-	serverV1BeeRaftPath   = serverV1RaftPath + "/{app}/{id}"
-	serverV1BeeRaftFormat = "http://%s" + serverV1RaftPath + "/%s/%v"
+	serverV1StatusPath  = "/api/v1/status"
+	serverV1MsgPath     = "/api/v1/msg"
+	serverV1CmdPath     = "/api/v1/cmd"
+	serverV1RaftPath    = "/api/v1/raft"
+	serverV1BeeRaftPath = serverV1RaftPath + "/{app}/{id}"
 )
+
+func buildURL(scheme, addr, path string) string {
+	var buffer bytes.Buffer
+	buffer.WriteString(scheme)
+	buffer.WriteString("://")
+	buffer.WriteString(addr)
+	buffer.WriteString(path)
+	return buffer.String()
+}
 
 // server is the HTTP server that act as the remote endpoint for Beehive.
 type server struct {
