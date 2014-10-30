@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultRaftTick = 30 * time.Millisecond
+	defaultRaftTick = 100 * time.Millisecond
 )
 
 type Hive interface {
