@@ -33,7 +33,7 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 		}(a)
 	}
 
-	// Return the first one that returns.
+	// Return the first one.
 	hives := <-ch
 	glog.V(2).Infof("found live hives: %v", hives)
 	infos := make(map[uint64]HiveInfo)
@@ -86,14 +86,15 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 }
 
 func meta(cfg HiveConfig) hiveMeta {
-	m := hiveMeta{
-		Peers: peersInfo(cfg.PeerAddrs),
-	}
+	m := hiveMeta{}
 
 	var dec *gob.Decoder
 	metapath := path.Join(cfg.StatePath, "meta")
 	f, err := os.Open(metapath)
 	if err != nil {
+		// TODO(soheil): We should also update our peer addresses when we have an
+		// existing meta.
+		m.Peers = peersInfo(cfg.PeerAddrs)
 		m.Hive.Addr = cfg.Addr
 		if len(cfg.PeerAddrs) == 0 {
 			// The initial ID is 1. There is no raft node up yet to allocate an ID. So
