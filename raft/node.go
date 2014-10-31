@@ -79,7 +79,7 @@ func init() {
 
 func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 	listener StatusListener, datadir string, store Store, snapCount uint64,
-	ticker <-chan time.Time) *Node {
+	ticker <-chan time.Time, election, heartbeat int) *Node {
 
 	glog.V(2).Infof("creating a new raft node %v (%v) with peers %v", id, name,
 		peers)
@@ -106,7 +106,7 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 		if err != nil {
 			glog.Fatal(err)
 		}
-		n = etcdraft.StartNode(id, peers, 10, 1)
+		n = etcdraft.StartNode(id, peers, election, heartbeat)
 	} else {
 		var index uint64
 		snapshot, err := ss.Load()
@@ -137,7 +137,7 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 			glog.Fatal("id in write-ahead-log is %v and different than %v", walid, id)
 		}
 
-		n = etcdraft.RestartNode(id, 10, 1, snapshot, st, ents)
+		n = etcdraft.RestartNode(id, election, heartbeat, snapshot, st, ents)
 		lastIndex = ents[len(ents)-1].Index
 	}
 
