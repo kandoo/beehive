@@ -21,24 +21,23 @@ func createHive(config bh.HiveConfig, minDriver, maxDriver int,
 	minCol, maxCol int, stickyCollector bool, lockRouter bool, joinCh chan bool) {
 	h := bh.NewHiveWithConfig(config)
 
-	c := h.NewApp("Collector")
+	cOps := []bh.AppOption{}
+	if stickyCollector {
+		cOps = append(cOps, bh.AppSticky)
+	}
+	c := h.NewApp("Collector", cOps...)
 	p := NewPoller(1 * time.Second)
 	c.Detached(p)
 	c.Handle(StatResult{}, &Collector{uint64(maxSpike * (1 - elephantProb)), p})
 	c.Handle(SwitchJoined{}, &SwitchJoinHandler{p})
-	if stickyCollector {
-		c.SetFlags(bh.AppFlagSticky)
-	}
 
-	r := h.NewApp("Router")
+	r := h.NewApp("Router", bh.AppSticky)
 	r.Handle(MatrixUpdate{}, &UpdateHandler{})
-	r.SetFlags(bh.AppFlagSticky)
 
-	d := h.NewApp("Driver")
+	d := h.NewApp("Driver", bh.AppSticky)
 	driver := NewDriver(minDriver, maxDriver-minDriver)
 	d.Handle(StatQuery{}, driver)
 	d.Handle(FlowMod{}, driver)
-	d.SetFlags(bh.AppFlagSticky)
 
 	if lockRouter {
 		h.Emit(MatrixUpdate{})

@@ -2,18 +2,9 @@ package beehive
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/state"
-)
-
-type AppFlag uint64
-
-const (
-	AppFlagSticky        AppFlag = 1 << iota
-	AppFlagPersistent            = 1 << iota
-	AppFlagTransactional         = 1 << iota
 )
 
 // Apps simply process and exchange messages. App methods are not
@@ -39,31 +30,31 @@ type App interface {
 	State() State
 	// Returns the app name.
 	Name() string
+}
 
-	// SetFlags sets the flags for this application.
-	SetFlags(flag AppFlag)
-	// Flags return the flags for this application.
-	Flags() AppFlag
+// AppOption represents an option for applications.
+type AppOption func(a *app)
 
-	// Whether the app is sticky.
-	Sticky() bool
-	// Whether to use the persistent state.
-	Persistent() bool
-	// Whether to use transactions.
-	Transactional() bool
+// AppPersistent is an application option that makes the application's state
+// persistent. The app state will be replciated on "replicationFactor" hives.
+// This option also makes the application transactional.
+func AppPersistent(replicationFactor int) AppOption {
+	return func(a *app) {
+		a.flags = a.flags | appFlagPersistent | appFlagTransactional
+		a.replFactor = replicationFactor
+	}
+}
 
-	// ReplicationFactor is the number of backup bees for the application. 1 means
-	// no replication.
-	ReplicationFactor() int
-	// SetReplicationFactor sets the number of backup bees for this application.
-	SetReplicationFactor(f int)
+// AppTransactional is an application option that makes the application
+// transactional. Transactions embody both application messages and its state.
+func AppTransactional(a *app) {
+	a.flags |= appFlagTransactional
+}
 
-	// CommitThreshold is the minimum number of successful replications before
-	// committing a replicated transaction.
-	CommitThreshold() int
-
-	// SetCommitThreshold sets the commit threshold.
-	SetCommitThreshold(c int) error
+// AppSticky is an application option that makes the application sticky. Bees of
+// sticky apps are not migrated by the optimizer.
+func AppSticky(a *app) {
+	a.flags |= appFlagSticky
 }
 
 // An applications map function that maps a specific message to the set of keys
@@ -135,14 +126,25 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 	return h.recvFunc(m, c)
 }
 
+var (
+	defaultAppOptions = []AppOption{AppTransactional}
+)
+
+type appFlag uint64
+
+const (
+	appFlagSticky        appFlag = 1 << iota
+	appFlagPersistent            = 1 << iota
+	appFlagTransactional         = 1 << iota
+)
+
 type app struct {
-	name         string
-	hive         *hive
-	qee          *qee
-	handlers     map[string]Handler
-	flags        AppFlag
-	replFactor   int
-	commitThresh int
+	name       string
+	hive       *hive
+	qee        *qee
+	handlers   map[string]Handler
+	flags      appFlag
+	replFactor int
 }
 
 func (a *app) HandleFunc(msg interface{}, m MapFunc, r RcvFunc) error {
@@ -191,26 +193,6 @@ func (a *app) Name() string {
 	return a.name
 }
 
-func (a *app) SetFlags(flags AppFlag) {
-	a.flags = flags
-}
-
-func (a *app) Flags() AppFlag {
-	return a.flags
-}
-
-func (a *app) Sticky() bool {
-	return a.flags&AppFlagSticky != 0
-}
-
-func (a *app) Persistent() bool {
-	return a.flags&AppFlagPersistent != 0
-}
-
-func (a *app) Transactional() bool {
-	return a.flags&AppFlagTransactional != 0
-}
-
 func (a *app) initQee() {
 	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
@@ -222,32 +204,18 @@ func (a *app) initQee() {
 	}
 }
 
-func (a *app) ReplicationFactor() int {
-	return a.replFactor
-}
-
-func (a *app) SetReplicationFactor(f int) {
-	a.SetFlags(a.flags | AppFlagTransactional | AppFlagPersistent)
-	a.replFactor = f
-	if a.commitThresh == 0 {
-		a.commitThresh = f / 2
-	}
-}
-func (a *app) CommitThreshold() int {
-	return a.commitThresh
-}
-
-func (a *app) SetCommitThreshold(c int) error {
-	if c > a.replFactor {
-		a.commitThresh = a.replFactor - 1
-		return fmt.Errorf("Commit threshold %d is lager than replication factor %d",
-			c, a.replFactor)
-	}
-
-	a.commitThresh = c - 1
-	return nil
-}
-
 func (a *app) newState() state.State {
 	return state.NewInMem()
+}
+
+func (a *app) persistent() bool {
+	return a.flags&appFlagPersistent != 0
+}
+
+func (a *app) transactional() bool {
+	return a.flags&appFlagTransactional != 0
+}
+
+func (a *app) sticky() bool {
+	return a.flags&appFlagSticky != 0
 }

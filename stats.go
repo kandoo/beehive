@@ -256,7 +256,7 @@ func (o *optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return fmt.Errorf("%v does not have app %s", ctx.Hive(), tob.App)
 	}
 
-	if a.Sticky() {
+	if a.sticky() {
 		return nil
 	}
 

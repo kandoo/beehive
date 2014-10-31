@@ -224,7 +224,7 @@ func (b *localBee) setState(s state.State) {
 }
 
 func (b *localBee) start() {
-	if !b.colony().IsNil() && b.app.Persistent() {
+	if !b.colony().IsNil() && b.app.persistent() {
 		if err := b.startNode(); err != nil {
 			glog.Errorf("%v cannot start raft: %v", b, err)
 			return
@@ -276,13 +276,13 @@ func (b *localBee) callRcv(mh msgAndHandler) {
 func (b *localBee) handleMsg(mh msgAndHandler) {
 	glog.V(2).Infof("%v handles message %v", b, mh.msg)
 
-	if b.app.Transactional() {
+	if b.app.transactional() {
 		b.BeginTx()
 	}
 
 	b.callRcv(mh)
 
-	if err := b.CommitTx(); err != nil && b.app.Transactional() {
+	if err := b.CommitTx(); err != nil && b.app.transactional() {
 		glog.Errorf("%v cannot commit a transaction : %v", b, err)
 	}
 }
@@ -549,9 +549,9 @@ func (b *localBee) replicate() error {
 		return b.doCommitTx()
 	}
 
-	if n := len(b.colony().Followers) + 1; n < b.app.ReplicationFactor() {
+	if n := len(b.colony().Followers) + 1; n < b.app.replFactor {
 		newf := b.recruiteFollowers()
-		if newf+n < b.app.ReplicationFactor() {
+		if newf+n < b.app.replFactor {
 			glog.Warningf("%v can replicate only on %v node(s)", b, n)
 		}
 	}
@@ -567,7 +567,7 @@ func (b *localBee) replicate() error {
 
 func (b *localBee) recruiteFollowers() (recruited int) {
 	c := b.colony()
-	r := b.app.ReplicationFactor() - len(c.Followers)
+	r := b.app.replFactor - len(c.Followers)
 	if r == 1 {
 		return 0
 	}
@@ -657,7 +657,7 @@ func (b *localBee) CommitTx() error {
 	defer b.resetTx()
 
 	// No need to update sequences.
-	if !b.app.Persistent() || b.detached {
+	if !b.app.persistent() || b.detached {
 		b.doCommitTx()
 		return nil
 	}

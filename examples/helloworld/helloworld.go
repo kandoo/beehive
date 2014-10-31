@@ -28,8 +28,7 @@ func mapf(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 }
 
 func main() {
-	app := bh.NewApp("HelloWorld")
-	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
+	app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
 	app.HandleFunc(string(""), mapf, rcvf)
 
 	name1 := "1st name"

@@ -10,9 +10,9 @@ func Start() {
 }
 
 // NewApp creates a new application on the DefaultHive.
-func NewApp(name string) App {
+func NewApp(name string, options ...AppOption) App {
 	maybeInitDefaultHive()
-	return DefaultHive.NewApp(name)
+	return DefaultHive.NewApp(name, options...)
 }
 
 // Emit emits a message on the DefaultHive.

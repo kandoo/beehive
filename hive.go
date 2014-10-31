@@ -37,9 +37,9 @@ type Hive interface {
 	// stopped.
 	Stop() error
 
-	// Creates an app with the given name. Note that apps are not active until
-	// the hive is started.
-	NewApp(name string) App
+	// Creates an app with the given name and the provided options.
+	// Note that apps are not active until the hive is started.
+	NewApp(name string, options ...AppOption) App
 
 	// Emits a message containing msgData from this hive.
 	Emit(msgData interface{})
@@ -448,7 +448,7 @@ func (h *hive) sendCmd(cmd interface{}) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (h *hive) NewApp(name string) App {
+func (h *hive) NewApp(name string, options ...AppOption) App {
 	a := &app{
 		name:     name,
 		hive:     h,
@@ -456,14 +456,14 @@ func (h *hive) NewApp(name string) App {
 	}
 	a.initQee()
 	h.registerApp(a)
-	a.SetFlags(AppFlagTransactional)
 
-	// TODO REFACTOR
-	//a.Handle(heartbeatReq{}, &heartbeatReqHandler{})
-	//mod := &colonyModerator{h.config.RegLockTimeout}
-	//a.Handle(beeFailed{}, mod)
-	//a.Handle(HiveJoined{}, mod)
-	//a.Handle(HiveLeft{}, mod)
+	if len(options) == 0 {
+		options = defaultAppOptions
+	}
+
+	for _, opt := range options {
+		opt(a)
+	}
 
 	return a
 }
