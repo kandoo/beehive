@@ -31,12 +31,15 @@ type proxyBee struct {
 }
 
 type proxy struct {
-	client   *http.Client
+	client *http.Client
+
 	to       string
 	stateURL string
 	msgURL   string
 	cmdURL   string
 	raftURL  string
+
+	errors uint64
 }
 
 func newProxyWithAddr(client *http.Client, addr string) proxy {
@@ -69,9 +72,11 @@ func (p proxy) sendMsg(m *msg) error {
 
 	res, err := p.client.Post(p.msgURL, "application/x-gob", &data)
 	if err != nil {
+		p.errors++
 		return err
 	}
 
+	p.errors = 0
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		var b bytes.Buffer
@@ -91,8 +96,10 @@ func (p proxy) sendCmd(c *cmd) (interface{}, error) {
 	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
 	pRes, err := p.client.Post(p.cmdURL, "application/x-gob", &data)
 	if err != nil {
+		p.errors++
 		return nil, err
 	}
+	p.errors = 0
 	glog.V(2).Infof("Proxy to %v receives the result for command %v", p.to, c)
 
 	defer pRes.Body.Close()
@@ -138,8 +145,10 @@ func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 
 	r, err := p.client.Post(url, "application/x-protobuf", bytes.NewBuffer(d))
 	if err != nil {
+		p.errors++
 		return err
 	}
+	p.errors = 0
 
 	defer r.Body.Close()
 	if r.StatusCode != http.StatusOK {
@@ -166,8 +175,11 @@ func (p proxy) state() (hiveState, error) {
 	s := hiveState{}
 	r, err := p.client.Get(p.stateURL)
 	if err != nil {
+		p.errors++
 		return s, err
 	}
+
+	p.errors = 0
 
 	defer r.Body.Close()
 	if r.StatusCode != http.StatusOK {

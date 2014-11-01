@@ -171,6 +171,7 @@ type hive struct {
 	ticker   *time.Ticker
 	listener net.Listener
 	client   *http.Client
+	peers    map[uint64]*proxy
 
 	replStrategy replicationStrategy
 	collector    statCollector
@@ -547,24 +548,33 @@ func (h *hive) newServer(addr string) *server {
 	return &s
 }
 
+func (h *hive) newProxy(to uint64) (proxy, error) {
+	a, err := h.hiveAddr(to)
+	if err != nil {
+		return proxy{}, err
+	}
+
+	return newProxyWithAddr(h.client, a), nil
+}
+
 func (h *hive) sendRaft(msgs []raftpb.Message) {
 	for _, m := range msgs {
-		go func(m raftpb.Message) {
-			a, err := h.hiveAddr(m.To)
+		p, ok := h.peers[m.To]
+		if !ok {
+			prx, err := h.newProxy(m.To)
 			if err != nil {
 				glog.Errorf("%v has no address for node %v", h, m.To)
-				return
+				continue
 			}
-			if a == h.config.Addr {
-				h.registry.m.RLock()
-				glog.Fatalf("cannot send message to itself %#v", h.registry.Hives)
-			}
-			glog.V(2).Infof("%v sends raft message %v to %v", h, m, a)
-			if err = newProxyWithAddr(h.client, a).sendRaft(m); err != nil {
-				glog.Errorf("error in sending a raft message to %v: %v", a, err)
-				return
-			}
-			glog.V(2).Infof("raft message sucessfully sent to %v", m.To)
-		}(m)
+			h.peers[m.To] = &prx
+			p = &prx
+		}
+
+		glog.V(2).Infof("%v sends raft message %v to %v", h, m, p.to)
+		if err := p.sendRaft(m); err != nil {
+			glog.Errorf("%v cannot send raft message to %v: %v", h, p.to, err)
+			return
+		}
+		glog.V(2).Infof("raft message sucessfully sent to %v", m.To)
 	}
 }
