@@ -51,8 +51,8 @@ type RcvContext interface {
 	// StartDetachedFunc spawns a detached handler using the provide function.
 	StartDetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) uint64
 
-	// Lock proactively locks the cells in the given cell keys.
-	Lock(keys []CellKey) error
+	// LockCells proactively locks the cells in the given cell keys.
+	LockCells(keys []CellKey) error
 
 	// Snooze exits the Rcv function, and schedules the current message to be
 	// enqued again after at least duration d.

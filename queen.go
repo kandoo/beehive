@@ -126,7 +126,7 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 		return nil, errors.New("cannot create proxy for a local bee")
 	}
 
-	p, err := q.hive.newProxy(info.Hive)
+	p, err := q.hive.newProxyToHive(info.Hive)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 		glog.Fatalf("%v cannot find local bee %v", q, bid)
 	}
 
-	prx, err := q.hive.newProxy(info.Hive)
+	prx, err := q.hive.newProxyToHive(info.Hive)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +485,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 
 	glog.V(2).Infof("%v starts to migrate %v to %v", q, bid, to)
 
-	var prx proxy
+	var prx *proxy
 	var res interface{}
 
 	b, ok := q.beeByID(bid)
@@ -507,7 +507,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 		}
 	}
 
-	if prx, err = q.hive.newProxy(to); err != nil {
+	if prx, err = q.hive.newProxyToHive(to); err != nil {
 		return Nil, err
 	}
 
@@ -546,6 +546,7 @@ func (q *qee) defaultLocalBee(id uint64, detached bool) localBee {
 		hive:     q.hive,
 		app:      q.app,
 		ticker:   time.NewTicker(defaultRaftTick),
+		peers:    make(map[uint64]*proxy),
 	}
 	b.setState(q.app.newState())
 	return b

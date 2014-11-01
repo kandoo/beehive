@@ -39,7 +39,7 @@ const (
 )
 
 type localBee struct {
-	m sync.Mutex
+	sync.Mutex
 
 	beeID     uint64
 	beeColony Colony
@@ -55,6 +55,7 @@ type localBee struct {
 
 	node   *raft.Node
 	ticker *time.Ticker
+	peers  map[uint64]*proxy
 
 	cells        map[CellKey]bool
 	txStatus     state.TxStatus
@@ -73,15 +74,15 @@ func (b *localBee) String() string {
 }
 
 func (b *localBee) colony() Colony {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	return b.beeColony.DeepCopy()
 }
 
 func (b *localBee) setColony(c Colony) {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	b.beeColony = c
 }
@@ -97,7 +98,7 @@ func (b *localBee) startNode() error {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
 	b.node = raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
-		b.statePath(), b, 1024, b.ticker.C)
+		b.statePath(), b, 1024, b.ticker.C, 10, 1)
 	// This will act like a barrier.
 	if _, err := b.node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Errorf("%v cannot start raft: %v", b, err)
@@ -141,32 +142,63 @@ func (b *localBee) ProcessStatusChange(sch interface{}) {
 }
 
 func (b *localBee) sendRaft(msgs []raftpb.Message) {
-	var bi BeeInfo
-	var hi HiveInfo
-	var err error
+	peerq := make(map[uint64][]raftpb.Message)
 	for _, m := range msgs {
-		// TODO(soheil): Maybe launch goroutines in parallel.
-		if m.To == b.ID() {
+		q := peerq[m.To]
+		q = append(q, m)
+		peerq[m.To] = q
+	}
+
+	for to, msgs := range peerq {
+		if to == b.ID() {
 			glog.Fatalf("%v sends raft message to itself", b)
 		}
-		if bi, hi, err = b.hive.registry.beeAndHive(m.To); err != nil {
-			glog.Errorf("cannot find bee for raft message to %v: %v", m.To, err)
-			continue
-		}
-		if bi.ID != m.To {
-			glog.Fatalf("%v receives invalid info for %v: %#v", b, m.To, bi)
-		}
-		glog.V(2).Infof("%v tries to send bee raft message to %v@%v", b, bi.ID,
-			hi.Addr)
-		if err = newProxyWithAddr(b.hive.client, hi.Addr).sendBeeRaft(bi.App, m.To,
-			m); err != nil {
+		go b.sendRaftToPeer(to, msgs)
+	}
+}
 
+func (b *localBee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
+	p, err := b.raftPeer(to)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range msgs {
+		glog.V(2).Infof("%v tries to send bee raft message to %v@%v", b, m.To, p.to)
+		if err = p.sendBeeRaft(b.app.Name(), m.To, m); err != nil {
 			glog.Errorf("%v cannot send bee raft message to %v: %v", b, m.To, err)
-			continue
+			b.resetRaftPeer(to)
+			return err
 		}
 		glog.V(2).Infof("%v successfully sent bee raft message %v to %v", b,
 			m.Index, m.To)
 	}
+
+	return nil
+}
+
+func (b *localBee) raftPeer(bid uint64) (*proxy, error) {
+	b.Lock()
+	defer b.Unlock()
+
+	p, ok := b.peers[bid]
+	if !ok {
+		_, hi, err := b.hive.registry.beeAndHive(bid)
+		if err != nil {
+			glog.Errorf("%v cannot find the address of bee %v: %v", b, bid, err)
+			return nil, err
+		}
+		p = newProxy(b.hive.client, hi.Addr)
+		b.peers[bid] = p
+	}
+	return p, nil
+}
+
+func (b *localBee) resetRaftPeer(bid uint64) {
+	b.Lock()
+	defer b.Unlock()
+
+	delete(b.peers, bid)
 }
 
 func (b *localBee) statePath() string {
@@ -202,7 +234,7 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 		return err
 	}
 
-	p, err := b.hive.newProxy(hid)
+	p, err := b.hive.newProxyToHive(hid)
 	if err != nil {
 		return err
 	}
@@ -360,8 +392,8 @@ func (b *localBee) processRaft(msg raftpb.Message) error {
 }
 
 func (b *localBee) mappedCells() MappedCells {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	mc := make(MappedCells, 0, len(b.cells))
 	for c := range b.cells {
@@ -371,8 +403,8 @@ func (b *localBee) mappedCells() MappedCells {
 }
 
 func (b *localBee) addMappedCells(cells MappedCells) {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	if b.cells == nil {
 		b.cells = make(map[CellKey]bool)
@@ -385,15 +417,15 @@ func (b *localBee) addMappedCells(cells MappedCells) {
 }
 
 func (b *localBee) addTimer(t *time.Timer) {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	b.timers = append(b.timers, t)
 }
 
 func (b *localBee) delTimer(t *time.Timer) {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	for i := range b.timers {
 		if b.timers[i] == t {
@@ -475,7 +507,7 @@ func (b *localBee) ReplyTo(msg Msg, reply interface{}) error {
 	return nil
 }
 
-func (b *localBee) Lock(keys []CellKey) error {
+func (b *localBee) LockCells(keys []CellKey) error {
 	panic("error FIXME bee.LOCK")
 }
 
@@ -590,7 +622,7 @@ func (b *localBee) recruiteFollowers() (recruited int) {
 		}
 
 		blacklist = append(blacklist, hives[0])
-		prx, err := b.hive.newProxy(hives[0])
+		prx, err := b.hive.newProxyToHive(hives[0])
 		if err != nil {
 			continue
 		}
@@ -688,8 +720,8 @@ func (b *localBee) Restore(buf []byte) error {
 }
 
 func (b *localBee) Apply(req interface{}) (interface{}, error) {
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	switch r := req.(type) {
 	case commitTx:
@@ -722,8 +754,8 @@ func (b *localBee) Apply(req interface{}) (interface{}, error) {
 func (b *localBee) ApplyConfChange(cc raftpb.ConfChange,
 	n raft.NodeInfo) error {
 
-	b.m.Lock()
-	defer b.m.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	col := b.beeColony
 	switch cc.Type {

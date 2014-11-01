@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -69,6 +70,7 @@ type HiveConfig struct {
 	HBDeadTimeout   time.Duration // When to announce a bee dead.
 	RegLockTimeout  time.Duration // When to retry to lock an entry in a registry.
 	UseBeeHeartbeat bool          // Heartbeat bees instead of the registry.
+	ConnTimeout     time.Duration // Timeout for connections between hives.
 }
 
 // Creates a new hive based on the given configuration.
@@ -85,7 +87,8 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(defaultRaftTick),
-		client: newHttpClient(),
+		client: newHttpClient(cfg.ConnTimeout),
+		peers:  make(map[uint64]*proxy),
 	}
 
 	h.registry = newRegistry(h.String())
@@ -112,28 +115,30 @@ func NewHive() Hive {
 
 func init() {
 	flag.StringVar(&DefaultCfg.Addr, "laddr", "localhost:7767",
-		"The listening address used to communicate with other nodes")
+		"the listening address used to communicate with other nodes")
 	flag.Var(&bhflag.CSV{S: &DefaultCfg.PeerAddrs}, "paddrs",
-		"Address of peers. Seperate entries with a comma")
+		"address of peers. Seperate entries with a comma")
 	flag.Var(&bhflag.CSV{S: &DefaultCfg.RegAddrs}, "raddrs",
-		"Address of etcd machines. Separate entries with a comma ','")
+		"address of etcd machines. Separate entries with a comma ','")
 	flag.IntVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
-		"Buffer size of data channels")
+		"buffer size of data channels")
 	flag.IntVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
-		"Buffer size of command channels")
+		"buffer size of command channels")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
-		"Whether to insturment apps")
+		"whether to insturment apps")
 	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
-		"Where to store persistent state data")
+		"where to store persistent state data")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
-		100*time.Millisecond, "Heartbeat interval")
+		100*time.Millisecond, "heartbeat interval")
 	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout",
 		300*time.Millisecond,
-		"The timeout after which a non-responsive bee is announced dead")
+		"timeout to announce a non-responsive bee dead")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
-		10*time.Millisecond, "Timeout to retry locking an entry in the registry")
+		10*time.Millisecond, "timeout to retry locking an entry in the registry")
+	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 1*time.Second,
+		"timeout for trying to connect to other hives")
 	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
-		"Whether to use high-granular bee heartbeating in addition to registry"+
+		"whether to use high-granular bee heartbeating in addition to registry"+
 			"events")
 }
 
@@ -153,6 +158,8 @@ const (
 
 // The internal implementation of Hive.
 type hive struct {
+	sync.Mutex
+
 	id     uint64
 	meta   hiveMeta
 	config HiveConfig
@@ -356,7 +363,7 @@ func (h *hive) startRaftNode() {
 		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
 	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
-		h.config.StatePath, h.registry, 1024, h.ticker.C)
+		h.config.StatePath, h.registry, 1024, h.ticker.C, 10, 1)
 	// This will act like a barrier.
 	if err := h.raftBarrier(); err != nil {
 		glog.Fatalf("error when joining the cluster: %v", err)
@@ -548,33 +555,77 @@ func (h *hive) newServer(addr string) *server {
 	return &s
 }
 
-func (h *hive) newProxy(to uint64) (proxy, error) {
+func (h *hive) newProxyToHive(to uint64) (*proxy, error) {
+	// TODO(soheil): maybe we should use the cache here.
+	return h.newProxyToHiveWithRetry(to, 0, 1)
+}
+
+func (h *hive) newProxyToHiveWithRetry(to uint64, backoffStep time.Duration,
+	maxRetries uint32) (*proxy, error) {
+	// TODO(soheil): maybe we should use the cache here.
 	a, err := h.hiveAddr(to)
 	if err != nil {
-		return proxy{}, err
+		return nil, err
 	}
-
-	return newProxyWithAddr(h.client, a), nil
+	return newProxyWithRetry(h.client, a, backoffStep, maxRetries), nil
 }
 
 func (h *hive) sendRaft(msgs []raftpb.Message) {
-	for _, m := range msgs {
-		p, ok := h.peers[m.To]
-		if !ok {
-			prx, err := h.newProxy(m.To)
-			if err != nil {
-				glog.Errorf("%v has no address for node %v", h, m.To)
-				continue
-			}
-			h.peers[m.To] = &prx
-			p = &prx
-		}
-
-		glog.V(2).Infof("%v sends raft message %v to %v", h, m, p.to)
-		if err := p.sendRaft(m); err != nil {
-			glog.Errorf("%v cannot send raft message to %v: %v", h, p.to, err)
-			return
-		}
-		glog.V(2).Infof("raft message sucessfully sent to %v", m.To)
+	if len(msgs) == 0 {
+		return
 	}
+
+	peerq := make(map[uint64][]raftpb.Message)
+	for _, m := range msgs {
+		pmsgs := peerq[m.To]
+		pmsgs = append(pmsgs, m)
+		peerq[m.To] = pmsgs
+	}
+
+	for hid, pmsgs := range peerq {
+		go h.sendRaftToPeer(hid, pmsgs)
+	}
+}
+
+func (h *hive) sendRaftToPeer(hid uint64, msgs []raftpb.Message) error {
+	p, err := h.raftPeer(hid)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range msgs {
+		glog.V(2).Infof("%v sends raft to %v: %v", h, p.to, m)
+		if err = p.sendRaft(m); err != nil {
+			h.resetRaftPeer(hid)
+			glog.Errorf("%v cannot send raft message to %v: %v", h, p.to, err)
+			return err
+		}
+		glog.V(2).Infof("%v sucessfully sent raft to %v", h, hid)
+	}
+	return nil
+}
+
+func (h *hive) raftPeer(hid uint64) (*proxy, error) {
+	h.Lock()
+	defer h.Unlock()
+
+	var err error
+	p, ok := h.peers[hid]
+	if !ok {
+		p, err = h.newProxyToHive(hid)
+		if err != nil {
+			glog.Errorf("%v has no address for node %v", h, hid)
+			return nil, err
+		}
+		h.peers[hid] = p
+	}
+
+	return p, nil
+}
+
+func (h *hive) resetRaftPeer(hid uint64) {
+	h.Lock()
+	defer h.Unlock()
+
+	delete(h.peers, hid)
 }
