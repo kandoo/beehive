@@ -19,11 +19,11 @@ type DialFunc func(network, addr string) (net.Conn, error)
 type Dialer struct {
 	sync.Mutex
 	conns map[netAndAddr]*pool
-	// Same as http.Transport.Dial. If nil, net.Dial is used.
-	DialFunc DialFunc
-	// The maximum number of connections we can pool per address. If it is set to
-	// 0 we use DefaultMaxConnsPerHost.
-	MaxConnPerAddr int
+	// MaxConnPerHost is the maximum number of parallel connections dialed for
+	// each host. If it is set to 0 we use DefaultMaxConnsPerHost.
+	MaxConnPerHost int
+	// Dialer is the underlying network dialer.
+	Dialer net.Dialer
 }
 
 type netAndAddr struct {
@@ -35,7 +35,7 @@ func (d *Dialer) pool(network, addr string) *pool {
 	d.Lock()
 	defer d.Unlock()
 
-	max := d.MaxConnPerAddr
+	max := d.MaxConnPerHost
 	if max == 0 {
 		max = DefaultMaxConnsPerHost
 	}
@@ -58,13 +58,7 @@ func (d *Dialer) pool(network, addr string) *pool {
 
 func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
 	pool := d.pool(network, addr)
-
-	dial := d.DialFunc
-	if dial == nil {
-		dial = (&net.Dialer{}).Dial
-	}
-
-	conn, err := pool.maybeDial(network, addr, dial)
+	conn, err := pool.maybeDial(network, addr, d.Dialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +72,7 @@ func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
 		case conn := <-pool.connCh:
 			return conn, nil
 		case <-time.After(10 * time.Millisecond):
-			conn, err := pool.maybeDial(network, addr, dial)
+			conn, err := pool.maybeDial(network, addr, d.Dialer.Dial)
 			if err != nil {
 				return nil, err
 			}
