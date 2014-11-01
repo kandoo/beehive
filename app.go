@@ -57,6 +57,12 @@ func AppSticky(a *app) {
 	a.flags |= appFlagSticky
 }
 
+// AppNonTransactional is an application option that makes the application
+// non-transactional.
+func AppNonTransactional(a *app) {
+	a.flags &= ^appFlagTransactional
+}
+
 // An applications map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
 // called sequentially. If the return value is an empty set the message is
@@ -133,9 +139,9 @@ var (
 type appFlag uint64
 
 const (
-	appFlagSticky        appFlag = 1 << iota
-	appFlagPersistent            = 1 << iota
-	appFlagTransactional         = 1 << iota
+	appFlagSticky appFlag = 1 << iota
+	appFlagPersistent
+	appFlagTransactional
 )
 
 type app struct {

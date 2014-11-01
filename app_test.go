@@ -14,9 +14,7 @@ func TestPersistentApp(t *testing.T) {
 	defer removeState(cfg)
 	h := NewHiveWithConfig(cfg)
 
-	app := h.NewApp("persistent")
-	app.SetFlags(AppFlagTransactional | AppFlagPersistent)
-	app.SetReplicationFactor(3)
+	app := h.NewApp("persistent", AppPersistent(3))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return ctx.LocalMappedCells()
 	}
@@ -40,9 +38,7 @@ func TestPersistentApp(t *testing.T) {
 }
 
 func registerPersistentApp(h Hive, ch chan uint64) App {
-	app := h.NewApp("persistent")
-	app.SetFlags(AppFlagTransactional | AppFlagPersistent)
-	app.SetReplicationFactor(3)
+	app := h.NewApp("persistent", AppPersistent(3))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"D", "0"}}
 	}
