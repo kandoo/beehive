@@ -231,7 +231,7 @@ func (r *registry) addBee(info BeeInfo) error {
 	if _, ok := r.Bees[info.ID]; ok {
 		return ErrDuplicateBee
 	}
-	if info.ID < r.BeeID {
+	if r.BeeID < info.ID {
 		glog.Fatalf("%v has invalid bee ID: %v < %v", r, info.ID, r.HiveID)
 	}
 	r.Bees[info.ID] = info
