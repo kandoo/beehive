@@ -289,7 +289,6 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 			Data: bid,
 			Err:  err,
 		}
-		return
 
 	default:
 		if cc.ch != nil {
