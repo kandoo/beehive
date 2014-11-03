@@ -35,6 +35,11 @@ func newAppStatCollector(h Hive) collector {
 	a.Handle(beeRecord{}, localCollector{})
 	a.Handle(cmdMigrate{}, &localCollector{})
 	a.Handle(beeMatrixUpdate{}, optimizer{})
+	a.Handle(pollLocalStat{}, localStatPoller{})
+	a.Detached(Timer{
+		Tick: 1 * time.Second,
+		Func: func() { h.Emit(pollLocalStat{}) },
+	})
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
 }
@@ -140,15 +145,17 @@ func (h localCollector) updateProvenance(r beeRecord, ctx RcvContext) {
 	}
 }
 
-type timeoutHandler struct {
+type pollLocalStat struct{}
+
+type localStatPoller struct {
 	thresh uint64
 }
 
-func (h timeoutHandler) Map(msg Msg, ctx MapContext) MappedCells {
+func (h localStatPoller) Map(msg Msg, ctx MapContext) MappedCells {
 	return MappedCells{}
 }
 
-func (h timeoutHandler) Rcv(msg Msg, ctx RcvContext) error {
+func (h localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 	d := ctx.Dict(localStatDict)
 	d.ForEach(func(k string, v []byte) {
 		var lm localBeeMatrix
