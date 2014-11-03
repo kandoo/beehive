@@ -302,7 +302,7 @@ func (b *localBee) callRcv(mh msgAndHandler) {
 	}
 
 	// FIXME(soheil): Provenence works when the application is transactional.
-	b.hive.collector.collect(mh.msg.MsgFrom, b.beeID, mh.msg, b.bufferedMsgs)
+	b.hive.collector.collect(b.beeID, mh.msg, b.bufferedMsgs)
 }
 
 func (b *localBee) handleMsg(mh msgAndHandler) {

@@ -181,7 +181,7 @@ type hive struct {
 	peers    map[uint64]*proxy
 
 	replStrategy replicationStrategy
-	collector    statCollector
+	collector    collector
 }
 
 func (h *hive) ID() uint64 {
