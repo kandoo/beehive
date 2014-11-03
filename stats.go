@@ -29,13 +29,15 @@ type collectorApp struct {
 	hive Hive
 }
 
-func newAppStatCollector(h Hive) collector {
+func newAppStatCollector(h *hive) collector {
 	c := &collectorApp{hive: h}
 	a := h.NewApp(collectorAppName, AppNonTransactional)
 	a.Handle(beeRecord{}, localCollector{})
-	a.Handle(cmdMigrate{}, &localCollector{})
+	a.Handle(cmdMigrate{}, localCollector{})
 	a.Handle(beeMatrixUpdate{}, optimizer{})
-	a.Handle(pollLocalStat{}, localStatPoller{})
+	a.Handle(pollLocalStat{}, localStatPoller{
+		thresh: uint64(h.config.OptimizeThresh),
+	})
 	a.Detached(Timer{
 		Tick: 1 * time.Second,
 		Func: func() { h.Emit(pollLocalStat{}) },

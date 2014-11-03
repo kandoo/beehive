@@ -59,18 +59,19 @@ type Hive interface {
 
 // Configuration of a hive.
 type HiveConfig struct {
-	Addr            string        // Listening address of the hive.
-	PeerAddrs       []string      // Peer addresses.
-	RegAddrs        []string      // Reigstery service addresses.
-	StatePath       string        // Where to store state data.
-	DataChBufSize   int           // Buffer size of the data channels.
-	CmdChBufSize    int           // Buffer size of the control channels.
-	Instrument      bool          // Whether to instrument apps on the hive.
-	HBQueryInterval time.Duration // Heartbeating interval.
-	HBDeadTimeout   time.Duration // When to announce a bee dead.
-	RegLockTimeout  time.Duration // When to retry to lock an entry in a registry.
-	UseBeeHeartbeat bool          // Heartbeat bees instead of the registry.
-	ConnTimeout     time.Duration // Timeout for connections between hives.
+	Addr            string        // listening address of the hive.
+	PeerAddrs       []string      // peer addresses.
+	RegAddrs        []string      // reigstery service addresses.
+	StatePath       string        // where to store state data.
+	DataChBufSize   int           // buffer size of the data channels.
+	CmdChBufSize    int           // buffer size of the control channels.
+	Instrument      bool          // whether to instrument apps on the hive.
+	OptimizeThresh  uint          // when to notify the optimizer (in msg/s).
+	HBQueryInterval time.Duration // heartbeating interval.
+	HBDeadTimeout   time.Duration // when to announce a bee dead.
+	RegLockTimeout  time.Duration // when to retry to lock an entry in a registry.
+	UseBeeHeartbeat bool          // heartbeat bees instead of the registry.
+	ConnTimeout     time.Duration // timeout for connections between hives.
 }
 
 // Creates a new hive based on the given configuration.
@@ -126,6 +127,8 @@ func init() {
 		"buffer size of command channels")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"whether to insturment apps")
+	flag.UintVar(&DefaultCfg.OptimizeThresh, "optthresh", 10,
+		"when the local stat collector should notify the optimizer (in msg/s).")
 	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
 		"where to store persistent state data")
 	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
