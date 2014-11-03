@@ -2,6 +2,7 @@ package beehive
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/state"
@@ -151,6 +152,10 @@ type app struct {
 	handlers   map[string]Handler
 	flags      appFlag
 	replFactor int
+}
+
+func (a *app) String() string {
+	return fmt.Sprintf("%v/%s", a.hive, a.name)
 }
 
 func (a *app) HandleFunc(msg interface{}, m MapFunc, r RcvFunc) error {
