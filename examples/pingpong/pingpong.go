@@ -38,7 +38,7 @@ type pong struct {
 }
 
 func (p ping) pong() pong {
-	return pong{Pxng{p.Seq + 1}}
+	return pong{Pxng{p.Seq}}
 }
 
 func (p pong) ping() ping {
@@ -56,8 +56,8 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	data := msg.Data()
 	switch data := data.(type) {
 	case ping:
-		fmt.Printf("Rx Ping %d @ %v\n", data.Seq, ctx.ID())
-		time.Sleep(100 * time.Millisecond)
+		fmt.Printf("Rx Ping %d %v->%v\n", data.Seq, msg.From(), ctx.ID())
+		time.Sleep(300 * time.Millisecond)
 
 		v, err := dict.Get("ping")
 		var p ping
@@ -66,21 +66,23 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		if data != p {
-			return fmt.Errorf("Invalid ping: %d != %d", data.Seq, p.Seq)
+			return fmt.Errorf("Invalid ping: ping=%d, want=%d", data.Seq, p.Seq)
 		}
 
 		p.Seq += 1
 		dict.Put("ping", p.encode())
 
 		fmt.Printf("Ping stored to %v\n", p.Seq)
-		fmt.Printf("Tx Pong %d @ %v\n", data.pong().Seq, ctx.ID())
 
-		ctx.Emit(data.pong())
+		if !msg.NoReply() {
+			fmt.Printf("Tx Pong %d @ %v\n", data.pong().Seq, ctx.ID())
+			ctx.Emit(data.pong())
+		}
 
 	case pong:
-		fmt.Printf("Rx Pong %d @ %v\n", data.Seq, ctx.ID())
+		fmt.Printf("Rx Pong %d %v->%v\n", data.Seq, msg.From(), ctx.ID())
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 
 		dict := ctx.Dict(PingPongDict)
 		v, err := dict.Get("pong")
@@ -90,7 +92,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		if data != p {
-			return fmt.Errorf("Invalid pong: %d != %d", data.Seq, p.Seq)
+			return fmt.Errorf("Invalid pong: pong=%d, want=%d", data.Seq, p.Seq)
 		}
 
 		p.Seq += 1
@@ -98,7 +100,6 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		fmt.Printf("Pong stored to %v\n", p.Seq)
 
 		fmt.Printf("Tx Ping %d @ %v\n", data.ping().Seq, ctx.ID())
-
 		ctx.Emit(data.ping())
 	}
 	return nil
