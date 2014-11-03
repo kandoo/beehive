@@ -2,27 +2,36 @@ package beehive
 
 import "time"
 
-type Timer struct {
-	Tick time.Duration
-	Func func()
+// NewTimer returns a detached handler that calls fn per tick.
+func NewTimer(tick time.Duration, fn func()) DetachedHandler {
+	return timer{
+		tick: tick,
+		fn:   fn,
+		done: make(chan struct{}),
+	}
+}
+
+type timer struct {
+	tick time.Duration
+	fn   func()
 	done chan struct{}
 }
 
-func (t Timer) Start(ctx RcvContext) {
+func (t timer) Start(ctx RcvContext) {
 	for {
 		select {
-		case <-time.Tick(t.Tick):
-			t.Func()
+		case <-time.Tick(t.tick):
+			t.fn()
 		case <-t.done:
 			return
 		}
 	}
 }
 
-func (t Timer) Stop(ctx RcvContext) {
+func (t timer) Stop(ctx RcvContext) {
 	close(t.done)
 }
 
-func (t Timer) Rcv(msg Msg, ctx RcvContext) error {
+func (t timer) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }

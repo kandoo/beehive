@@ -38,10 +38,7 @@ func newAppStatCollector(h *hive) collector {
 	a.Handle(pollLocalStat{}, localStatPoller{
 		thresh: uint64(h.config.OptimizeThresh),
 	})
-	a.Detached(Timer{
-		Tick: 1 * time.Second,
-		Func: func() { h.Emit(pollLocalStat{}) },
-	})
+	a.Detached(NewTimer(1*time.Second, func() { h.Emit(pollLocalStat{}) }))
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
 }
