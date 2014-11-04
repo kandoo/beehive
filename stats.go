@@ -2,6 +2,7 @@ package beehive
 
 import (
 	"encoding/gob"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -100,15 +101,18 @@ func (h localCollector) Rcv(msg Msg, ctx RcvContext) error {
 		h.updateMatrix(d, ctx)
 		h.updateProvenance(d, ctx)
 	case cmdMigrate:
-		cmd := cmd{
-			App:  ctx.App(),
-			Data: d,
+		bi, err := beeInfoFromContext(ctx, d.Bee)
+		if err != nil {
+			return fmt.Errorf("%v cannot find bee %v to migrate", ctx, d.Bee)
 		}
-		q := ctx.(*localBee).qee
-		if _, err := q.processCmd(cmd); err != nil {
-			glog.Errorf(
-				"%v cannot migrate bee %v to %v as instructed by optimizer",
-				ctx, d.Bee, d.To)
+		a, ok := ctx.(*localBee).hive.app(bi.App)
+		if !ok {
+			return fmt.Errorf("%v cannot find app %v", ctx, a)
+		}
+		if _, err := a.qee.processCmd(d); err != nil {
+			return fmt.Errorf(
+				"%v cannot migrate bee %v to %v as instructed by optimizer: %v",
+				ctx, d.Bee, d.To, err)
 		}
 	}
 	return nil
@@ -121,6 +125,7 @@ func (h localCollector) updateMatrix(r beeRecord, ctx RcvContext) {
 	if err := d.GetGob(k, &lm); err != nil {
 		lm.BeeMatrix.Bee = r.Bee
 		lm.BeeMatrix.Matrix = make(map[uint64]uint64)
+		lm.UpdateTime = time.Now()
 	}
 	lm.BeeMatrix.Matrix[r.In.From()]++
 	lm.UpdateMsgCnt++
@@ -163,6 +168,9 @@ func (h localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 		}
 		now := time.Now()
 		dur := uint64(now.Sub(lm.UpdateTime) / time.Second)
+		if dur == 0 {
+			dur = 1
+		}
 		if lm.UpdateMsgCnt/dur < h.thresh {
 			return
 		}
@@ -229,7 +237,8 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return nil
 	}
 
-	glog.Infof("%v initiates migration of %v to %v", ctx, up.Bee, maxBee.Hive)
+	glog.Infof("%v initiates migration of bee %v to hive %v", ctx, up.Bee,
+		maxBee.Hive)
 	ctx.SendToBee(cmdMigrate{up.Bee, maxBee.Hive}, msg.From())
 	dict.Put(formatBeeID(up.Bee), []byte{})
 	return nil
