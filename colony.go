@@ -42,6 +42,10 @@ func (c Colony) Contains(id uint64) bool {
 }
 
 func (c *Colony) AddFollower(id uint64) bool {
+	if id == Nil {
+		return false
+	}
+
 	if c.IsLeader(id) {
 		return false
 	}
