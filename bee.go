@@ -149,22 +149,32 @@ func (b *localBee) ProcessStatusChange(sch interface{}) {
 	switch ev := sch.(type) {
 	case raft.LeaderChanged:
 		glog.V(2).Infof("%v recevies leader changed event %#v", b, ev)
-		if ev.New != b.ID() {
+		if ev.New == Nil {
+			// TODO(soheil): when we switch to nil during a campaign, shouldn't we
+			// just change the colony?
 			return
 		}
+
 		oldc := b.colony()
-		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
-		if oldc.Leader == b.ID() || oldc.IsNil() {
+		if oldc.IsNil() || oldc.Leader == ev.New {
 			glog.V(2).Infof("%v has no need to change %v", b, oldc)
 			return
 		}
 
 		newc := oldc.DeepCopy()
-		newc.DelFollower(b.ID())
-		newc.Leader = b.ID()
 		if oldc.Leader != Nil {
+			newc.Leader = Nil
 			newc.AddFollower(oldc.Leader)
 		}
+		newc.DelFollower(ev.New)
+		newc.Leader = ev.New
+		b.setColony(newc)
+
+		if ev.New == b.ID() {
+			return
+		}
+
+		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
 		up := updateColony{
 			Old: oldc,
 			New: newc,
@@ -173,7 +183,6 @@ func (b *localBee) ProcessStatusChange(sch interface{}) {
 			glog.Errorf("%v cannot update its colony: %v", b, err)
 			return
 		}
-		b.setColony(newc)
 		// FIXME(soheil): Add health checks here and recruite if needed.
 	}
 }
@@ -351,8 +360,10 @@ func (b *localBee) handleMsg(mh msgAndHandler) {
 
 	b.callRcv(mh)
 
-	if err := b.CommitTx(); err != nil && b.app.transactional() {
-		glog.Errorf("%v cannot commit a transaction : %v", b, err)
+	if b.app.transactional() {
+		if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
+			glog.Errorf("%v cannot commit a transaction: %v", b, err)
+		}
 	}
 }
 
@@ -692,10 +703,12 @@ func (b *localBee) handoff(to uint64) error {
 	if _, err := b.qee.sendCmdToBee(to, cmdSync{}); err != nil {
 		return err
 	}
-	b.node.Stop()
+	// TODO(soheil): do we really need to stop the node here?
+	b.stopNode()
 
 	ch := make(chan error)
 	go func() {
+		// TODO(soheil): use context with deadline here.
 		_, err := b.qee.sendCmdToBee(to, cmdCampaign{})
 		ch <- err
 	}()
@@ -704,6 +717,7 @@ func (b *localBee) handoff(to uint64) error {
 	if err := b.startNode(); err != nil {
 		glog.Fatalf("%v cannot restart node: %v", b, err)
 	}
+
 	return <-ch
 }
 
@@ -760,11 +774,11 @@ func (b *localBee) Apply(req interface{}) (interface{}, error) {
 
 	switch r := req.(type) {
 	case commitTx:
-		glog.V(2).Infof("%v commits %+v", b, r)
+		glog.V(2).Infof("%v commits %v", b, r)
 		leader := b.isLeader()
 		if b.txStatus == state.TxOpen {
 			if !leader {
-				glog.Errorf("Follower %v has an open transaction", b)
+				glog.Errorf("%v is a follower and has an open transaction", b)
 			}
 			b.state.Reset()
 		}
@@ -772,10 +786,11 @@ func (b *localBee) Apply(req interface{}) (interface{}, error) {
 			return nil, err
 		}
 
-		if leader {
+		if leader && b.emitInRaft {
 			for _, m := range r.Msgs {
 				msg := m.(msg)
 				msg.MsgFrom = b.beeID
+				glog.V(2).Infof("%v emits %#v", b, m)
 				b.doEmit(&msg)
 			}
 		}
