@@ -64,6 +64,14 @@ func AppNonTransactional(a *app) {
 	a.flags &= ^appFlagTransactional
 }
 
+// AppWithPlacement represents an application option that customizes the default
+// placement strategy for the application.
+func AppWithPlacement(p PlacementMethod) AppOption {
+	return func(a *app) {
+		a.placement = p
+	}
+}
+
 // An applications map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
 // called sequentially. If the return value is an empty set the message is
@@ -152,6 +160,7 @@ type app struct {
 	handlers   map[string]Handler
 	flags      appFlag
 	replFactor int
+	placement  PlacementMethod
 }
 
 func (a *app) String() string {

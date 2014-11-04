@@ -291,9 +291,9 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 
 	default:
 		if cc.ch != nil {
-			glog.Errorf("Unknown bee command %v", cmd)
+			glog.Errorf("Unknown bee command %#v", cmd)
 			cc.ch <- cmdResult{
-				Err: fmt.Errorf("Unknown bee command %v", cmd),
+				Err: fmt.Errorf("Unknown bee command %#v", cmd),
 			}
 		}
 	}
@@ -389,25 +389,23 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	b, err := q.beeByCells(cells)
 	if err != nil {
-		lb, err := q.newLocalBee(true)
-		if err != nil {
-			glog.Fatal(err)
+		if b, err = q.placeBee(cells); err != nil {
+			glog.Fatalf("%v cannot place a new bee %v", err)
 		}
 
 		info := BeeInfo{
 			Hive:   q.hive.ID(),
 			App:    q.app.Name(),
-			ID:     lb.ID(),
-			Colony: lb.colony().DeepCopy(),
+			ID:     b.ID(),
+			Colony: Colony{Leader: b.ID()},
 		}
 
 		if info, err = q.lock(info, cells); err != nil {
 			glog.Fatalf("error in locking the cells: %v", err)
 		}
 
-		if info.ID == lb.ID() {
-			lb.addMappedCells(cells)
-			b = lb
+		if info.ID == b.ID() {
+			b.processCmd(cmdAddMappedCells{Cells: cells})
 		} else {
 			b, err = q.beeByCells(cells)
 			if err != nil {
@@ -418,6 +416,57 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 	glog.V(2).Infof("message sent to bee %v: %v", b, mh.msg)
 	b.enqueMsg(mh)
+}
+
+func (q *qee) placeBee(cells MappedCells) (*bee, error) {
+	if q.app.placement == nil || q.app.placement == PlacementMethod(nil) {
+		return q.newLocalBee(true)
+	}
+
+	h := q.app.placement.Place(cells, q.hive, q.hive.registry.hives())
+	if h.ID == q.hive.ID() {
+		return q.newLocalBee(true)
+	}
+
+	var col Colony
+	var bi BeeInfo
+	var b *bee
+	cmd := &cmd{
+		App:  q.app.Name(),
+		Data: cmdCreateBee{},
+	}
+	p := newProxy(q.hive.client, h.Addr)
+	res, err := p.sendCmd(cmd)
+	if err != nil {
+		goto fallback
+	}
+	col.Leader = res.(uint64)
+
+	cmd.To = col.Leader
+	cmd.Data = cmdJoinColony{
+		Colony: col,
+	}
+	if _, err = p.sendCmd(cmd); err != nil {
+		goto fallback
+	}
+
+	bi = BeeInfo{
+		ID:     col.Leader,
+		Hive:   h.ID,
+		App:    q.app.Name(),
+		Colony: col,
+	}
+	b, err = q.newProxyBee(bi)
+	if err != nil {
+		goto fallback
+	}
+	q.addBee(b)
+	return b, nil
+
+fallback:
+	glog.Errorf("%v cannot create a new bee on %v. will place locally: %v", q,
+		h.ID, err)
+	return q.newLocalBee(true)
 }
 
 func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
