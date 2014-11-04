@@ -36,11 +36,6 @@ func newHttpClient(timeout time.Duration) *http.Client {
 	}
 }
 
-type proxyBee struct {
-	localBee
-	proxy *proxy
-}
-
 type proxy struct {
 	client *http.Client
 
@@ -168,28 +163,6 @@ func (p *proxy) sendCmd(c *cmd) (interface{}, error) {
 	return cRes.get()
 }
 
-// TODO(soheil): We should batch here.
-func (b *proxyBee) handleMsg(mh msgAndHandler) {
-	mh.msg.MsgTo = b.ID()
-
-	glog.V(2).Infof("Proxy %v sends msg %v", b, mh.msg)
-	if err := b.proxy.sendMsg(mh.msg); err != nil {
-		glog.Errorf("cannot send message %v to %v: %v", mh.msg, b, err)
-	}
-}
-
-func (b *proxyBee) handleCmd(cc cmdAndChannel) {
-	switch cc.cmd.Data.(type) {
-	case cmdStop, cmdStart:
-		b.localBee.handleCmd(cc)
-	default:
-		d, err := b.proxy.sendCmd(&cc.cmd)
-		if cc.ch != nil {
-			cc.ch <- cmdResult{Data: d, Err: err}
-		}
-	}
-}
-
 func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 	// TODO(soheil): this should get a slice of messages and send them through the
 	// pipe. But becuase pb does not support encoding of multiple entries, we send
@@ -242,30 +215,4 @@ func (p proxy) state() (hiveState, error) {
 	dec := json.NewDecoder(r.Body)
 	err = dec.Decode(&s)
 	return s, err
-}
-
-// TODO(soheil): Maybe start should return an error.
-func (b *proxyBee) start() {
-	b.status = beeStatusStarted
-	glog.V(2).Infof("%v started", b)
-
-	for b.status == beeStatusStarted {
-		select {
-		case d, ok := <-b.dataCh:
-			if !ok {
-				return
-			}
-			b.handleMsg(d)
-
-		case c, ok := <-b.ctrlCh:
-			if !ok {
-				return
-			}
-			b.handleCmd(c)
-		}
-	}
-}
-
-func (b *proxyBee) String() string {
-	return "proxy " + b.localBee.String()
 }

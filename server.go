@@ -165,10 +165,9 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lb, ok := b.(*localBee)
-	if !ok {
-		glog.Errorf("%v is not local to %v", b, h.srv.hive)
-		http.Error(w, fmt.Sprintf("not local bee %v", id), http.StatusBadRequest)
+	if b.proxy || b.detached {
+		glog.Errorf("%v not local to %v", b, h.srv.hive)
+		http.Error(w, fmt.Sprintf("not a local bee %v", id), http.StatusBadRequest)
 		return
 	}
 
@@ -183,12 +182,12 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	node := lb.raftNode()
+	node := b.raftNode()
 	if node == nil {
 		http.Error(w, "node is not started", http.StatusInternalServerError)
 		return
 	}
-	if err = lb.stepRaft(msg); err != nil {
+	if err = b.stepRaft(msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

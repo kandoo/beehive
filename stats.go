@@ -105,7 +105,7 @@ func (h localCollector) Rcv(msg Msg, ctx RcvContext) error {
 		if err != nil {
 			return fmt.Errorf("%v cannot find bee %v to migrate", ctx, d.Bee)
 		}
-		a, ok := ctx.(*localBee).hive.app(bi.App)
+		a, ok := ctx.(*bee).hive.app(bi.App)
 		if !ok {
 			return fmt.Errorf("%v cannot find app %v", ctx, a)
 		}

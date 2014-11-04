@@ -211,7 +211,7 @@ func (a *app) initQee() {
 		ctrlCh: make(chan cmdAndChannel, a.hive.config.CmdChBufSize),
 		hive:   a.hive,
 		app:    a,
-		bees:   make(map[uint64]bee),
+		bees:   make(map[uint64]*bee),
 	}
 }
 

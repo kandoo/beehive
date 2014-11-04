@@ -26,7 +26,7 @@ type qee struct {
 
 	state State
 
-	bees map[uint64]bee
+	bees map[uint64]*bee
 }
 
 func (q *qee) start() {
@@ -66,7 +66,7 @@ func (q *qee) App() string {
 	return q.app.Name()
 }
 
-func (q *qee) beeByID(id uint64) (b bee, ok bool) {
+func (q *qee) beeByID(id uint64) (b *bee, ok bool) {
 	q.RLock()
 	defer q.RUnlock()
 
@@ -74,7 +74,7 @@ func (q *qee) beeByID(id uint64) (b bee, ok bool) {
 	return b, ok
 }
 
-func (q *qee) addBee(b bee) {
+func (q *qee) addBee(b *bee) {
 	q.Lock()
 	defer q.Unlock()
 
@@ -96,7 +96,7 @@ func (q *qee) allocateNewBeeID() (BeeInfo, error) {
 	return info, nil
 }
 
-func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
+func (q *qee) newLocalBee(withInitColony bool) (*bee, error) {
 	info, err := q.allocateNewBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
@@ -106,22 +106,26 @@ func (q *qee) newLocalBee(withInitColony bool) (*localBee, error) {
 		return nil, fmt.Errorf("bee %v already exists", info.ID)
 	}
 
-	b := q.defaultLocalBee(info.ID, false)
+	b := q.defaultLocalBee(info.ID)
+	b.setState(q.app.newState())
 	if withInitColony {
 		c := Colony{Leader: info.ID}
 		info.Colony = c
 		b.beeColony = c
+		b.becomeLeader()
+	} else {
+		b.becomeZombie()
 	}
 	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
 
-	q.addBee(&b)
+	q.addBee(b)
 	go b.start()
-	return &b, nil
+	return b, nil
 }
 
-func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
+func (q *qee) newProxyBee(info BeeInfo) (*bee, error) {
 	if q.isLocalBee(info) {
 		return nil, errors.New("cannot create proxy for a local bee")
 	}
@@ -130,33 +134,28 @@ func (q *qee) newProxyBee(info BeeInfo) (*proxyBee, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	b := &proxyBee{
-		localBee: q.defaultLocalBee(info.ID, false),
-		proxy:    p,
-	}
+	b := q.defaultLocalBee(info.ID)
+	b.becomeProxy(p)
 	q.addBee(b)
 	go b.start()
 	return b, nil
 }
 
-func (q *qee) newDetachedBee(h DetachedHandler) (*detachedBee, error) {
+func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
 	info, err := q.allocateNewBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}
 	info.Detached = true
-	glog.V(2).Infof("%v starts detached bee %v for app %v", q, info.ID, info.App)
-	d := &detachedBee{
-		localBee: q.defaultLocalBee(info.ID, true),
-		h:        h,
-	}
+	b := q.defaultLocalBee(info.ID)
+	b.setState(q.app.newState())
+	b.becomeDetached(h)
 	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
 		return nil, err
 	}
-	q.addBee(d)
-	go d.start()
-	return d, nil
+	q.addBee(b)
+	go b.startDetached(h)
+	return b, nil
 }
 
 func (q *qee) processCmd(data interface{}) (interface{}, error) {
@@ -300,17 +299,23 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 	}
 }
 
-func (q *qee) reloadBee(id uint64, col Colony) (bee, error) {
+func (q *qee) reloadBee(id uint64, col Colony) (*bee, error) {
 	info, err := q.hive.bee(id)
 	if err != nil {
 		return nil, err
 	}
-	b := q.defaultLocalBee(id, false)
+	b := q.defaultLocalBee(id)
+	b.setState(q.app.newState())
 	b.setColony(info.Colony)
-	q.addBee(&b)
-	glog.V(2).Infof("%v reloads %v", q, &b)
+	if b.isLeader() {
+		b.becomeLeader()
+	} else {
+		b.becomeFollower()
+	}
+	q.addBee(b)
+	glog.V(2).Infof("%v reloads %v", q, b)
 	go b.start()
-	return &b, nil
+	return b, nil
 }
 
 func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
@@ -330,20 +335,10 @@ func (q *qee) isDetached(id uint64) bool {
 	return err == nil && b.Detached
 }
 
-func (q *qee) isDetachedBee(b bee) bool {
-	_, ok := b.(*detachedBee)
-	return ok
-}
-
-func (q *qee) isProxyBee(b bee) bool {
-	_, ok := b.(*proxyBee)
-	return ok
-}
-
 func (q *qee) handleMsg(mh msgAndHandler) {
 	if mh.msg.IsUnicast() {
 		glog.V(2).Infof("unicast msg: %v", mh.msg)
-		bee, ok := q.beeByID(mh.msg.To())
+		b, ok := q.beeByID(mh.msg.To())
 		if !ok {
 			info, err := q.hive.registry.bee(mh.msg.To())
 			if err != nil {
@@ -354,17 +349,17 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 				glog.Fatalf("%v cannot find a local bee %v", q, mh.msg.To())
 			}
 
-			if bee, ok = q.beeByID(info.ID); !ok {
+			if b, ok = q.beeByID(info.ID); !ok {
 				glog.Errorf("%v cannnot find the remote bee %v", q, mh.msg.To())
 				return
 			}
 		}
 
-		if mh.handler == nil && !q.isDetachedBee(bee) && !q.isProxyBee(bee) {
+		if mh.handler == nil && !b.detached && !b.proxy {
 			glog.Fatalf("handler is nil for message %v", mh.msg)
 		}
 
-		bee.enqueMsg(mh)
+		b.enqueMsg(mh)
 		return
 	}
 
@@ -380,19 +375,19 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 		q.RLock()
 		defer q.RUnlock()
 		glog.V(2).Infof("%v sends a message to all local bees: %v", q, mh.msg)
-		for id, bee := range q.bees {
-			if _, ok := bee.(*localBee); !ok {
+		for id, b := range q.bees {
+			if b.detached || b.proxy {
 				continue
 			}
-			if bee.colony().Leader != id {
+			if b.colony().Leader != id {
 				continue
 			}
-			bee.enqueMsg(mh)
+			b.enqueMsg(mh)
 		}
 		return
 	}
 
-	bee, err := q.beeByCells(cells)
+	b, err := q.beeByCells(cells)
 	if err != nil {
 		lb, err := q.newLocalBee(true)
 		if err != nil {
@@ -412,17 +407,17 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 
 		if info.ID == lb.ID() {
 			lb.addMappedCells(cells)
-			bee = lb
+			b = lb
 		} else {
-			bee, err = q.beeByCells(cells)
+			b, err = q.beeByCells(cells)
 			if err != nil {
 				glog.Fatalf("neither can lock a cell nor can find its bee")
 			}
 		}
 	}
 
-	glog.V(2).Infof("message sent to bee %v: %v", bee, mh.msg)
-	bee.enqueMsg(mh)
+	glog.V(2).Infof("message sent to bee %v: %v", b, mh.msg)
+	b.enqueMsg(mh)
 }
 
 func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
@@ -448,7 +443,7 @@ func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
 	return info, nil
 }
 
-func (q *qee) beeByCells(cells MappedCells) (bee, error) {
+func (q *qee) beeByCells(cells MappedCells) (*bee, error) {
 	info, all, err := q.hive.registry.beeForCells(q.app.Name(), cells)
 	if err != nil {
 		return nil, err
@@ -488,13 +483,12 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 	var prx *proxy
 	var res interface{}
 
-	b, ok := q.beeByID(bid)
+	oldb, ok := q.beeByID(bid)
 	if !ok {
 		return Nil, fmt.Errorf("%v cannot find %v", q, bid)
 	}
 
-	oldb, ok := b.(*localBee)
-	if !ok {
+	if oldb.detached || oldb.proxy {
 		return Nil, fmt.Errorf("%v cannot migrate nonlocal bee %v", q, bid)
 	}
 
@@ -536,18 +530,15 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 	return q.hive.ID() == info.Hive
 }
 
-func (q *qee) defaultLocalBee(id uint64, detached bool) localBee {
-	b := localBee{
-		qee:      q,
-		beeID:    id,
-		detached: detached,
-		dataCh:   make(chan msgAndHandler, cap(q.dataCh)),
-		ctrlCh:   make(chan cmdAndChannel, cap(q.ctrlCh)),
-		hive:     q.hive,
-		app:      q.app,
-		ticker:   time.NewTicker(defaultRaftTick),
-		peers:    make(map[uint64]*proxy),
+func (q *qee) defaultLocalBee(id uint64) *bee {
+	return &bee{
+		qee:    q,
+		beeID:  id,
+		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
+		ctrlCh: make(chan cmdAndChannel, cap(q.ctrlCh)),
+		hive:   q.hive,
+		app:    q.app,
+		ticker: time.NewTicker(defaultRaftTick),
+		peers:  make(map[uint64]*proxy),
 	}
-	b.setState(q.app.newState())
-	return b
 }

@@ -17,19 +17,6 @@ import (
 	"github.com/kandoo/beehive/state"
 )
 
-type bee interface {
-	ID() uint64
-	colony() Colony
-
-	start()
-
-	State() State
-	setState(s state.State)
-
-	enqueMsg(mh msgAndHandler)
-	enqueCmd(cc cmdAndChannel)
-}
-
 type beeStatus int
 
 const (
@@ -38,20 +25,23 @@ const (
 	beeStatusStarted           = iota
 )
 
-type localBee struct {
+type bee struct {
 	sync.Mutex
 
 	beeID     uint64
 	beeColony Colony
 	detached  bool
+	proxy     bool
 	status    beeStatus
 	qee       *qee
 	app       *app
 	hive      *hive
 	timers    []*time.Timer
 
-	dataCh chan msgAndHandler
-	ctrlCh chan cmdAndChannel
+	dataCh    chan msgAndHandler
+	ctrlCh    chan cmdAndChannel
+	handleMsg func(mh msgAndHandler)
+	handleCmd func(cc cmdAndChannel)
 
 	node       *raft.Node
 	ticker     *time.Ticker
@@ -66,42 +56,51 @@ type localBee struct {
 	local interface{}
 }
 
-func (b *localBee) ID() uint64 {
+func (b *bee) ID() uint64 {
 	return b.beeID
 }
 
-func (b *localBee) String() string {
-	return fmt.Sprintf("bee %v/%v/%016X", b.hive.ID(), b.app.Name(), b.ID())
+func (b *bee) String() string {
+	switch {
+	case b.detached:
+		return fmt.Sprintf("detached bee %v/%v/%016X", b.hive.ID(), b.app.Name(),
+			b.ID())
+	case b.proxy:
+		return fmt.Sprintf("proxy bee %v/%v/%016X", b.hive.ID(), b.app.Name(),
+			b.ID())
+	default:
+		return fmt.Sprintf("bee %v/%v/%016X", b.hive.ID(), b.app.Name(), b.ID())
+	}
 }
 
-func (b *localBee) colony() Colony {
+func (b *bee) colony() Colony {
 	b.Lock()
 	defer b.Unlock()
 
 	return b.beeColony.DeepCopy()
 }
 
-func (b *localBee) setColony(c Colony) {
+func (b *bee) setColony(c Colony) {
 	b.Lock()
 	defer b.Unlock()
 
 	b.beeColony = c
 }
-func (b *localBee) setRaftNode(n *raft.Node) {
+func (b *bee) setRaftNode(n *raft.Node) {
 	b.Lock()
 	defer b.Unlock()
 
 	b.node = n
 }
 
-func (b *localBee) raftNode() *raft.Node {
+func (b *bee) raftNode() *raft.Node {
 	b.Lock()
 	defer b.Unlock()
 
 	return b.node
 }
 
-func (b *localBee) startNode() error {
+func (b *bee) startNode() error {
 	// TODO(soheil): restart if needed.
 	c := b.colony()
 	if c.IsNil() {
@@ -124,7 +123,7 @@ func (b *localBee) startNode() error {
 	return nil
 }
 
-func (b *localBee) stopNode() {
+func (b *bee) stopNode() {
 	node := b.raftNode()
 	if node == nil {
 		return
@@ -133,19 +132,19 @@ func (b *localBee) stopNode() {
 	b.disableEmit()
 }
 
-func (b *localBee) enableEmit() {
+func (b *bee) enableEmit() {
 	b.Lock()
 	defer b.Unlock()
 	b.emitInRaft = true
 }
 
-func (b *localBee) disableEmit() {
+func (b *bee) disableEmit() {
 	b.Lock()
 	defer b.Unlock()
 	b.emitInRaft = false
 }
 
-func (b *localBee) ProcessStatusChange(sch interface{}) {
+func (b *bee) ProcessStatusChange(sch interface{}) {
 	switch ev := sch.(type) {
 	case raft.LeaderChanged:
 		glog.V(2).Infof("%v recevies leader changed event %#v", b, ev)
@@ -170,6 +169,8 @@ func (b *localBee) ProcessStatusChange(sch interface{}) {
 		newc.Leader = ev.New
 		b.setColony(newc)
 
+		go b.processCmd(cmdRefreshRole{})
+
 		if ev.New == b.ID() {
 			return
 		}
@@ -187,7 +188,7 @@ func (b *localBee) ProcessStatusChange(sch interface{}) {
 	}
 }
 
-func (b *localBee) sendRaft(msgs []raftpb.Message) {
+func (b *bee) sendRaft(msgs []raftpb.Message) {
 	peerq := make(map[uint64][]raftpb.Message)
 	for _, m := range msgs {
 		q := peerq[m.To]
@@ -203,7 +204,7 @@ func (b *localBee) sendRaft(msgs []raftpb.Message) {
 	}
 }
 
-func (b *localBee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
+func (b *bee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
 	p, err := b.raftPeer(to)
 	if err != nil {
 		return err
@@ -223,7 +224,7 @@ func (b *localBee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
 	return nil
 }
 
-func (b *localBee) raftPeer(bid uint64) (*proxy, error) {
+func (b *bee) raftPeer(bid uint64) (*proxy, error) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -240,23 +241,23 @@ func (b *localBee) raftPeer(bid uint64) (*proxy, error) {
 	return p, nil
 }
 
-func (b *localBee) resetRaftPeer(bid uint64) {
+func (b *bee) resetRaftPeer(bid uint64) {
 	b.Lock()
 	defer b.Unlock()
 
 	delete(b.peers, bid)
 }
 
-func (b *localBee) statePath() string {
+func (b *bee) statePath() string {
 	return path.Join(b.hive.config.StatePath, b.app.Name(),
 		fmt.Sprintf("%016X", b.ID()))
 }
 
-func (b *localBee) isLeader() bool {
+func (b *bee) isLeader() bool {
 	return b.beeColony.Leader == b.beeID
 }
 
-func (b *localBee) addFollower(bid uint64, hid uint64) error {
+func (b *bee) addFollower(bid uint64, hid uint64) error {
 	oldc := b.colony()
 	if oldc.Leader != b.beeID {
 		return fmt.Errorf("%v is not the leader", b)
@@ -297,18 +298,30 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 	return nil
 }
 
-func (b *localBee) setState(s state.State) {
+func (b *bee) setState(s state.State) {
 	b.state = state.NewTransactional(s)
 }
 
-func (b *localBee) start() {
-	if !b.colony().IsNil() && b.app.persistent() {
+func (b *bee) startDetached(h DetachedHandler) {
+	if !b.detached {
+		glog.Fatalf("%v is not detached", b)
+	}
+
+	go h.Start(b)
+	defer h.Stop(b)
+
+	b.start()
+}
+
+func (b *bee) start() {
+	if !b.proxy && !b.colony().IsNil() && b.app.persistent() {
 		if err := b.startNode(); err != nil {
 			glog.Errorf("%v cannot start raft: %v", b, err)
 			return
 		}
 	}
 	b.status = beeStatusStarted
+	glog.V(2).Infof("%v started", b)
 	for b.status == beeStatusStarted {
 		select {
 		case d := <-b.dataCh:
@@ -320,7 +333,7 @@ func (b *localBee) start() {
 	}
 }
 
-func (b *localBee) recoverFromError(mh msgAndHandler, err interface{},
+func (b *bee) recoverFromError(mh msgAndHandler, err interface{},
 	stack bool) {
 	b.AbortTx()
 
@@ -335,7 +348,7 @@ func (b *localBee) recoverFromError(mh msgAndHandler, err interface{},
 	}
 }
 
-func (b *localBee) callRcv(mh msgAndHandler) {
+func (b *bee) callRcv(mh msgAndHandler) {
 	defer func() {
 		if r := recover(); r != nil {
 			b.recoverFromError(mh, r, true)
@@ -351,7 +364,7 @@ func (b *localBee) callRcv(mh msgAndHandler) {
 	b.hive.collector.collect(b.beeID, mh.msg, b.bufferedMsgs)
 }
 
-func (b *localBee) handleMsg(mh msgAndHandler) {
+func (b *bee) handleMsgLeader(mh msgAndHandler) {
 	glog.V(2).Infof("%v handles message %v", b, mh.msg)
 
 	if b.app.transactional() {
@@ -367,7 +380,7 @@ func (b *localBee) handleMsg(mh msgAndHandler) {
 	}
 }
 
-func (b *localBee) handleCmd(cc cmdAndChannel) {
+func (b *bee) handleCmdLeader(cc cmdAndChannel) {
 	glog.V(2).Infof("%v handles command %v", b, cc.cmd)
 	var err error
 	var data interface{}
@@ -400,6 +413,19 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 		}
 		b.setColony(cmd.Colony)
 		b.startNode()
+		if cmd.Colony.Leader == b.ID() {
+			b.becomeLeader()
+		} else {
+			b.becomeFollower()
+		}
+
+	case cmdRefreshRole:
+		c := b.colony()
+		if c.Leader == b.ID() {
+			b.becomeLeader()
+		} else {
+			b.becomeFollower()
+		}
 
 	case cmdAddFollower:
 		err = b.addFollower(cmd.Bee, cmd.Hive)
@@ -417,27 +443,114 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 	}
 }
 
-func (b *localBee) enqueMsg(mh msgAndHandler) {
+func (b *bee) becomeLeader() {
+	b.handleMsg, b.handleCmd = b.leaderHandlers()
+}
+
+func (b *bee) leaderHandlers() (func(mh msgAndHandler),
+	func(cc cmdAndChannel)) {
+
+	return b.handleMsgLeader, b.handleCmdLeader
+}
+
+func (b *bee) becomeZombie() {
+	b.handleMsg, b.handleCmd = b.dropMsg, b.handleCmdLeader
+}
+
+func (b *bee) dropMsg(mh msgAndHandler) {
+	glog.Errorf("%v drops %v", b, mh.msg)
+}
+
+func (b *bee) becomeFollower() {
+	b.handleMsg, b.handleCmd = b.followerHandlers()
+}
+
+func (b *bee) followerHandlers() (func(mh msgAndHandler),
+	func(cc cmdAndChannel)) {
+
+	c := b.colony()
+	if c.Leader == b.ID() {
+		glog.Fatalf("%v is the leader")
+	}
+
+	bi, err := b.hive.registry.bee(c.Leader)
+	if err != nil {
+		glog.Fatalf("%v cannot find leader %v", b, c.Leader)
+	}
+
+	p, err := b.hive.newProxyToHive(bi.Hive)
+	if err != nil {
+		glog.Fatalf("%v cannot create proxy to %v: %v", b, bi.Hive, err)
+	}
+
+	mfn, _ := b.proxyHandlers(p, c.Leader)
+	return mfn, b.handleCmdLeader
+}
+
+func (b *bee) becomeProxy(p *proxy) {
+	b.proxy = true
+	b.handleMsg, b.handleCmd = b.proxyHandlers(p, b.ID())
+}
+
+func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mh msgAndHandler),
+	func(cc cmdAndChannel)) {
+
+	mfn := func(mh msgAndHandler) {
+		glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
+		mh.msg.MsgTo = to
+		if err := p.sendMsg(mh.msg); err != nil {
+			glog.Errorf("cannot send message %v to %v: %v", mh.msg, b, err)
+		}
+	}
+	cfn := func(cc cmdAndChannel) {
+		switch cc.cmd.Data.(type) {
+		case cmdStop, cmdStart:
+			b.handleCmdLeader(cc)
+		default:
+			d, err := p.sendCmd(&cc.cmd)
+			if cc.ch != nil {
+				cc.ch <- cmdResult{Data: d, Err: err}
+			}
+		}
+	}
+	return mfn, cfn
+}
+
+func (b *bee) becomeDetached(h DetachedHandler) {
+	b.detached = true
+	b.handleMsg, b.handleCmd = b.detachedHandlers(h)
+}
+
+func (b *bee) detachedHandlers(h DetachedHandler) (func(mh msgAndHandler),
+	func(cc cmdAndChannel)) {
+
+	mfn := func(mh msgAndHandler) {
+		h.Rcv(mh.msg, b)
+	}
+	return mfn, b.handleCmdLeader
+}
+
+func (b *bee) enqueMsg(mh msgAndHandler) {
 	glog.V(3).Infof("%v enqueues message %v", b, mh.msg)
 	b.dataCh <- mh
 }
 
-func (b *localBee) enqueCmd(cc cmdAndChannel) {
+func (b *bee) enqueCmd(cc cmdAndChannel) {
 	glog.V(3).Infof("%v enqueues a command %v", b, cc)
 	b.ctrlCh <- cc
 }
 
-func (b *localBee) processCmd(data interface{}) (interface{}, error) {
+func (b *bee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
 	b.ctrlCh <- newCmdAndChannel(data, b.app.Name(), b.ID(), ch)
 	return (<-ch).get()
 }
 
-func (b *localBee) stepRaft(msg raftpb.Message) error {
+func (b *bee) stepRaft(msg raftpb.Message) error {
 	return b.raftNode().Step(context.TODO(), msg)
 }
 
-func (b *localBee) mappedCells() MappedCells {
+func (b *bee) mappedCells() MappedCells {
 	b.Lock()
 	defer b.Unlock()
 
@@ -448,7 +561,7 @@ func (b *localBee) mappedCells() MappedCells {
 	return mc
 }
 
-func (b *localBee) addMappedCells(cells MappedCells) {
+func (b *bee) addMappedCells(cells MappedCells) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -462,14 +575,14 @@ func (b *localBee) addMappedCells(cells MappedCells) {
 	}
 }
 
-func (b *localBee) addTimer(t *time.Timer) {
+func (b *bee) addTimer(t *time.Timer) {
 	b.Lock()
 	defer b.Unlock()
 
 	b.timers = append(b.timers, t)
 }
 
-func (b *localBee) delTimer(t *time.Timer) {
+func (b *bee) delTimer(t *time.Timer) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -481,7 +594,7 @@ func (b *localBee) delTimer(t *time.Timer) {
 	}
 }
 
-func (b *localBee) snooze(mh msgAndHandler, d time.Duration) {
+func (b *bee) snooze(mh msgAndHandler, d time.Duration) {
 	t := time.NewTimer(d)
 	b.addTimer(t)
 
@@ -492,46 +605,46 @@ func (b *localBee) snooze(mh msgAndHandler, d time.Duration) {
 	}()
 }
 
-func (b *localBee) Hive() Hive {
+func (b *bee) Hive() Hive {
 	return b.hive
 }
 
-func (b *localBee) State() State {
+func (b *bee) State() State {
 	return b.state
 }
 
-func (b *localBee) Dict(n string) state.Dict {
+func (b *bee) Dict(n string) state.Dict {
 	return b.State().Dict(n)
 }
 
-func (b *localBee) App() string {
+func (b *bee) App() string {
 	return b.app.Name()
 }
 
 // Emits a message. Note that m should be your data not an instance of Msg.
-func (b *localBee) Emit(msgData interface{}) {
+func (b *bee) Emit(msgData interface{}) {
 	b.bufferOrEmit(newMsgFromData(msgData, b.ID(), 0))
 }
 
-func (b *localBee) doEmit(msg *msg) {
+func (b *bee) doEmit(msg *msg) {
 	b.hive.emitMsg(msg)
 }
 
-func (b *localBee) bufferMsg(msg *msg) {
+func (b *bee) bufferMsg(msg *msg) {
 	b.bufferedMsgs = append(b.bufferedMsgs, msg)
 }
 
-func (b *localBee) bufferOrEmit(msg *msg) {
+func (b *bee) bufferOrEmit(msg *msg) {
 	if b.txStatus != state.TxOpen {
 		b.doEmit(msg)
 		return
 	}
 
-	glog.V(2).Infof("Buffers msg %+v in tx", msg)
+	glog.V(2).Infof("buffers msg %+v in tx", msg)
 	b.bufferMsg(msg)
 }
 
-func (b *localBee) SendToCellKey(msgData interface{}, to string, k CellKey) {
+func (b *bee) SendToCellKey(msgData interface{}, to string, k CellKey) {
 	// FIXME(soheil): Implement send to.
 	glog.Fatal("FIXME implement bee.SendToCellKey")
 
@@ -539,12 +652,12 @@ func (b *localBee) SendToCellKey(msgData interface{}, to string, k CellKey) {
 	b.bufferOrEmit(msg)
 }
 
-func (b *localBee) SendToBee(msgData interface{}, to uint64) {
+func (b *bee) SendToBee(msgData interface{}, to uint64) {
 	b.bufferOrEmit(newMsgFromData(msgData, b.beeID, to))
 }
 
 // Reply to msg with the provided reply.
-func (b *localBee) ReplyTo(msg Msg, reply interface{}) error {
+func (b *bee) ReplyTo(msg Msg, reply interface{}) error {
 	if msg.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
@@ -553,19 +666,19 @@ func (b *localBee) ReplyTo(msg Msg, reply interface{}) error {
 	return nil
 }
 
-func (b *localBee) LockCells(keys []CellKey) error {
+func (b *bee) LockCells(keys []CellKey) error {
 	panic("error FIXME bee.LOCK")
 }
 
-func (b *localBee) SetBeeLocal(d interface{}) {
+func (b *bee) SetBeeLocal(d interface{}) {
 	b.local = d
 }
 
-func (b *localBee) BeeLocal() interface{} {
+func (b *bee) BeeLocal() interface{} {
 	return b.local
 }
 
-func (b *localBee) StartDetached(h DetachedHandler) uint64 {
+func (b *bee) StartDetached(h DetachedHandler) uint64 {
 	d, err := b.qee.processCmd(cmdStartDetached{Handler: h})
 	if err != nil {
 		glog.Fatalf("Cannot start a detached bee: %v", err)
@@ -573,13 +686,13 @@ func (b *localBee) StartDetached(h DetachedHandler) uint64 {
 	return d.(uint64)
 }
 
-func (b *localBee) StartDetachedFunc(start StartFunc, stop StopFunc,
+func (b *bee) StartDetachedFunc(start StartFunc, stop StopFunc,
 	rcv RcvFunc) uint64 {
 
 	return b.StartDetached(&funcDetached{start, stop, rcv})
 }
 
-func (b *localBee) BeginTx() error {
+func (b *bee) BeginTx() error {
 	if b.txStatus == state.TxOpen {
 		return state.ErrOpenTx
 	}
@@ -594,7 +707,7 @@ func (b *localBee) BeginTx() error {
 	return nil
 }
 
-func (b *localBee) emitTxMsgs() {
+func (b *bee) emitTxMsgs() {
 	if len(b.bufferedMsgs) == 0 {
 		return
 	}
@@ -604,7 +717,7 @@ func (b *localBee) emitTxMsgs() {
 	}
 }
 
-func (b *localBee) doCommitTx() error {
+func (b *bee) doCommitTx() error {
 	defer b.resetTx()
 	b.emitTxMsgs()
 	if err := b.state.CommitTx(); err != nil {
@@ -614,26 +727,20 @@ func (b *localBee) doCommitTx() error {
 	return nil
 }
 
-func (b *localBee) resetTx() {
+func (b *bee) resetTx() {
 	b.txStatus = state.TxNone
 	b.state.Reset()
 	b.bufferedMsgs = nil
 }
 
-func (b *localBee) replicate() error {
+func (b *bee) replicate() error {
 	glog.V(2).Infof("%v replicates transaction", b)
 	tx := b.tx()
 	if len(tx.Ops) == 0 {
 		return b.doCommitTx()
 	}
 
-	if n := len(b.colony().Followers) + 1; n < b.app.replFactor {
-		newf := b.recruiteFollowers()
-		if newf+n < b.app.replFactor {
-			glog.Warningf("%v can replicate only on %v node(s)", b, n)
-		}
-	}
-
+	b.maybeRecruitFollowers()
 	_, err := b.raftNode().Process(context.TODO(), commitTx(tx))
 	if err == nil {
 		glog.V(2).Infof("%v successfully replicates transaction", b)
@@ -643,7 +750,25 @@ func (b *localBee) replicate() error {
 	return err
 }
 
-func (b *localBee) recruiteFollowers() (recruited int) {
+func (b *bee) maybeRecruitFollowers() {
+	if b.detached {
+		return
+	}
+
+	c := b.colony()
+	if c.Leader != b.ID() {
+		glog.Fatalf("%v is not master of %v and is replicating", b, c)
+	}
+
+	if n := len(c.Followers) + 1; n < b.app.replFactor {
+		newf := b.doRecruitFollowers()
+		if newf+n < b.app.replFactor {
+			glog.Warningf("%v can replicate only on %v node(s)", b, n)
+		}
+	}
+}
+
+func (b *bee) doRecruitFollowers() (recruited int) {
 	c := b.colony()
 	r := b.app.replFactor - len(c.Followers)
 	if r == 1 {
@@ -695,7 +820,7 @@ func (b *localBee) recruiteFollowers() (recruited int) {
 	return recruited
 }
 
-func (b *localBee) handoff(to uint64) error {
+func (b *bee) handoff(to uint64) error {
 	if !b.colony().IsFollower(to) {
 		return fmt.Errorf("%v is not a follower of %v", to, b)
 	}
@@ -718,17 +843,21 @@ func (b *localBee) handoff(to uint64) error {
 		glog.Fatalf("%v cannot restart node: %v", b, err)
 	}
 
+	if b.colony().IsFollower(b.ID()) {
+		glog.V(2).Infof("%v successfully handed off leadership to %v", b, to)
+		b.becomeFollower()
+	}
 	return <-ch
 }
 
-func (b *localBee) tx() Tx {
+func (b *bee) tx() Tx {
 	return Tx{
 		Tx:   state.Tx{Status: b.txStatus, Ops: b.state.Tx()},
 		Msgs: b.bufferedMsgs,
 	}
 }
 
-func (b *localBee) CommitTx() error {
+func (b *bee) CommitTx() error {
 	if b.txStatus != state.TxOpen {
 		return state.ErrNoTx
 	}
@@ -746,7 +875,7 @@ func (b *localBee) CommitTx() error {
 	return b.replicate()
 }
 
-func (b *localBee) AbortTx() error {
+func (b *bee) AbortTx() error {
 	if b.txStatus != state.TxOpen {
 		return state.ErrNoTx
 	}
@@ -756,19 +885,19 @@ func (b *localBee) AbortTx() error {
 	return b.state.AbortTx()
 }
 
-func (b *localBee) Snooze(d time.Duration) {
+func (b *bee) Snooze(d time.Duration) {
 	panic(d)
 }
 
-func (b *localBee) Save() ([]byte, error) {
+func (b *bee) Save() ([]byte, error) {
 	return b.state.Save()
 }
 
-func (b *localBee) Restore(buf []byte) error {
+func (b *bee) Restore(buf []byte) error {
 	return b.state.Restore(buf)
 }
 
-func (b *localBee) Apply(req interface{}) (interface{}, error) {
+func (b *bee) Apply(req interface{}) (interface{}, error) {
 	b.Lock()
 	defer b.Unlock()
 
@@ -801,7 +930,7 @@ func (b *localBee) Apply(req interface{}) (interface{}, error) {
 	return nil, ErrUnsupportedRequest
 }
 
-func (b *localBee) ApplyConfChange(cc raftpb.ConfChange,
+func (b *bee) ApplyConfChange(cc raftpb.ConfChange,
 	n raft.NodeInfo) error {
 
 	b.Lock()
