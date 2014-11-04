@@ -136,7 +136,7 @@ func (h *v1Handler) handleRaft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.srv.hive.processRaft(context.TODO(), msg); err != nil {
+	if err = h.srv.hive.stepRaft(context.TODO(), msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -183,8 +183,12 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	if err = lb.processRaft(msg); err != nil {
+	node := lb.raftNode()
+	if node == nil {
+		http.Error(w, "node is not started", http.StatusInternalServerError)
+		return
+	}
+	if err = lb.stepRaft(msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

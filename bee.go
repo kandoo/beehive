@@ -53,9 +53,10 @@ type localBee struct {
 	dataCh chan msgAndHandler
 	ctrlCh chan cmdAndChannel
 
-	node   *raft.Node
-	ticker *time.Ticker
-	peers  map[uint64]*proxy
+	node       *raft.Node
+	ticker     *time.Ticker
+	peers      map[uint64]*proxy
+	emitInRaft bool
 
 	cells        map[CellKey]bool
 	txStatus     state.TxStatus
@@ -86,6 +87,19 @@ func (b *localBee) setColony(c Colony) {
 
 	b.beeColony = c
 }
+func (b *localBee) setRaftNode(n *raft.Node) {
+	b.Lock()
+	defer b.Unlock()
+
+	b.node = n
+}
+
+func (b *localBee) raftNode() *raft.Node {
+	b.Lock()
+	defer b.Unlock()
+
+	return b.node
+}
 
 func (b *localBee) startNode() error {
 	// TODO(soheil): restart if needed.
@@ -97,15 +111,38 @@ func (b *localBee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
-	b.node = raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
+	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
 		b.statePath(), b, 1024, b.ticker.C, 10, 1)
+	b.setRaftNode(node)
 	// This will act like a barrier.
-	if _, err := b.node.Process(context.TODO(), noOp{}); err != nil {
+	if _, err := node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Errorf("%v cannot start raft: %v", b, err)
 		return err
 	}
+	b.enableEmit()
 	glog.V(2).Infof("%v started its raft node", b)
 	return nil
+}
+
+func (b *localBee) stopNode() {
+	node := b.raftNode()
+	if node == nil {
+		return
+	}
+	node.Stop()
+	b.disableEmit()
+}
+
+func (b *localBee) enableEmit() {
+	b.Lock()
+	defer b.Unlock()
+	b.emitInRaft = true
+}
+
+func (b *localBee) disableEmit() {
+	b.Lock()
+	defer b.Unlock()
+	b.emitInRaft = false
 }
 
 func (b *localBee) ProcessStatusChange(sch interface{}) {
@@ -230,7 +267,7 @@ func (b *localBee) addFollower(bid uint64, hid uint64) error {
 		return err
 	}
 
-	if err := b.node.AddNode(context.TODO(), bid, ""); err != nil {
+	if err := b.raftNode().AddNode(context.TODO(), bid, ""); err != nil {
 		return err
 	}
 
@@ -326,9 +363,7 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		b.status = beeStatusStopped
-		if b.node != nil {
-			b.node.Stop()
-		}
+		b.stopNode()
 		glog.V(2).Infof("%v stopped", b)
 
 	case cmdStart:
@@ -336,10 +371,10 @@ func (b *localBee) handleCmd(cc cmdAndChannel) {
 		glog.V(2).Infof("%v started", b)
 
 	case cmdSync:
-		_, err = b.node.Process(context.TODO(), noOp{})
+		_, err = b.raftNode().Process(context.TODO(), noOp{})
 
 	case cmdCampaign:
-		err = b.node.Campaign(context.TODO())
+		err = b.raftNode().Campaign(context.TODO())
 
 	case cmdHandoff:
 		err = b.handoff(cmd.To)
@@ -387,8 +422,8 @@ func (b *localBee) processCmd(data interface{}) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (b *localBee) processRaft(msg raftpb.Message) error {
-	return b.node.Step(context.TODO(), msg)
+func (b *localBee) stepRaft(msg raftpb.Message) error {
+	return b.raftNode().Step(context.TODO(), msg)
 }
 
 func (b *localBee) mappedCells() MappedCells {
@@ -588,7 +623,7 @@ func (b *localBee) replicate() error {
 		}
 	}
 
-	_, err := b.node.Process(context.TODO(), commitTx(tx))
+	_, err := b.raftNode().Process(context.TODO(), commitTx(tx))
 	if err == nil {
 		glog.V(2).Infof("%v successfully replicates transaction", b)
 	} else {

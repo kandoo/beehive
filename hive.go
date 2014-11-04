@@ -304,7 +304,7 @@ func (h *hive) processCmd(data interface{}) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (h *hive) processRaft(ctx context.Context, msg raftpb.Message) error {
+func (h *hive) stepRaft(ctx context.Context, msg raftpb.Message) error {
 	return h.node.Step(ctx, msg)
 }
 
