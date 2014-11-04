@@ -308,6 +308,7 @@ func (q *qee) reloadBee(id uint64, col Colony) (bee, error) {
 	b := q.defaultLocalBee(id, false)
 	b.setColony(info.Colony)
 	q.addBee(&b)
+	glog.V(2).Infof("%v reloads %v", q, &b)
 	go b.start()
 	return &b, nil
 }
