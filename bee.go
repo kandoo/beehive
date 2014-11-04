@@ -419,6 +419,9 @@ func (b *bee) handleCmdLeader(cc cmdAndChannel) {
 			b.becomeFollower()
 		}
 
+	case cmdAddMappedCells:
+		b.addMappedCells(cmd.Cells)
+
 	case cmdRefreshRole:
 		c := b.colony()
 		if c.Leader == b.ID() {

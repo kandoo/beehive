@@ -16,6 +16,7 @@ type cmdCreateBee struct{}
 type cmdFindBee struct{ ID uint64 }
 type cmdHandoff struct{ To uint64 }
 type cmdJoinColony struct{ Colony Colony }
+type cmdAddMappedCells struct{ Cells MappedCells }
 type cmdRefreshRole struct{}
 type cmdLiveHives struct{}
 type cmdMigrate struct {
@@ -41,6 +42,7 @@ func init() {
 	gob.Register(cmdFindBee{})
 	gob.Register(cmdHandoff{})
 	gob.Register(cmdJoinColony{})
+	gob.Register(cmdAddMappedCells{})
 	gob.Register(cmdRefreshRole{})
 	gob.Register(cmdLiveHives{})
 	gob.Register(cmdMigrate{})
