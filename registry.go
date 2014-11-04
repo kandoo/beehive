@@ -227,7 +227,8 @@ func (r *registry) addHive(info HiveInfo) error {
 }
 
 func (r *registry) addBee(info BeeInfo) error {
-	glog.V(2).Infof("%v add bee %v with colony %v", r, info.ID, info.Colony)
+	glog.V(2).Infof("%v add bee %v (detached=%v) for %v with %v,", r, info.ID,
+		info.Detached, info.App, info.Colony)
 	if _, ok := r.Bees[info.ID]; ok {
 		return ErrDuplicateBee
 	}
