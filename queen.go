@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
@@ -587,7 +586,6 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 		ctrlCh: make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:   q.hive,
 		app:    q.app,
-		ticker: time.NewTicker(defaultRaftTick),
 		peers:  make(map[uint64]*proxy),
 	}
 }

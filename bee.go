@@ -110,6 +110,8 @@ func (b *bee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
+
+	b.ticker = time.NewTicker(defaultRaftTick)
 	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
 		b.statePath(), b, 1024, b.ticker.C, 10, 1)
 	b.setRaftNode(node)
@@ -130,6 +132,7 @@ func (b *bee) stopNode() {
 	}
 	node.Stop()
 	b.disableEmit()
+	b.ticker.Stop()
 }
 
 func (b *bee) enableEmit() {
