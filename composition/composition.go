@@ -46,13 +46,23 @@ func (c *ComposedHandler) callMap(h bh.Handler, msg bh.Msg, ctx bh.MapContext) (
 	}()
 
 	cells = h.Map(msg, ctx)
+	if cells == nil {
+		err = fmt.Errorf("%#v drops the msg", h)
+	}
 	return
 }
 
+// Rcv method of the composed handler.
 func (c *ComposedHandler) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	var err error
 	for i := range c.Handlers {
-		err = c.callRcv(c.Handlers[i], msg, ctx)
+		if c.Isolate {
+			rctx := composedRcvContext{RcvContext: ctx, prefix: strconv.Itoa(i)}
+			err = c.callRcv(c.Handlers[i], msg, rctx)
+		} else {
+			err = c.callRcv(c.Handlers[i], msg, ctx)
+		}
+
 		switch c.Composer(msg, ctx, err) {
 		case Abort:
 			ctx.AbortTx()
@@ -79,17 +89,27 @@ func (c *ComposedHandler) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
+// Map method of the composed handler.
 func (c *ComposedHandler) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	var cells bh.MappedCells
-	for _, h := range c.Handlers {
-		hc, err := c.callMap(h, msg, ctx)
+	var err error
+	for i, h := range c.Handlers {
+		var hc bh.MappedCells
+		if c.Isolate {
+			mctx := composedMapContext{MapContext: ctx, prefix: strconv.Itoa(i)}
+			hc, err = c.callMap(h, msg, mctx)
+		} else {
+			hc, err = c.callMap(h, msg, ctx)
+		}
+
+		// TODO(soheil): Is there any better way to handle this?
 		if err != nil {
-			glog.Errorf("error in calling the map function of %v: %v", h, err)
+			glog.Errorf("error in calling the map function of %#v: %v", h, err)
 			return nil
 		}
 		if c.Isolate {
-			for i := range hc {
-				hc[i].Dict = strconv.Itoa(i) + hc[i].Dict
+			for j := range hc {
+				hc[j].Dict = strconv.Itoa(i) + hc[j].Dict
 			}
 		}
 		for _, cell := range hc {

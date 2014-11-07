@@ -7,7 +7,8 @@ import (
 
 // Any composes handlers as a logic OR function. An incoming message is passed
 // to the i'th handler, if the (i-1)'th handler cannot successfully process the
-// incoming message.
+// incoming message. Note that the map functions should never drop the packet or
+// panic.
 func Any(handlers ...bh.Handler) bh.Handler {
 	if len(handlers) == 0 {
 		glog.Fatalf("no handler provided")
