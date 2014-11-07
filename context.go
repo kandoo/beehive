@@ -11,8 +11,6 @@ type Context interface {
 	Hive() Hive
 	// App returns the name of the application of this context.
 	App() string
-	// State returns the state of the bee/queen bee.
-	State() State
 	// Dict is a helper function that returns the specific dict within the state.
 	Dict(name string) state.Dict
 }

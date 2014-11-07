@@ -37,7 +37,7 @@ func bytesToInt(b []byte) int {
 
 func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	hash := int(m.Data().(MyMsg)) % handlers
-	d := c.State().Dict("D")
+	d := c.Dict("D")
 	k := strconv.Itoa(hash)
 	v, err := d.Get(k)
 	i := 1
