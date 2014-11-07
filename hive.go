@@ -94,6 +94,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
+	h.initServer(cfg.Addr)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -176,10 +177,12 @@ type hive struct {
 	apps map[string]*app
 	qees map[string][]qeeAndHandler
 
+	server   *server
+	listener net.Listener
+
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	listener net.Listener
 	client   *http.Client
 	peers    map[uint64]*proxy
 
@@ -529,19 +532,18 @@ func (h *hive) listen() error {
 	glog.Infof("%v listens", h)
 	h.listener = l
 
-	s := h.newServer(h.config.Addr)
 	go func() {
-		s.Serve(l)
+		h.server.Serve(l)
 		glog.Infof("%v closed listener", h)
 	}()
 	return nil
 }
 
-// NewServer creates a server for the given addr. It installs all required
+// initServer creates a server for the given addr. It installs all required
 // handlers for Beehive.
-func (h *hive) newServer(addr string) *server {
+func (h *hive) initServer(addr string) {
 	r := mux.NewRouter()
-	s := server{
+	h.server = &server{
 		Server: http.Server{
 			Addr:    addr,
 			Handler: r,
@@ -549,13 +551,10 @@ func (h *hive) newServer(addr string) *server {
 		router: r,
 		hive:   h,
 	}
-
 	handlerV1 := v1Handler{
-		srv: &s,
+		srv: h.server,
 	}
 	handlerV1.Install(r)
-
-	return &s
 }
 
 func (h *hive) newProxyToHive(to uint64) (*proxy, error) {

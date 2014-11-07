@@ -1,6 +1,8 @@
 package beehive
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -353,4 +355,24 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	h2.Stop()
 	h3.Stop()
 	h4.Stop()
+}
+
+func TestAppHTTP(t *testing.T) {
+	h := hive{}
+	addr := newHiveAddrForTest()
+	h.initServer(addr)
+	a := &app{
+		name: "testapp",
+		hive: &h,
+	}
+	a.HTTPHandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+	})
+	go h.server.ListenAndServe()
+	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", addr))
+	if err != nil {
+		t.Error(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("reponse status: actual=%v want=200 Ok", resp.Status)
+	}
 }

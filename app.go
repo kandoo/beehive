@@ -3,8 +3,10 @@ package beehive
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -31,6 +33,20 @@ type App interface {
 	State() State
 	// Returns the app name.
 	Name() string
+
+	// HTTPHandle registers an HTTP handler for this application on
+	// "/apps/name/path".
+	//
+	// Note: Gorilla mux is used internally. As such, it is legal to use path
+	// parameters.
+	HTTPHandle(path string, handler http.Handler) *mux.Route
+	// HTTPHandleFunc registers an HTTP handler func for this application on
+	// "/app/name/path".
+	//
+	// Note: Gorilla mux is used internally. As such, it is legal to use path
+	// parameters.
+	HTTPHandleFunc(path string,
+		handler func(http.ResponseWriter, *http.Request)) *mux.Route
 }
 
 // AppOption represents an option for applications.
@@ -211,6 +227,24 @@ func (a *app) State() State {
 
 func (a *app) Name() string {
 	return a.name
+}
+
+func (a *app) HTTPHandle(path string, handler http.Handler) *mux.Route {
+	return a.subrouter().Handle(path, handler)
+}
+
+func (a *app) HTTPHandleFunc(path string,
+	handler func(http.ResponseWriter, *http.Request)) *mux.Route {
+
+	return a.subrouter().HandleFunc(path, handler)
+}
+
+func (a *app) subrouter() *mux.Router {
+	return a.hive.server.router.PathPrefix(a.appHTTPPrefix()).Subrouter()
+}
+
+func (a *app) appHTTPPrefix() string {
+	return "/apps/" + a.name
 }
 
 func (a *app) initQee() {
