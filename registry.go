@@ -374,18 +374,18 @@ func (r *registry) transfer(t transferCells) error {
 
 func (r *registry) hives() []HiveInfo {
 	r.m.RLock()
-	defer r.m.RUnlock()
 	hives := make([]HiveInfo, 0, len(r.Hives))
 	for _, h := range r.Hives {
 		hives = append(hives, h)
 	}
+	r.m.RUnlock()
 	return hives
 }
 
 func (r *registry) hive(id uint64) (HiveInfo, error) {
 	r.m.RLock()
-	defer r.m.RUnlock()
 	i, ok := r.Hives[id]
+	r.m.RUnlock()
 	if !ok {
 		return i, ErrNoSuchHive
 	}
@@ -394,20 +394,20 @@ func (r *registry) hive(id uint64) (HiveInfo, error) {
 
 func (r *registry) beesOfHive(id uint64) []BeeInfo {
 	r.m.RLock()
-	defer r.m.RUnlock()
 	var bees []BeeInfo
 	for _, b := range r.Bees {
 		if b.Hive == id {
 			bees = append(bees, b)
 		}
 	}
+	r.m.RUnlock()
 	return bees
 }
 
 func (r *registry) bee(id uint64) (BeeInfo, error) {
 	r.m.RLock()
-	defer r.m.RUnlock()
 	i, ok := r.Bees[id]
+	r.m.RUnlock()
 	if !ok {
 		return i, ErrNoSuchBee
 	}
