@@ -157,7 +157,7 @@ type hiveStatus int
 // Valid values for HiveStatus.
 const (
 	hiveStopped hiveStatus = iota
-	hiveStarted            = iota
+	hiveStarted
 )
 
 // The internal implementation of Hive.

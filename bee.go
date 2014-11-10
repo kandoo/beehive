@@ -21,8 +21,8 @@ type beeStatus int
 
 const (
 	beeStatusStopped beeStatus = iota
-	beeStatusJoining           = iota
-	beeStatusStarted           = iota
+	beeStatusJoining
+	beeStatusStarted
 )
 
 type bee struct {
