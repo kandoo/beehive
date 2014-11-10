@@ -310,7 +310,14 @@ func (b *bee) startDetached(h DetachedHandler) {
 		glog.Fatalf("%v is not detached", b)
 	}
 
-	go h.Start(b)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				glog.Errorf("%v recovers from an error in Start(): %v", r)
+			}
+		}()
+		h.Start(b)
+	}()
 	defer h.Stop(b)
 
 	b.start()
@@ -538,7 +545,18 @@ func (b *bee) detachedHandlers(h DetachedHandler) (func(mh msgAndHandler),
 
 func (b *bee) enqueMsg(mh msgAndHandler) {
 	glog.V(3).Infof("%v enqueues message %v", b, mh.msg)
-	b.dataCh <- mh
+	for {
+		select {
+		case b.dataCh <- mh:
+			return
+		case <-time.After(60 * time.Second):
+			fmt.Printf("deadline %v, %v %v, %v %v, %v %v\n", b,
+				len(b.dataCh), len(b.ctrlCh),
+				len(b.qee.dataCh), len(b.qee.ctrlCh),
+				len(b.hive.dataCh.in()), len(b.hive.ctrlCh))
+			panic("test2")
+		}
+	}
 }
 
 func (b *bee) enqueCmd(cc cmdAndChannel) {
@@ -633,7 +651,7 @@ func (b *bee) Emit(msgData interface{}) {
 }
 
 func (b *bee) doEmit(msg *msg) {
-	b.hive.emitMsg(msg)
+	b.hive.enqueMsg(msg)
 }
 
 func (b *bee) bufferMsg(msg *msg) {
@@ -868,16 +886,16 @@ func (b *bee) CommitTx() error {
 		return state.ErrNoTx
 	}
 
-	glog.V(2).Infof("%v commits transaction", b)
-
 	defer b.resetTx()
 
 	// No need to update sequences.
 	if !b.app.persistent() || b.detached {
+		glog.V(2).Infof("%v commits in memory transaction", b)
 		b.doCommitTx()
 		return nil
 	}
 
+	glog.V(2).Infof("%v commits persistent transaction", b)
 	return b.replicate()
 }
 
