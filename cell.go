@@ -28,66 +28,90 @@ func (mc MappedCells) LocalBroadcast() bool {
 }
 
 type cellStore struct {
-	// appname -> cellkey -> colony
-	CellBees map[string]map[CellKey]Colony
-	// beeid -> cellkey
-	BeeCells map[uint64]map[CellKey]struct{}
+	// appname -> dict -> key -> colony
+	CellBees map[string]map[string]map[string]Colony
+	// beeid -> dict -> key
+	BeeCells map[uint64]map[string]map[string]struct{}
 }
 
 func newCellStore() cellStore {
 	return cellStore{
-		CellBees: make(map[string]map[CellKey]Colony),
-		BeeCells: make(map[uint64]map[CellKey]struct{}),
+		CellBees: make(map[string]map[string]map[string]Colony),
+		BeeCells: make(map[uint64]map[string]map[string]struct{}),
 	}
 }
 
 func (s *cellStore) assign(app string, k CellKey, c Colony) {
-	cells, ok := s.CellBees[app]
-	if !ok {
-		cells = make(map[CellKey]Colony)
-		s.CellBees[app] = cells
-	}
-	cells[k] = c
+	s.assignCellBees(app, k, c)
+	s.assignBeeCells(app, k, c)
+}
 
-	m, ok := s.BeeCells[c.Leader]
+func (s *cellStore) assignCellBees(app string, k CellKey, c Colony) {
+	dicts, ok := s.CellBees[app]
 	if !ok {
-		m = make(map[CellKey]struct{})
-		s.BeeCells[c.Leader] = m
+		dicts = make(map[string]map[string]Colony)
+		s.CellBees[app] = dicts
 	}
-	m[k] = struct{}{}
+	keys, ok := dicts[k.Dict]
+	if !ok {
+		keys = make(map[string]Colony)
+		dicts[k.Dict] = keys
+	}
+	keys[k.Key] = c
+}
+
+func (s *cellStore) assignBeeCells(app string, k CellKey, c Colony) {
+	dicts, ok := s.BeeCells[c.Leader]
+	if !ok {
+		dicts = make(map[string]map[string]struct{})
+		s.BeeCells[c.Leader] = dicts
+	}
+	keys, ok := dicts[k.Dict]
+	if !ok {
+		keys = make(map[string]struct{})
+		dicts[k.Dict] = keys
+	}
+	keys[k.Key] = struct{}{}
 }
 
 func (s *cellStore) colony(app string, cell CellKey) (c Colony, ok bool) {
-	cells, ok := s.CellBees[app]
+	dicts, ok := s.CellBees[app]
 	if !ok {
-		return Colony{}, ok
+		return Colony{}, false
 	}
-
-	c, ok = cells[cell]
+	keys, ok := dicts[cell.Dict]
+	if !ok {
+		return Colony{}, false
+	}
+	c, ok = keys[cell.Key]
 	return c, ok
 }
 
 func (s *cellStore) cells(bee uint64) MappedCells {
-	m, ok := s.BeeCells[bee]
+	dicts, ok := s.BeeCells[bee]
 	if !ok {
 		return nil
 	}
-	c := make(MappedCells, 0, len(m))
-	for k := range m {
-		c = append(c, k)
+	c := make(MappedCells, 0, len(dicts))
+	for d, dict := range dicts {
+		for k := range dict {
+			c = append(c, CellKey{Dict: d, Key: k})
+		}
 	}
 	return c
 }
 
 func (s *cellStore) updateColony(app string, oldc Colony, newc Colony) error {
-	bcells := s.BeeCells[oldc.Leader]
+	bdicts := s.BeeCells[oldc.Leader]
 	if oldc.Leader != newc.Leader {
-		s.BeeCells[newc.Leader] = bcells
+		s.BeeCells[newc.Leader] = bdicts
 		delete(s.BeeCells, oldc.Leader)
 	}
 	acells := s.CellBees[app]
-	for c := range bcells {
-		acells[c] = newc
+	for d, dict := range bdicts {
+		for k := range dict {
+			acells[d][k] = newc
+		}
 	}
 	return nil
 }
