@@ -83,7 +83,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		meta:   m,
 		status: hiveStopped,
 		config: cfg,
-		dataCh: make(chan *msg, cfg.DataChBufSize),
+		dataCh: newMsgChannel(cfg.DataChBufSize),
 		ctrlCh: make(chan cmdAndChannel),
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
@@ -170,7 +170,7 @@ type hive struct {
 
 	status hiveStatus
 
-	dataCh chan *msg
+	dataCh *msgChannel
 	ctrlCh chan cmdAndChannel
 	sigCh  chan os.Signal
 
@@ -347,10 +347,10 @@ func (h *hive) handleMsg(m *msg) {
 		if !ok {
 			glog.Fatalf("no such application %s", i.App)
 		}
-		a.qee.dataCh <- msgAndHandler{m, a.handler(m.Type())}
+		a.qee.enqueMsg(msgAndHandler{m, a.handler(m.Type())})
 	default:
 		for _, qh := range h.qees[m.Type()] {
-			qh.q.dataCh <- msgAndHandler{m, qh.h}
+			qh.q.enqueMsg(msgAndHandler{m, qh.h})
 		}
 	}
 }
@@ -419,10 +419,11 @@ func (h *hive) Start() error {
 	h.reloadState()
 
 	glog.V(2).Infof("%v starts message loop", h)
+	dataCh := h.dataCh.out()
 	for h.status == hiveStarted {
 		select {
-		case msg := <-h.dataCh:
-			h.handleMsg(msg)
+		case m := <-dataCh:
+			h.handleMsg(m.msg)
 
 		case cmd := <-h.ctrlCh:
 			h.handleCmd(cmd)
@@ -440,6 +441,7 @@ func (h *hive) info() HiveInfo {
 }
 
 func (h *hive) Stop() error {
+	glog.Infof("stopping %v", h)
 	if h.ctrlCh == nil {
 		return errors.New("control channel is closed")
 	}
@@ -483,11 +485,11 @@ func (h *hive) NewApp(name string, options ...AppOption) App {
 }
 
 func (h *hive) Emit(msgData interface{}) {
-	h.emitMsg(&msg{MsgData: msgData})
+	h.enqueMsg(&msg{MsgData: msgData})
 }
 
-func (h *hive) emitMsg(msg *msg) {
-	h.dataCh <- msg
+func (h *hive) enqueMsg(msg *msg) {
+	h.dataCh.in() <- msgAndHandler{msg: msg}
 }
 
 func (h *hive) SendToCellKey(msgData interface{}, to string, k CellKey) {
@@ -496,7 +498,7 @@ func (h *hive) SendToCellKey(msgData interface{}, to string, k CellKey) {
 }
 
 func (h *hive) SendToBee(msgData interface{}, to uint64) {
-	h.emitMsg(newMsgFromData(msgData, 0, to))
+	h.enqueMsg(newMsgFromData(msgData, 0, to))
 }
 
 // Reply to thatMsg with the provided replyData.
@@ -506,7 +508,7 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 		return errors.New("cannot reply to this message")
 	}
 
-	h.emitMsg(newMsgFromData(replyData, 0, m.From()))
+	h.enqueMsg(newMsgFromData(replyData, 0, m.From()))
 	return nil
 }
 

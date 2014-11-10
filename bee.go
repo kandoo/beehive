@@ -38,7 +38,7 @@ type bee struct {
 	hive      *hive
 	timers    []*time.Timer
 
-	dataCh    chan msgAndHandler
+	dataCh    *msgChannel
 	ctrlCh    chan cmdAndChannel
 	handleMsg func(mh msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
@@ -332,9 +332,10 @@ func (b *bee) start() {
 	}
 	b.status = beeStatusStarted
 	glog.V(2).Infof("%v started", b)
+	dataCh := b.dataCh.out()
 	for b.status == beeStatusStarted {
 		select {
-		case d := <-b.dataCh:
+		case d := <-dataCh:
 			b.handleMsg(d)
 
 		case c := <-b.ctrlCh:
@@ -545,18 +546,7 @@ func (b *bee) detachedHandlers(h DetachedHandler) (func(mh msgAndHandler),
 
 func (b *bee) enqueMsg(mh msgAndHandler) {
 	glog.V(3).Infof("%v enqueues message %v", b, mh.msg)
-	for {
-		select {
-		case b.dataCh <- mh:
-			return
-		case <-time.After(60 * time.Second):
-			fmt.Printf("deadline %v, %v %v, %v %v, %v %v\n", b,
-				len(b.dataCh), len(b.ctrlCh),
-				len(b.qee.dataCh), len(b.qee.ctrlCh),
-				len(b.hive.dataCh.in()), len(b.hive.ctrlCh))
-			panic("test2")
-		}
-	}
+	b.dataCh.in() <- mh
 }
 
 func (b *bee) enqueCmd(cc cmdAndChannel) {

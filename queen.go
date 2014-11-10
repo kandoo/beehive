@@ -19,7 +19,7 @@ type qee struct {
 	hive *hive
 	app  *app
 
-	dataCh  chan msgAndHandler
+	dataCh  *msgChannel
 	ctrlCh  chan cmdAndChannel
 	stopped bool
 
@@ -30,9 +30,10 @@ type qee struct {
 
 func (q *qee) start() {
 	q.stopped = false
+	dataCh := q.dataCh.out()
 	for !q.stopped {
 		select {
-		case d := <-q.dataCh:
+		case d := <-dataCh:
 			q.handleMsg(d)
 
 		case c := <-q.ctrlCh:
@@ -582,10 +583,14 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 	return &bee{
 		qee:    q,
 		beeID:  id,
-		dataCh: make(chan msgAndHandler, cap(q.dataCh)),
+		dataCh: newMsgChannel(q.hive.config.DataChBufSize),
 		ctrlCh: make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:   q.hive,
 		app:    q.app,
 		peers:  make(map[uint64]*proxy),
 	}
+}
+
+func (q *qee) enqueMsg(mh msgAndHandler) {
+	q.dataCh.in() <- mh
 }

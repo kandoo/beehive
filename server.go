@@ -69,8 +69,7 @@ func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	h.srv.hive.dataCh <- &msg
+	h.srv.hive.enqueMsg(&msg)
 }
 
 func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {

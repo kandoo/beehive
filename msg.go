@@ -96,3 +96,136 @@ type Emitter interface {
 func init() {
 	gob.Register(msg{})
 }
+
+type msgChannel struct {
+	chin  chan msgAndHandler
+	chout chan msgAndHandler
+	buf   []msgAndHandler
+	start int
+	end   int
+}
+
+func newMsgChannel(bufSize int) *msgChannel {
+	q := &msgChannel{
+		chin:  make(chan msgAndHandler, bufSize),
+		chout: make(chan msgAndHandler, bufSize),
+		buf:   make([]msgAndHandler, bufSize),
+	}
+	go q.pipe()
+	return q
+}
+
+func (q *msgChannel) pipe() {
+	var chout chan msgAndHandler
+	var first msgAndHandler
+	dequed := false
+	for {
+		if dequed {
+			chout = q.chout
+		} else {
+			chout = nil
+		}
+		select {
+		case mh := <-q.chin:
+			q.enque(mh)
+			q.maybeReadMore()
+			if dequed == false {
+				first, dequed = q.deque()
+			}
+		case chout <- first:
+			q.maybeWriteMore()
+			first, dequed = q.deque()
+		}
+	}
+}
+
+func (q *msgChannel) maybeReadMore() {
+	for {
+		select {
+		case mh := <-q.chin:
+			q.enque(mh)
+		default:
+			return
+		}
+	}
+}
+
+func (q *msgChannel) maybeWriteMore() {
+	l := q.len()
+	for i := 0; i < l; i++ {
+		select {
+		case q.chout <- q.buf[q.start]:
+			q.deque()
+		default:
+			return
+		}
+	}
+}
+
+func (q *msgChannel) in() chan<- msgAndHandler {
+	return q.chin
+}
+
+func (q *msgChannel) out() <-chan msgAndHandler {
+	return q.chout
+}
+
+func (q *msgChannel) empty() bool {
+	return q.len() == 0
+}
+
+func (q *msgChannel) full() bool {
+	return q.len() == len(q.buf)-1
+}
+
+func (q *msgChannel) enque(mh msgAndHandler) {
+	if q.full() {
+		q.maybeExpand()
+	}
+
+	q.buf[q.end] = mh
+	q.end++
+	if q.end >= len(q.buf) {
+		q.end = 0
+	}
+}
+
+func (q *msgChannel) deque() (msgAndHandler, bool) {
+	if q.empty() {
+		return msgAndHandler{}, false
+	}
+
+	mh := q.buf[q.start]
+	q.start++
+	if q.start >= len(q.buf) {
+		q.start = 0
+	}
+	return mh, true
+}
+
+func (q *msgChannel) len() int {
+	l := q.end - q.start
+	if l >= 0 {
+		return l
+	}
+	return len(q.buf) + l
+}
+
+func (q *msgChannel) maybeExpand() {
+	if !q.full() {
+		return
+	}
+
+	qlen := q.len()
+	buf := make([]msgAndHandler, len(q.buf)*2)
+	if q.start < q.end {
+		copy(buf, q.buf[q.start:q.end])
+	} else {
+		l := len(q.buf) - q.start
+		copy(buf, q.buf[q.start:])
+		copy(buf[l:], q.buf[:q.end])
+	}
+	q.start = 0
+	q.end = qlen
+	q.buf = buf
+}
