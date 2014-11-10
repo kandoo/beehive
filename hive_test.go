@@ -46,12 +46,12 @@ func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	}
 
 	if err = d.Put(k, intToBytes(i)); err != nil {
-		panic(fmt.Sprintf("Cannot change the key: %v", err))
+		panic(fmt.Sprintf("cannot change the key: %v", err))
 	}
 
 	id := c.ID() % uint64(handlers)
 	if id != uint64(hash) {
-		panic(fmt.Sprintf("Invalid message %v received in %v.", m, id))
+		panic(fmt.Sprintf("invalid message %v received in %v.", m, id))
 	}
 
 	if i == msgs/handlers {
@@ -86,12 +86,13 @@ func runHiveTest(cfg HiveConfig, t *testing.T) {
 	}
 
 	if err := hive.Stop(); err != nil {
-		t.Errorf("Cannot stop the hive %v", err)
+		t.Errorf("cannot stop the hive %v", err)
 	}
 }
 
 func TestHiveStart(t *testing.T) {
 	cfg := DefaultCfg
+	cfg.Addr = newHiveAddrForTest()
 	cfg.StatePath = "/tmp/bhtest"
 	defer removeState(cfg)
 	runHiveTest(DefaultCfg, t)
@@ -100,6 +101,7 @@ func TestHiveStart(t *testing.T) {
 func TestHiveRestart(t *testing.T) {
 	cfg := DefaultCfg
 	cfg.StatePath = "/tmp/bhtest"
+	cfg.Addr = newHiveAddrForTest()
 	defer removeState(cfg)
 	runHiveTest(DefaultCfg, t)
 	runHiveTest(DefaultCfg, t)
