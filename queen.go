@@ -68,18 +68,16 @@ func (q *qee) App() string {
 
 func (q *qee) beeByID(id uint64) (b *bee, ok bool) {
 	q.RLock()
-	defer q.RUnlock()
-
 	b, ok = q.bees[id]
+	q.RUnlock()
 	return b, ok
 }
 
 func (q *qee) addBee(b *bee) {
 	q.Lock()
-	defer q.Unlock()
-
 	// TODO(soheil): should we validate the map first?
 	q.bees[b.ID()] = b
+	q.Unlock()
 }
 
 func (q *qee) allocateNewBeeID() (BeeInfo, error) {
