@@ -35,9 +35,9 @@ type RcvContext interface {
 
 	// Emit emits a message.
 	Emit(msgData interface{})
-	// SendToCellKey sends a message to the bee of the give app that owns the
-	// given cell key.
-	SendToCellKey(msgData interface{}, to string, dk CellKey)
+	// SendToCell sends a message to the bee of the give app that owns the
+	// given cell.
+	SendToCell(msgData interface{}, app string, cell CellKey)
 	// SendToBee sends a message to the given bee.
 	SendToBee(msgData interface{}, to uint64)
 	// ReplyTo replies to a message: Sends a message from the current bee to the

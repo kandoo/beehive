@@ -658,11 +658,12 @@ func (b *bee) bufferOrEmit(msg *msg) {
 	b.bufferMsg(msg)
 }
 
-func (b *bee) SendToCellKey(msgData interface{}, to string, k CellKey) {
-	// FIXME(soheil): Implement send to.
-	glog.Fatal("FIXME implement bee.SendToCellKey")
-
-	msg := newMsgFromData(msgData, b.ID(), 0)
+func (b *bee) SendToCell(msgData interface{}, app string, cell CellKey) {
+	bi, _, err := b.hive.registry.beeForCells(app, MappedCells{cell})
+	if err != nil {
+		glog.Fatalf("cannot find any bee in app %v for cell %v", app, cell)
+	}
+	msg := newMsgFromData(msgData, bi.ID, 0)
 	b.bufferOrEmit(msg)
 }
 
