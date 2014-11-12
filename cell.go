@@ -8,6 +8,13 @@ type CellKey struct {
 	Key  string
 }
 
+// AppCellKey represents a key in a dictionary of a specific app.
+type AppCellKey struct {
+	App  string
+	Dict string
+	Key  string
+}
+
 // This is the list of dictionary keys returned by the map functions.
 type MappedCells []CellKey
 
