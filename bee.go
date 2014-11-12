@@ -313,7 +313,7 @@ func (b *bee) startDetached(h DetachedHandler) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				glog.Errorf("%v recovers from an error in Start(): %v", r)
+				glog.Errorf("%v recovers from an error in Start(): %v", b, r)
 			}
 		}()
 		h.Start(b)
@@ -484,7 +484,7 @@ func (b *bee) followerHandlers() (func(mh msgAndHandler),
 
 	c := b.colony()
 	if c.Leader == b.ID() {
-		glog.Fatalf("%v is the leader")
+		glog.Fatalf("%v is the leader", b)
 	}
 
 	bi, err := b.hive.registry.bee(c.Leader)

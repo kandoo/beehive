@@ -388,7 +388,7 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 	b, err := q.beeByCells(cells)
 	if err != nil {
 		if b, err = q.placeBee(cells); err != nil {
-			glog.Fatalf("%v cannot place a new bee %v", err)
+			glog.Fatalf("%v cannot place a new bee %v", q, err)
 		}
 
 		info := BeeInfo{
