@@ -15,6 +15,19 @@ type AppCellKey struct {
 	Key  string
 }
 
+// Cell returns the CellKey of this AppCellKey.
+func (ack AppCellKey) Cell() CellKey {
+	return CellKey{
+		Dict: ack.Dict,
+		Key:  ack.Key,
+	}
+}
+
+// IsNil returns whether the AppCellKey represents no cells.
+func (ack AppCellKey) IsNil() bool {
+	return ack.App == ""
+}
+
 // This is the list of dictionary keys returned by the map functions.
 type MappedCells []CellKey
 
