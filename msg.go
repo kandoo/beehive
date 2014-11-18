@@ -50,7 +50,7 @@ func (m msg) IsUnicast() bool {
 }
 
 func (m msg) Type() string {
-	return msgType(m.MsgData)
+	return MsgType(m.MsgData)
 }
 
 func (m msg) Data() interface{} {
@@ -69,7 +69,8 @@ func (m msg) String() string {
 	return fmt.Sprintf("%v -> %v\t%v(%#v)", m.From(), m.To(), m.Type(), m.Data())
 }
 
-func msgType(d interface{}) string {
+// MsgType returns the message type of the data.
+func MsgType(d interface{}) string {
 	if t, ok := d.(Typed); ok {
 		return t.Type()
 	}

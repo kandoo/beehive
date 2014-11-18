@@ -196,7 +196,7 @@ func (a *app) Handle(msg interface{}, h Handler) error {
 		glog.Fatalf("App's qee is nil!")
 	}
 
-	t := msgType(msg)
+	t := MsgType(msg)
 	a.hive.RegisterMsg(msg)
 	return a.registerHandler(t, h)
 }

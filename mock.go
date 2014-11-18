@@ -27,7 +27,7 @@ func (m MockMsg) Data() interface{} {
 }
 
 func (m MockMsg) Type() string {
-	return msgType(m.MsgData)
+	return MsgType(m.MsgData)
 }
 
 func (m MockMsg) IsBroadCast() bool {
