@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"errors"
 	"time"
 
 	"github.com/kandoo/beehive/state"
@@ -8,38 +9,37 @@ import (
 
 // MockMsg is a mock for Msg.
 type MockMsg struct {
-	MType string
-	MData interface{}
-	MTo   uint64
-	MFrom uint64
+	MsgData interface{}
+	MsgTo   uint64
+	MsgFrom uint64
 }
 
 func (m MockMsg) To() uint64 {
-	return m.MTo
+	return m.MsgTo
 }
 
 func (m MockMsg) From() uint64 {
-	return m.MFrom
+	return m.MsgFrom
 }
 
 func (m MockMsg) Data() interface{} {
-	return m.MData
+	return m.MsgData
 }
 
 func (m MockMsg) Type() string {
-	return m.MType
+	return msgType(m.MsgData)
 }
 
 func (m MockMsg) IsBroadCast() bool {
-	return m.MTo == Nil
+	return m.MsgTo == Nil
 }
 
 func (m MockMsg) IsUnicast() bool {
-	return m.MTo != Nil
+	return m.MsgTo != Nil
 }
 
 func (m MockMsg) NoReply() bool {
-	return m.MFrom == Nil
+	return m.MsgFrom == Nil
 }
 
 // MockRcvContext is a mock for RcvContext.
@@ -48,6 +48,7 @@ type MockRcvContext struct {
 	CtxApp   string
 	CtxDicts *state.InMem
 	CtxID    uint64
+	CtxMsgs  []Msg
 	// TODO(soheil): add message handling methods.
 }
 
@@ -70,15 +71,32 @@ func (m MockRcvContext) ID() uint64 {
 	return m.CtxID
 }
 
-func (m MockRcvContext) Emit(msgData interface{}) {}
+func (m *MockRcvContext) Emit(msgData interface{}) {
+	msg := MockMsg{
+		MsgData: msgData,
+		MsgFrom: m.ID(),
+	}
+	m.CtxMsgs = append(m.CtxMsgs, msg)
+}
 
 func (m MockRcvContext) SendToCell(msgData interface{}, app string,
 	cell CellKey) {
 }
 
-func (m MockRcvContext) SendToBee(msgData interface{}, to uint64) {}
+func (m *MockRcvContext) SendToBee(msgData interface{}, to uint64) {
+	msg := MockMsg{
+		MsgData: msgData,
+		MsgFrom: m.ID(),
+		MsgTo:   to,
+	}
+	m.CtxMsgs = append(m.CtxMsgs, msg)
+}
 
-func (m MockRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+func (m *MockRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+	if msg.NoReply() {
+		return errors.New("cannot reply")
+	}
+	m.SendToBee(replyData, msg.To())
 	return nil
 }
 
