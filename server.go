@@ -21,6 +21,7 @@ import (
 // state should be human readable.
 const (
 	serverV1StatePath   = "/api/v1/state"
+	serverV1BeesPath    = "/api/v1/bees"
 	serverV1MsgPath     = "/api/v1/msg"
 	serverV1CmdPath     = "/api/v1/cmd"
 	serverV1RaftPath    = "/api/v1/raft"
@@ -57,6 +58,7 @@ type v1Handler struct {
 
 func (h *v1Handler) Install(r *mux.Router) {
 	r.HandleFunc(serverV1StatePath, h.handleHiveState)
+	r.HandleFunc(serverV1BeesPath, h.handleBees)
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
 	r.HandleFunc(serverV1CmdPath, h.handleCmd)
 	r.HandleFunc(serverV1BeeRaftPath, h.handleBeeRaft)
@@ -206,6 +208,17 @@ func (h *v1Handler) handleHiveState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	j, err := json.Marshal(s)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(j)
+}
+
+func (h *v1Handler) handleBees(w http.ResponseWriter, r *http.Request) {
+	bees := h.srv.hive.registry.bees()
+	j, err := json.Marshal(bees)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

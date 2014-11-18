@@ -35,11 +35,11 @@ type newBeeID struct{}
 
 // BeeInfo stores the metadata about a bee.
 type BeeInfo struct {
-	ID       uint64
-	Hive     uint64
-	App      string
-	Colony   Colony
-	Detached bool
+	ID       uint64 `json:"id"`
+	Hive     uint64 `json:"hive"`
+	App      string `json:"app"`
+	Colony   Colony `json:"colony"`
+	Detached bool   `json:"Detached"`
 }
 
 // addBee is the registery request to add a new bee.
@@ -229,6 +229,11 @@ func (r *registry) addHive(info HiveInfo) error {
 func (r *registry) addBee(info BeeInfo) error {
 	glog.V(2).Infof("%v add bee %v (detached=%v) for %v with %v,", r, info.ID,
 		info.Detached, info.App, info.Colony)
+
+	if info.ID == Nil {
+		glog.Fatalf("invalid bee info: %v", info)
+	}
+
 	if _, ok := r.Bees[info.ID]; ok {
 		return ErrDuplicateBee
 	}
@@ -390,6 +395,16 @@ func (r *registry) hive(id uint64) (HiveInfo, error) {
 		return i, ErrNoSuchHive
 	}
 	return i, nil
+}
+
+func (r *registry) bees() []BeeInfo {
+	r.m.RLock()
+	bees := make([]BeeInfo, 0, len(r.Bees))
+	for _, b := range r.Bees {
+		bees = append(bees, b)
+	}
+	r.m.RUnlock()
+	return bees
 }
 
 func (r *registry) beesOfHive(id uint64) []BeeInfo {
