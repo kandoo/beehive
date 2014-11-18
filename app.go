@@ -99,10 +99,16 @@ type MapFunc func(m Msg, c MapContext) MappedCells
 // parallel for different map-sets and sequentially within a map-set.
 type RcvFunc func(m Msg, c RcvContext) error
 
+// Receiver wraps Rcv.
+type Receiver interface {
+	// Receives replies to messages emitted in this handler.
+	Rcv(m Msg, c RcvContext) error
+}
+
 // The interface msg handlers should implement.
 type Handler interface {
+	Receiver
 	Map(m Msg, c MapContext) MappedCells
-	Rcv(m Msg, c RcvContext) error
 }
 
 // Detached handlers, in contrast to normal Handlers with Map and Rcv, start in
@@ -110,14 +116,13 @@ type Handler interface {
 // message and only recv replys in their receive functions.
 // Note that each app can have only one detached handler.
 type DetachedHandler interface {
+	Receiver
 	// Starts the handler. Note that this will run in a separate goroutine, and
 	// you can block.
 	Start(ctx RcvContext)
 	// Stops the handler. This should notify the start method perhaps using a
 	// channel.
 	Stop(ctx RcvContext)
-	// Receives replies to messages emitted in this handler.
-	Rcv(m Msg, ctx RcvContext) error
 }
 
 // Start function of a detached handler.
