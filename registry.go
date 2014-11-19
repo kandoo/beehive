@@ -39,7 +39,7 @@ type BeeInfo struct {
 	Hive     uint64 `json:"hive"`
 	App      string `json:"app"`
 	Colony   Colony `json:"colony"`
-	Detached bool   `json:"Detached"`
+	Detached bool   `json:"detached"`
 }
 
 // addBee is the registery request to add a new bee.
