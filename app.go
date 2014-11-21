@@ -10,8 +10,11 @@ import (
 	"github.com/kandoo/beehive/state"
 )
 
-// Apps simply process and exchange messages. App methods are not
-// thread-safe and we assume that neither are its map and receive functions.
+// App represents an application in beehive. An app is a collection of stateful
+// message handlers.
+//
+// Methods in this interface are not thread-safe and must be called before the
+// Hive starts.
 type App interface {
 	// Handles a specific message type using the handler. If msgType is an
 	// name of msgType's reflection type.
@@ -88,14 +91,14 @@ func AppWithPlacement(p PlacementMethod) AppOption {
 	}
 }
 
-// An applications map function that maps a specific message to the set of keys
+// MapFunc is a map function that maps a specific message to the set of keys
 // in state dictionaries. This method is assumed not to be thread-safe and is
 // called sequentially. If the return value is an empty set the message is
 // broadcasted to all local bees. Also, if the return value is nil, the message
 // is drop.
 type MapFunc func(m Msg, c MapContext) MappedCells
 
-// An application recv function that handles a message. This method is called in
+// RcvFunc is the function that handles a message. This method is called in
 // parallel for different map-sets and sequentially within a map-set.
 type RcvFunc func(m Msg, c RcvContext) error
 
@@ -105,13 +108,13 @@ type Receiver interface {
 	Rcv(m Msg, c RcvContext) error
 }
 
-// The interface msg handlers should implement.
+// Handler represents a message handler.
 type Handler interface {
 	Receiver
 	Map(m Msg, c MapContext) MappedCells
 }
 
-// Detached handlers, in contrast to normal Handlers with Map and Rcv, start in
+// DetachedHandler in contrast to normal Handlers with Map and Rcv, starts in
 // their own go-routine and emit messages. They do not listen on a particular
 // message and only recv replys in their receive functions.
 // Note that each app can have only one detached handler.
@@ -125,10 +128,10 @@ type DetachedHandler interface {
 	Stop(ctx RcvContext)
 }
 
-// Start function of a detached handler.
+// StartFunc is the start function of a detached handler.
 type StartFunc func(ctx RcvContext)
 
-// Stop function of a detached handler.
+// StopFunc is the stop function of a detached handler.
 type StopFunc func(ctx RcvContext)
 
 type funcHandler struct {

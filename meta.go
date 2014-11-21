@@ -23,7 +23,7 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 	}
 
 	ch := make(chan []HiveInfo, len(addrs))
-	client := newHttpClient(0)
+	client := newHTTPClient(0)
 	for _, a := range addrs {
 		go func(a string) {
 			p := newProxy(client, a)
@@ -49,7 +49,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	}
 
 	ch := make(chan uint64, len(paddrs))
-	client := newHttpClient(0)
+	client := newHTTPClient(0)
 	for _, a := range paddrs {
 		glog.V(2).Infof("requesting hive ID from %v", a)
 		go func(a string) {

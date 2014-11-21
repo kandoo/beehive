@@ -26,6 +26,8 @@ const (
 	defaultRaftTick = 100 * time.Millisecond
 )
 
+// Hive represents is the main active entity of beehive. It mananges all
+// messages, apps and bees.
 type Hive interface {
 	// ID of the hive. Valid only if the hive is started.
 	ID() uint64
@@ -57,7 +59,7 @@ type Hive interface {
 	RegisterMsg(msg interface{})
 }
 
-// Configuration of a hive.
+// HiveConfig represents the configuration of a hive.
 type HiveConfig struct {
 	Addr            string        // listening address of the hive.
 	PeerAddrs       []string      // peer addresses.
@@ -74,7 +76,7 @@ type HiveConfig struct {
 	ConnTimeout     time.Duration // timeout for connections between hives.
 }
 
-// Creates a new hive based on the given configuration.
+// NewHiveWithConfig creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	os.MkdirAll(cfg.StatePath, 0700)
 	m := meta(cfg)
@@ -88,7 +90,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(defaultRaftTick),
-		client: newHttpClient(cfg.ConnTimeout),
+		client: newHTTPClient(cfg.ConnTimeout),
 		peers:  make(map[uint64]*proxy),
 	}
 
@@ -104,9 +106,11 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	return h
 }
 
+// DefaultCfg is the default configration for hives in beehive.
 var DefaultCfg = HiveConfig{}
 
-// Create a new hive and load its configuration from command line flags.
+// NewHive creates a new hive and load its configuration from command line
+// flags.
 func NewHive() Hive {
 	if !flag.Parsed() {
 		flag.Parse()
@@ -233,7 +237,7 @@ func (h *hive) stopQees() {
 	}
 
 	stopCh := make(chan cmdResult)
-	for q, _ := range qs {
+	for q := range qs {
 		q.ctrlCh <- newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
 		glog.V(3).Infof("Waiting on a qee: %v", q)
 		stopped := false
@@ -512,16 +516,16 @@ func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
 	return nil
 }
 
-func (s *hive) registerSignals() {
-	s.sigCh = make(chan os.Signal, 1)
-	signal.Notify(s.sigCh,
+func (h *hive) registerSignals() {
+	h.sigCh = make(chan os.Signal, 1)
+	signal.Notify(h.sigCh,
 		syscall.SIGHUP,
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 	go func() {
-		<-s.sigCh
-		s.Stop()
+		<-h.sigCh
+		h.Stop()
 	}()
 }
 

@@ -28,7 +28,7 @@ func (ack AppCellKey) IsNil() bool {
 	return ack.App == ""
 }
 
-// This is the list of dictionary keys returned by the map functions.
+// MappedCells is the list of dictionary keys returned by the map functions.
 type MappedCells []CellKey
 
 func (mc MappedCells) String() string {
@@ -42,7 +42,8 @@ func (mc MappedCells) Less(i, j int) bool {
 		(mc[i].Dict == mc[j].Dict && mc[i].Key < mc[j].Key)
 }
 
-// An empty mapset means a local broadcast of message.
+// LocalBroadcast returns whether the mapped cells indicate a local broadcast.
+// An empty set means a local broadcast of message. Note that nil means drop.
 func (mc MappedCells) LocalBroadcast() bool {
 	return len(mc) == 0
 }

@@ -20,14 +20,17 @@ func (c Colony) String() string {
 	return fmt.Sprintf("colony(leader=%v, followers=%+v)", c.Leader, c.Followers)
 }
 
+// IsNil returns whether the colony does not represent a valid colony.
 func (c Colony) IsNil() bool {
 	return c.Leader == Nil && len(c.Followers) == 0
 }
 
+// IsLeader returns whether id is the leader of this colony.
 func (c Colony) IsLeader(id uint64) bool {
 	return c.Leader == id
 }
 
+// IsFollower retursn whether id is the follower in this colony.
 func (c Colony) IsFollower(id uint64) bool {
 	for _, s := range c.Followers {
 		if s == id {
@@ -37,10 +40,13 @@ func (c Colony) IsFollower(id uint64) bool {
 	return false
 }
 
+// Contains returns whether id is the leader or a follower in this colony.
 func (c Colony) Contains(id uint64) bool {
 	return c.IsLeader(id) || c.IsFollower(id)
 }
 
+// AddFollower adds a follower to the colony. Returns false if id is already a
+// follower.
 func (c *Colony) AddFollower(id uint64) bool {
 	if id == Nil {
 		return false
@@ -58,6 +64,8 @@ func (c *Colony) AddFollower(id uint64) bool {
 	return true
 }
 
+// DelFollower deletes id from the followers of this colony. Returns false if
+// id is not already a follower.
 func (c *Colony) DelFollower(id uint64) bool {
 	for i, s := range c.Followers {
 		if s == id {
@@ -69,6 +77,7 @@ func (c *Colony) DelFollower(id uint64) bool {
 	return false
 }
 
+// DeepCopy creates a cloned copy of the colony.
 func (c Colony) DeepCopy() Colony {
 	f := make([]uint64, len(c.Followers))
 	copy(f, c.Followers)
@@ -76,7 +85,8 @@ func (c Colony) DeepCopy() Colony {
 	return c
 }
 
-func (c Colony) Equal(thatC Colony) bool {
+// Equals return whether c is equal to thatC.
+func (c Colony) Equals(thatC Colony) bool {
 	if c.Leader != thatC.Leader {
 		return false
 	}
@@ -103,6 +113,7 @@ func (c Colony) Equal(thatC Colony) bool {
 	return true
 }
 
+// Bytes returns the []byte representation of this colony.
 func (c *Colony) Bytes() ([]byte, error) {
 	j, err := json.Marshal(c)
 	if err != nil {
@@ -111,6 +122,7 @@ func (c *Colony) Bytes() ([]byte, error) {
 	return j, nil
 }
 
+// ColonyFromBytes creates a colony from its []byte representation.
 func ColonyFromBytes(b []byte) (Colony, error) {
 	c := Colony{}
 	err := json.Unmarshal(b, &c)

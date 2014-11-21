@@ -340,7 +340,7 @@ func (r *registry) lock(l LockMappedCell) (Colony, error) {
 			continue
 		}
 
-		if locked && !c.Equal(l.Colony) {
+		if locked && !c.Equals(l.Colony) {
 			// FIXME(soheil): Fix this bug after refactoring the code.
 			glog.Fatal("TODO registery conflict between colonies")
 		}

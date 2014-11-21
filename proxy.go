@@ -21,7 +21,7 @@ const (
 	defaultBackoff    = 50 * time.Millisecond
 )
 
-func newHttpClient(timeout time.Duration) *http.Client {
+func newHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Dial: (&connpool.Dialer{
