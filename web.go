@@ -92,6 +92,50 @@ var (
 				var y = center + Math.cos(i * deg)*rad;
 				drawBee(b, x, y, i*deg, c, svg)
 			}
+
+			matrix = {
+				0: {
+					3: 4,
+					2: 1,
+					12: 1,
+					10:1,
+					9: 1,
+					7: 1
+				}
+			};
+
+			rad -= BEE_HEAD_R*4;
+			for (i in bees) {
+				var x1 = center + Math.sin(i * deg)*rad;
+				var y1 = center + Math.cos(i * deg)*rad;
+				for (j in bees) {
+					if (i == j) {
+						continue
+					}
+
+					if (!matrix[i] || !matrix[i][j]) {
+						continue
+					}
+
+					var x2 = center + Math.sin(j * deg)*rad;
+					var y2 = center + Math.cos(j * deg)*rad;
+
+					var lineData = [
+						{'x': x1, 'y': y1},
+						{'x': center, 'y': center},
+						{'x': x2, 'y': y2}
+					];
+					var lineFunction = d3.svg.line()
+																	 .x(function(d) { return d.x; })
+																	 .y(function(d) { return d.y; })
+																	 .interpolate('basis');
+					var lineGraph = svg.append('path')
+														 .attr('d', lineFunction(lineData))
+														 .attr('stroke', 'gray')
+														 .attr('stroke-width', matrix[i][j])
+														 .attr('fill', 'none');
+				}
+			}
 		}
 
 		function drawBee(b, x, y, d, c, svg) {
