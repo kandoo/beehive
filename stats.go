@@ -2,7 +2,10 @@ package beehive
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
+	"math/rand"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -20,7 +23,7 @@ type dummyStatCollector struct{}
 func (c *dummyStatCollector) collect(bee uint64, in Msg, out []Msg) {}
 
 const (
-	collectorAppName = "BeehiveStatCollector"
+	collectorAppName = "beehive-stat-collector"
 	localStatDict    = "LocalStatDict"
 	localProvDict    = "LocalProvDict"
 	optimizerDict    = "OptimizerDict"
@@ -39,7 +42,11 @@ func newAppStatCollector(h *hive) collector {
 	a.Handle(pollLocalStat{}, localStatPoller{
 		thresh: uint64(h.config.OptimizeThresh),
 	})
+	a.Handle(statRequest{}, statRequestHandler{})
 	a.Detached(NewTimer(1*time.Second, func() { h.Emit(pollLocalStat{}) }))
+	hh := newStatHttpHandler()
+	a.Detached(hh)
+	a.HTTPHandle("/stats", hh)
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
 }
@@ -191,8 +198,9 @@ type optimizerStat struct {
 type optimizer struct{}
 
 func (o optimizer) isMigrated(b uint64, optDict state.Dict) bool {
-	_, err := optDict.Get(formatBeeID(b))
-	return err == nil
+	var os optimizerStat
+	err := optDict.GetGob(formatBeeID(b), &os)
+	return err == nil && os.Migrated
 }
 
 func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
@@ -203,12 +211,21 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return err
 	}
 
+	os := optimizerStat{
+		BeeMatrix: beeMatrix(up),
+		Migrated:  false,
+	}
+	dict := ctx.Dict(optimizerDict)
+	defer func() {
+		dict.PutGob(formatBeeID(up.Bee), &os)
+	}()
+
 	if bi.Detached {
 		return nil
 	}
 
-	dict := ctx.Dict(optimizerDict)
 	if o.isMigrated(up.Bee, dict) {
+		os.Migrated = true
 		return nil
 	}
 
@@ -216,7 +233,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	maxBee := bi
 	for from, cnt := range up.Matrix {
 		frombi, err := beeInfoFromContext(ctx, from)
-		if err != nil {
+		if err != nil || o.isMigrated(frombi.ID, dict) {
 			continue
 		}
 
@@ -232,26 +249,132 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		return nil
 	}
 
-	// Migrated.
-	if o.isMigrated(maxBee.ID, dict) {
-		return nil
-	}
-
 	glog.Infof("%v initiates migration of bee %v to hive %v", ctx, up.Bee,
 		maxBee.Hive)
-	ctx.SendToBee(cmdMigrate{up.Bee, maxBee.Hive}, msg.From())
-	dict.Put(formatBeeID(up.Bee), []byte{})
+	ctx.SendToBee(cmdMigrate{Bee: up.Bee, To: maxBee.Hive}, msg.From())
+	os.Migrated = true
 	return nil
 }
 
+var optimizerCentrlizedCells = MappedCells{{optimizerDict, "0"}}
+
 func (o optimizer) Map(msg Msg, ctx MapContext) MappedCells {
-	return MappedCells{{optimizerDict, "0"}}
+	return optimizerCentrlizedCells
+}
+
+type statRequestHandler struct{}
+
+func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
+	req := msg.Data().(statRequest)
+	dict := ctx.Dict(optimizerDict)
+	res := statResponse{
+		ID:     req.ID,
+		Matrix: make(map[uint64]map[uint64]uint64),
+	}
+	dict.ForEach(func(k string, v []byte) {
+		var os optimizerStat
+		if err := bhgob.Decode(&os, v); err == nil {
+			res.Matrix[os.BeeMatrix.Bee] = os.BeeMatrix.Matrix
+		}
+	})
+	return ctx.ReplyTo(msg, res)
+}
+
+func (h statRequestHandler) Map(msg Msg, ctx MapContext) MappedCells {
+	return optimizerCentrlizedCells
 }
 
 func beeInfoFromContext(ctx RcvContext, bid uint64) (BeeInfo, error) {
 	return ctx.Hive().(*hive).registry.bee(bid)
 }
 
+type statHttpHandler struct {
+	reqch   chan statRequestAndChannel
+	resch   chan statResponse
+	done    chan struct{}
+	pending map[uint64]statRequestAndChannel
+}
+
+func (h *statHttpHandler) Start(ctx RcvContext) {
+	for {
+		select {
+		case rc := <-h.reqch:
+			h.pending[rc.r.ID] = rc
+			ctx.Emit(rc.r)
+
+		case res := <-h.resch:
+			rc, ok := h.pending[res.ID]
+			if !ok {
+				glog.Errorf("cannot find request %v", res.ID)
+				continue
+			}
+			rc.c <- res
+
+		case <-h.done:
+			return
+		}
+	}
+}
+
+func (h *statHttpHandler) Stop(ctx RcvContext) {
+	h.done <- struct{}{}
+}
+
+func (h *statHttpHandler) Rcv(msg Msg, ctx RcvContext) error {
+	h.resch <- msg.Data().(statResponse)
+	return nil
+}
+
+func (h statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ch := make(chan statResponse)
+	h.reqch <- statRequestAndChannel{
+		r: statRequest{ID: uint64(rand.Int63())},
+		c: ch,
+	}
+	res := <-ch
+	jsonres := make(map[string]map[string]uint64)
+	for to, m := range res.Matrix {
+		jsonresto := make(map[string]uint64)
+		jsonres[strconv.FormatUint(to, 10)] = jsonresto
+		for from, cnt := range m {
+			jsonresto[strconv.FormatUint(from, 10)] = cnt
+		}
+	}
+	b, err := json.Marshal(jsonres)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(b)
+}
+
+func newStatHttpHandler() *statHttpHandler {
+	return &statHttpHandler{
+		reqch:   make(chan statRequestAndChannel),
+		resch:   make(chan statResponse),
+		done:    make(chan struct{}),
+		pending: make(map[uint64]statRequestAndChannel),
+	}
+}
+
+type statRequest struct {
+	ID uint64
+}
+
+type statResponse struct {
+	ID     uint64
+	Matrix map[uint64]map[uint64]uint64
+}
+
+type statRequestAndChannel struct {
+	r statRequest
+	c chan<- statResponse
+}
+
 func init() {
+	gob.Register(beeMatrix{})
 	gob.Register(beeMatrixUpdate{})
+	gob.Register(statRequest{})
+	gob.Register(statResponse{})
 }
