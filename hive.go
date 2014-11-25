@@ -385,14 +385,21 @@ func (h *hive) startRaftNode() {
 	glog.V(2).Infof("%v is in sync with the cluster", h)
 }
 
+func (h *hive) delBeeFromRegistry(id uint64) error {
+	_, err := h.node.Process(context.TODO(), delBee(id))
+	if err != nil {
+		glog.Errorf("%v cannot delete bee %v from registory", h, id)
+	}
+	return err
+}
+
 func (h *hive) reloadState() {
 	for _, b := range h.registry.beesOfHive(h.id) {
-		if b.Detached {
-			glog.V(1).Infof("%v will not reload detached bee %v", h, b.ID)
-			continue
-		}
-		if b.Colony.IsNil() {
-			glog.V(1).Infof("%v will not reload zombie bee %v", h, b.ID)
+		if b.Detached || b.Colony.IsNil() {
+			glog.V(1).Infof(
+				"%v will not reload detached bee %v (detached=%v, colony=%#v)", h, b.ID,
+				b.Detached, b.Colony)
+			h.delBeeFromRegistry(b.ID)
 			continue
 		}
 		a, ok := h.app(b.App)
