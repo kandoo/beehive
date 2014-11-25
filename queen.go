@@ -344,12 +344,14 @@ func (q *qee) handleMsg(mh msgAndHandler) {
 			}
 
 			if q.isLocalBee(info) {
-				glog.Fatalf("%v cannot find a local bee %v", q, mh.msg.To())
+				glog.Fatalf("%v cannot find local bee %v", q, mh.msg.To())
 			}
 
 			if b, ok = q.beeByID(info.ID); !ok {
-				glog.Errorf("%v cannnot find the remote bee %v", q, mh.msg.To())
-				return
+				if b, err = q.newProxyBee(info); err != nil {
+					glog.Errorf("%v cannnot find remote bee %v", q, mh.msg.To())
+					return
+				}
 			}
 		}
 
