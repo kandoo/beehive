@@ -23,7 +23,7 @@ type dummyStatCollector struct{}
 func (c *dummyStatCollector) collect(bee uint64, in Msg, out []Msg) {}
 
 const (
-	collectorAppName = "beehive-stat-collector"
+	collectorAppName = "bh_collector"
 	localStatDict    = "LocalStatDict"
 	localProvDict    = "LocalProvDict"
 	optimizerDict    = "OptimizerDict"
