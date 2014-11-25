@@ -10,9 +10,18 @@ import (
 var (
 	beesPagePath = "/bees"
 	beesPage     = genPage("Bees", beesScript, beesStyle, "")
+	bgColor      = `#12191A`
 	beesStyle    = `
+		@import url(http://fonts.googleapis.com/css?family=Ubuntu+Mono);
+
+		body {
+			background: ` + bgColor + `
+		}
+
 		.infobox {
+			color: #EEE;
 			float: left;
+			font-family: 'Ubuntu Mono';
 			width: 200px;
 			margin: 20px;
 		}
@@ -79,12 +88,6 @@ var (
 			var svg = d3.select('body').append('svg')
 																 .attr('width', center * 2)
 																 .attr('height', center * 2);
-			svg.append('circle')
-				 .attr('cx', center)
-				 .attr('cy', center)
-				 .attr('r', rad)
-				 .attr('fill', 'white');
-
 			for (i in bees) {
 				var b = bees[i];
 				var c = appColors[b.app];
@@ -138,6 +141,7 @@ var (
 			}
 		}
 
+		var bgColor = '` + bgColor + `';
 		function drawBee(b, x, y, d, c, svg) {
 			var g = svg.append('g');
 			g.append('ellipse')
@@ -146,14 +150,14 @@ var (
 				.attr('rx', BEE_TAIL_RX)
 				.attr('ry', BEE_TAIL_RY)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white');
+				.attr('fill', bgColor);
 			g.append('ellipse')
 				.attr('cx', x)
 				.attr('cy', y + BEE_WING_RY )
 				.attr('rx', BEE_WING_RX)
 				.attr('ry', BEE_WING_RY)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white')
+				.attr('fill', bgColor)
 				.attr('transform', 'rotate(-30 ' + x + ' ' + y + ')');
 			g.append('ellipse')
 				.attr('cx', x)
@@ -161,7 +165,7 @@ var (
 				.attr('rx', BEE_WING_RX)
 				.attr('ry', BEE_WING_RY)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white')
+				.attr('fill', bgColor)
 				.attr('transform', 'rotate(30 ' + x + ' ' + y + ')');
 			g.append('ellipse')
 				.attr('cx', x)
@@ -169,20 +173,20 @@ var (
 				.attr('rx', BEE_WING_RX)
 				.attr('ry', BEE_WING_RY)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white');
+				.attr('fill', bgColor);
 			g.append('ellipse')
 				.attr('cx', x)
 				.attr('cy', y - BEE_WING_RY)
 				.attr('rx', BEE_WING_RX)
 				.attr('ry', BEE_WING_RY)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white');
+				.attr('fill', bgColor);
 			g.append('circle')
 				.attr('cx', x - BEE_R + BEE_HEAD_R*2)
 				.attr('cy', y)
 				.attr('r', BEE_HEAD_R)
 				.attr('style', 'stroke: ' + c + ';')
-				.attr('fill', 'white');
+				.attr('fill', bgColor);
 			g.attr('transform', 'rotate(' + (90 - d*180/PI) + ' ' + x + ' ' + y +')');
 			g.on('click', function() {
 				showBeeInfo(b);
@@ -245,7 +249,9 @@ func genPage(title, script, style, body string) []byte {
 	b.WriteString(`
 			</script>
 		</head>
-		<body>`)
+		<body>
+			<div class="bar">MENU</div>
+		`)
 	b.WriteString(body)
 	b.WriteString(`
 		</body>
