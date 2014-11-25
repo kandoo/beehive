@@ -391,6 +391,10 @@ func (h *hive) reloadState() {
 			glog.V(1).Infof("%v will not reload detached bee %v", h, b.ID)
 			continue
 		}
+		if b.Colony.IsNil() {
+			glog.V(1).Infof("%v will not reload zombie bee %v", h, b.ID)
+			continue
+		}
 		a, ok := h.app(b.App)
 		if !ok {
 			glog.Errorf("app %v is not registered but has a bee", b.App)
