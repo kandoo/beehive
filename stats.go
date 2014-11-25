@@ -23,10 +23,10 @@ type dummyStatCollector struct{}
 func (c *dummyStatCollector) collect(bee uint64, in Msg, out []Msg) {}
 
 const (
-	collectorAppName = "bh_collector"
-	localStatDict    = "LocalStatDict"
-	localProvDict    = "LocalProvDict"
-	optimizerDict    = "OptimizerDict"
+	appCollector  = "bh_collector"
+	dictLocalStat = "LocalStatDict"
+	dictLocalProv = "LocalProvDict"
+	dictOptimizer = "OptimizerDict"
 )
 
 type collectorApp struct {
@@ -35,7 +35,7 @@ type collectorApp struct {
 
 func newAppStatCollector(h *hive) collector {
 	c := &collectorApp{hive: h}
-	a := h.NewApp(collectorAppName, AppNonTransactional)
+	a := h.NewApp(appCollector, AppNonTransactional)
 	a.Handle(beeRecord{}, localCollector{})
 	a.Handle(cmdMigrate{}, localCollector{})
 	a.Handle(beeMatrixUpdate{}, optimizer{})
@@ -91,42 +91,35 @@ type beeMatrixUpdate beeMatrix
 
 type localCollector struct{}
 
-func (h localCollector) Map(msg Msg, ctx MapContext) MappedCells {
-	var bid uint64
-	switch d := msg.Data().(type) {
-	case beeRecord:
-		bid = d.Bee
-	case cmdMigrate:
-		bid = d.Bee
-	}
-	return MappedCells{{localProvDict, formatBeeID(bid)}}
+func (c localCollector) Map(msg Msg, ctx MapContext) MappedCells {
+	return ctx.LocalMappedCells()
 }
 
-func (h localCollector) Rcv(msg Msg, ctx RcvContext) error {
-	switch d := msg.Data().(type) {
+func (c localCollector) Rcv(msg Msg, ctx RcvContext) error {
+	switch br := msg.Data().(type) {
 	case beeRecord:
-		h.updateMatrix(d, ctx)
-		h.updateProvenance(d, ctx)
+		c.updateMatrix(br, ctx)
+		c.updateProvenance(br, ctx)
 	case cmdMigrate:
-		bi, err := beeInfoFromContext(ctx, d.Bee)
+		bi, err := beeInfoFromContext(ctx, br.Bee)
 		if err != nil {
-			return fmt.Errorf("%v cannot find bee %v to migrate", ctx, d.Bee)
+			return fmt.Errorf("%v cannot find bee %v to migrate", ctx, br.Bee)
 		}
 		a, ok := ctx.(*bee).hive.app(bi.App)
 		if !ok {
 			return fmt.Errorf("%v cannot find app %v", ctx, a)
 		}
-		if _, err := a.qee.processCmd(d); err != nil {
+		if _, err := a.qee.processCmd(br); err != nil {
 			return fmt.Errorf(
 				"%v cannot migrate bee %v to %v as instructed by optimizer: %v",
-				ctx, d.Bee, d.To, err)
+				ctx, br.Bee, br.To, err)
 		}
 	}
 	return nil
 }
 
-func (h localCollector) updateMatrix(r beeRecord, ctx RcvContext) {
-	d := ctx.Dict(localStatDict)
+func (c localCollector) updateMatrix(r beeRecord, ctx RcvContext) {
+	d := ctx.Dict(dictLocalStat)
 	k := formatBeeID(r.Bee)
 	var lm localBeeMatrix
 	if err := d.GetGob(k, &lm); err != nil {
@@ -141,18 +134,26 @@ func (h localCollector) updateMatrix(r beeRecord, ctx RcvContext) {
 	}
 }
 
-func (h localCollector) updateProvenance(r beeRecord, ctx RcvContext) {
+type provMatrix map[string]map[string]uint64
+
+func (c localCollector) updateProvenance(r beeRecord, ctx RcvContext) {
 	intype := r.In.Type()
-	d := ctx.Dict(localProvDict)
-	for _, m := range r.Out {
-		var stat map[string]uint64
-		if err := d.GetGob(m.Type(), &stat); err != nil {
-			stat = make(map[string]uint64)
-		}
-		stat[intype]++
-		if err := d.PutGob(m.Type(), &stat); err != nil {
-			glog.Fatalf("cannot store provenance data: %v", err)
-		}
+	d := ctx.Dict(dictLocalProv)
+	k := formatBeeID(r.Bee)
+	var mx provMatrix
+	if err := d.GetGob(k, &mx); err != nil {
+		mx = make(provMatrix)
+	}
+	stat, ok := mx[intype]
+	if !ok {
+		stat = make(map[string]uint64)
+		mx[intype] = stat
+	}
+	for _, msg := range r.Out {
+		stat[msg.Type()]++
+	}
+	if err := d.PutGob(k, &mx); err != nil {
+		glog.Fatalf("cannot store provenance data: %v", err)
 	}
 }
 
@@ -162,12 +163,12 @@ type localStatPoller struct {
 	thresh uint64
 }
 
-func (h localStatPoller) Map(msg Msg, ctx MapContext) MappedCells {
+func (p localStatPoller) Map(msg Msg, ctx MapContext) MappedCells {
 	return MappedCells{}
 }
 
-func (h localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
-	d := ctx.Dict(localStatDict)
+func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
+	d := ctx.Dict(dictLocalStat)
 	d.ForEach(func(k string, v []byte) {
 		var lm localBeeMatrix
 		if err := bhgob.Decode(&lm, v); err != nil {
@@ -178,7 +179,8 @@ func (h localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 		if dur == 0 {
 			dur = 1
 		}
-		if lm.UpdateMsgCnt/dur < h.thresh {
+		fmt.Println(dur, lm.UpdateMsgCnt, p.thresh)
+		if lm.UpdateMsgCnt/dur < p.thresh {
 			return
 		}
 
@@ -215,7 +217,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		BeeMatrix: beeMatrix(up),
 		Migrated:  false,
 	}
-	dict := ctx.Dict(optimizerDict)
+	dict := ctx.Dict(dictOptimizer)
 	defer func() {
 		dict.PutGob(formatBeeID(up.Bee), &os)
 	}()
@@ -256,7 +258,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
-var optimizerCentrlizedCells = MappedCells{{optimizerDict, "0"}}
+var optimizerCentrlizedCells = MappedCells{{dictOptimizer, "0"}}
 
 func (o optimizer) Map(msg Msg, ctx MapContext) MappedCells {
 	return optimizerCentrlizedCells
@@ -266,7 +268,7 @@ type statRequestHandler struct{}
 
 func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
 	req := msg.Data().(statRequest)
-	dict := ctx.Dict(optimizerDict)
+	dict := ctx.Dict(dictOptimizer)
 	res := statResponse{
 		ID:     req.ID,
 		Matrix: make(map[uint64]map[uint64]uint64),
@@ -375,6 +377,7 @@ type statRequestAndChannel struct {
 func init() {
 	gob.Register(beeMatrix{})
 	gob.Register(beeMatrixUpdate{})
+	gob.Register(provMatrix{})
 	gob.Register(statRequest{})
 	gob.Register(statResponse{})
 }

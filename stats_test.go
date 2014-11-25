@@ -27,7 +27,7 @@ func testStatUpdate(t *testing.T, ctx *MockRcvContext, infos []BeeInfo,
 	}
 	o := optimizer{}
 	o.Rcv(&msg, ctx)
-	d := ctx.Dict(optimizerDict)
+	d := ctx.Dict(dictOptimizer)
 	var os optimizerStat
 	if err := d.GetGob(formatBeeID(up.Bee), &os); err != nil {
 		t.Errorf("error in loading the optimizer stat: %v", err)
@@ -158,6 +158,26 @@ func TestStatRequest(t *testing.T) {
 				t.Errorf("invalid data in matrix of bee %v: actual=%v want=%v", id,
 					m[id], cnt)
 			}
+		}
+	}
+}
+
+func TestProvenanceUpdate(t *testing.T) {
+	ctx := MockRcvContext{}
+	r := beeRecord{
+		Bee: 1,
+		In:  MockMsg{MsgData: string("test")},
+		Out: []Msg{MockMsg{MsgData: string("test")}},
+	}
+	c := localCollector{}
+	k := formatBeeID(r.Bee)
+
+	for i := 1; i < 10; i++ {
+		c.updateProvenance(r, &ctx)
+		var m provMatrix
+		ctx.Dict(dictLocalProv).GetGob(k, &m)
+		if cnt := m["string"]["string"]; cnt != uint64(i) {
+			t.Errorf("incorrect provenence data: actual=%v want=%v", cnt, i)
 		}
 	}
 }
