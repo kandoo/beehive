@@ -563,16 +563,35 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 	}
 
 	newb = res.(uint64)
+	// TODO(soheil): we need to do this for persitent apps with a replication
+	// factor of 1 as well.
+	if !q.app.persistent() {
+		fmt.Println(newb)
+		_, err = prx.sendCmd(&cmd{
+			To:   newb,
+			App:  q.app.Name(),
+			Data: cmdJoinColony{Colony: Colony{Leader: newb}},
+		})
+		if err != nil {
+			return Nil, err
+		}
+		goto handoff
+	}
+
 	if _, err = oldb.processCmd(cmdAddFollower{Hive: to, Bee: newb}); err != nil {
 		// TODO(soheil): Maybe stop newb?
 		return Nil, err
 	}
 
 handoff:
+	if err = q.hive.raftBarrier(); err != nil {
+		return Nil, err
+	}
 	if _, err = oldb.processCmd(cmdHandoff{To: newb}); err != nil {
 		glog.Errorf("%v cannot handoff to %v: %v", oldb, newb, err)
+		return Nil, err
 	}
-	return newb, err
+	return newb, nil
 }
 
 func (q *qee) isLocalBee(info BeeInfo) bool {

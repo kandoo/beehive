@@ -15,6 +15,7 @@ type cmdCampaign struct{}
 type cmdCreateBee struct{}
 type cmdFindBee struct{ ID uint64 }
 type cmdHandoff struct{ To uint64 }
+type cmdRestoreState struct{ State []byte }
 type cmdJoinColony struct{ Colony Colony }
 type cmdAddMappedCells struct{ Cells MappedCells }
 type cmdRefreshRole struct{}
@@ -52,6 +53,7 @@ func init() {
 	gob.Register(cmdPing{})
 	gob.Register(cmdRefreshRole{})
 	gob.Register(cmdReloadBee{})
+	gob.Register(cmdRestoreState{})
 	gob.Register(cmdStartDetached{})
 	gob.Register(cmdStart{})
 	gob.Register(cmdStop{})

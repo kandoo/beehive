@@ -391,7 +391,7 @@ func (b *bee) handleMsgLeader(mh msgAndHandler) {
 	}
 }
 
-func (b *bee) handleCmdLeader(cc cmdAndChannel) {
+func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 	glog.V(2).Infof("%v handles command %v", b, cc.cmd)
 	var err error
 	var data interface{}
@@ -408,6 +408,9 @@ func (b *bee) handleCmdLeader(cc cmdAndChannel) {
 	case cmdSync:
 		_, err = b.raftNode().Process(context.TODO(), noOp{})
 
+	case cmdRestoreState:
+		err = b.state.Restore(cmd.State)
+
 	case cmdCampaign:
 		err = b.raftNode().Campaign(context.TODO())
 
@@ -423,7 +426,9 @@ func (b *bee) handleCmdLeader(cc cmdAndChannel) {
 			break
 		}
 		b.setColony(cmd.Colony)
-		b.startNode()
+		if b.app.persistent() {
+			b.startNode()
+		}
 		if cmd.Colony.Leader == b.ID() {
 			b.becomeLeader()
 		} else {
@@ -464,11 +469,11 @@ func (b *bee) becomeLeader() {
 func (b *bee) leaderHandlers() (func(mh msgAndHandler),
 	func(cc cmdAndChannel)) {
 
-	return b.handleMsgLeader, b.handleCmdLeader
+	return b.handleMsgLeader, b.handleCmdLocal
 }
 
 func (b *bee) becomeZombie() {
-	b.handleMsg, b.handleCmd = b.dropMsg, b.handleCmdLeader
+	b.handleMsg, b.handleCmd = b.dropMsg, b.handleCmdLocal
 }
 
 func (b *bee) dropMsg(mh msgAndHandler) {
@@ -498,7 +503,7 @@ func (b *bee) followerHandlers() (func(mh msgAndHandler),
 	}
 
 	mfn, _ := b.proxyHandlers(p, c.Leader)
-	return mfn, b.handleCmdLeader
+	return mfn, b.handleCmdLocal
 }
 
 func (b *bee) becomeProxy(p *proxy) {
@@ -510,6 +515,7 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mh msgAndHandler),
 	func(cc cmdAndChannel)) {
 
 	mfn := func(mh msgAndHandler) {
+		// TODO(soheil): send redirects.
 		glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
 		mh.msg.MsgTo = to
 		if err := p.sendMsg(mh.msg); err != nil {
@@ -519,7 +525,7 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mh msgAndHandler),
 	cfn := func(cc cmdAndChannel) {
 		switch cc.cmd.Data.(type) {
 		case cmdStop, cmdStart:
-			b.handleCmdLeader(cc)
+			b.handleCmdLocal(cc)
 		default:
 			d, err := p.sendCmd(&cc.cmd)
 			if cc.ch != nil {
@@ -541,7 +547,7 @@ func (b *bee) detachedHandlers(h DetachedHandler) (func(mh msgAndHandler),
 	mfn := func(mh msgAndHandler) {
 		h.Rcv(mh.msg, b)
 	}
-	return mfn, b.handleCmdLeader
+	return mfn, b.handleCmdLocal
 }
 
 func (b *bee) enqueMsg(mh msgAndHandler) {
@@ -835,8 +841,44 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 	return recruited
 }
 
+func (b *bee) handoffNonPersistent(to uint64) error {
+	info, err := b.hive.registry.bee(to)
+	if err != nil {
+		glog.Fatalf("%d %v", to, err)
+		return err
+	}
+
+	s, err := b.state.Save()
+	if err != nil {
+		return err
+	}
+
+	if _, err = b.qee.sendCmdToBee(to, cmdRestoreState{State: s}); err != nil {
+		return err
+	}
+
+	up := updateColony{
+		Old: Colony{Leader: b.ID()},
+		New: Colony{Leader: to},
+	}
+	if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+		return err
+	}
+
+	p, err := b.hive.newProxyToHive(info.Hive)
+	if err != nil {
+		return err
+	}
+	b.becomeProxy(p)
+	return nil
+}
+
 func (b *bee) handoff(to uint64) error {
-	if !b.colony().IsFollower(to) {
+	if !b.app.persistent() {
+		return b.handoffNonPersistent(to)
+	}
+
+	if !b.colony().IsFollower(to) && !b.app.persistent() {
 		return fmt.Errorf("%v is not a follower of %v", to, b)
 	}
 
