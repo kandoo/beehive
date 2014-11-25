@@ -78,6 +78,10 @@ type HiveConfig struct {
 
 // NewHiveWithConfig creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
+	if !flag.Parsed() {
+		flag.Parse()
+	}
+
 	os.MkdirAll(cfg.StatePath, 0700)
 	m := meta(cfg)
 	h := &hive{
