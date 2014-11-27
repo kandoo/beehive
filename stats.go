@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -38,15 +39,23 @@ func newAppStatCollector(h *hive) collector {
 	a := h.NewApp(appCollector, AppNonTransactional)
 	a.Handle(beeRecord{}, localCollector{})
 	a.Handle(cmdMigrate{}, localCollector{})
-	a.Handle(beeMatrixUpdate{}, optimizer{})
 	a.Handle(pollLocalStat{}, localStatPoller{
 		thresh: uint64(h.config.OptimizeThresh),
 	})
+
+	a.Handle(beeMatrixUpdate{}, optimizerCollector{})
+	a.Handle(pollOptimizer{}, optimizer{})
+
+	a.Detached(NewTimer(1*time.Second, func() {
+		h.Emit(pollOptimizer{})
+		h.Emit(pollLocalStat{})
+	}))
+
 	a.Handle(statRequest{}, statRequestHandler{})
-	a.Detached(NewTimer(1*time.Second, func() { h.Emit(pollLocalStat{}) }))
 	hh := newStatHttpHandler()
 	a.Detached(hh)
 	a.HTTPHandle("/stats", hh)
+
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
 }
@@ -61,17 +70,24 @@ func formatBeeID(id uint64) string {
 	return strconv.FormatUint(id, 10)
 }
 
+func parseBeeID(str string) uint64 {
+	id, err := strconv.ParseUint(str, 10, 64)
+	if err != nil {
+		glog.Fatalf("error in parsing id: %v", err)
+	}
+	return id
+}
+
 func (c *collectorApp) collect(bee uint64, in Msg, out []Msg) {
 	switch in.Data().(type) {
 	case beeMatrixUpdate, cmdMigrate:
 		return
 	}
 
-	if in.From() == Nil || in.To() == Nil {
+	if in.From() == Nil {
 		return
 	}
 
-	glog.V(3).Infof("Stat collector collects %v", in)
 	// TODO(soheil): We should batch here.
 	c.hive.Emit(beeRecord{Bee: bee, In: in, Out: out})
 }
@@ -179,7 +195,6 @@ func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 		if dur == 0 {
 			dur = 1
 		}
-		fmt.Println(dur, lm.UpdateMsgCnt, p.thresh)
 		if lm.UpdateMsgCnt/dur < p.thresh {
 			return
 		}
@@ -192,73 +207,190 @@ func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 	return nil
 }
 
+// TODO(soheil): implement migration status: none, initiated, and done.
 type optimizerStat struct {
-	BeeMatrix beeMatrix
+	Bee       uint64
+	Collector uint64
+	Matrix    map[uint64]uint64
 	Migrated  bool
+	Score     int
+	LastMax   uint64
 }
 
-type optimizer struct{}
+type optimizerCollector struct{}
 
-func (o optimizer) isMigrated(b uint64, optDict state.Dict) bool {
+func (c optimizerCollector) isMigrated(b uint64, optDict state.Dict) bool {
 	var os optimizerStat
 	err := optDict.GetGob(formatBeeID(b), &os)
 	return err == nil && os.Migrated
 }
 
-func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
+func (c optimizerCollector) Rcv(msg Msg, ctx RcvContext) error {
 	up := msg.Data().(beeMatrixUpdate)
 	glog.V(3).Infof("optimizer receives stat update: %+v", up)
-	bi, err := beeInfoFromContext(ctx, up.Bee)
-	if err != nil {
-		return err
-	}
-
-	os := optimizerStat{
-		BeeMatrix: beeMatrix(up),
-		Migrated:  false,
-	}
 	dict := ctx.Dict(dictOptimizer)
-	defer func() {
-		dict.PutGob(formatBeeID(up.Bee), &os)
-	}()
-
-	if bi.Detached {
-		return nil
-	}
-
-	if o.isMigrated(up.Bee, dict) {
-		os.Migrated = true
-		return nil
-	}
-
-	var maxCnt uint64
-	maxBee := bi
-	for from, cnt := range up.Matrix {
-		frombi, err := beeInfoFromContext(ctx, from)
-		if err != nil || o.isMigrated(frombi.ID, dict) {
-			continue
-		}
-
-		if maxCnt < cnt {
-			maxCnt = cnt
-			maxBee = frombi
-		} else if maxCnt == cnt && bi.Hive == frombi.Hive {
-			maxBee = frombi
-		}
-	}
-
-	if maxBee.Hive == bi.Hive {
-		return nil
-	}
-
-	glog.Infof("%v initiates migration of bee %v to hive %v", ctx, up.Bee,
-		maxBee.Hive)
-	ctx.SendToBee(cmdMigrate{Bee: up.Bee, To: maxBee.Hive}, msg.From())
-	os.Migrated = true
-	return nil
+	k := formatBeeID(up.Bee)
+	var os optimizerStat
+	dict.GetGob(k, &os)
+	os.Bee = up.Bee
+	os.Collector = msg.From()
+	os.Matrix = up.Matrix
+	return dict.PutGob(k, &os)
 }
 
 var optimizerCentrlizedCells = MappedCells{{dictOptimizer, "0"}}
+
+func (c optimizerCollector) Map(msg Msg, ctx MapContext) MappedCells {
+	return optimizerCentrlizedCells
+}
+
+type beeHiveCnt struct {
+	Bee  uint64
+	Hive uint64
+	Cnt  uint64
+}
+
+type beeHiveStat []beeHiveCnt
+
+func (s beeHiveStat) Len() int           { return len(s) }
+func (s beeHiveStat) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s beeHiveStat) Less(i, j int) bool { return s[i].Cnt < s[j].Cnt }
+
+type pollOptimizer struct{}
+
+type optimizer struct{}
+
+func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
+	dict := ctx.Dict(dictOptimizer)
+
+	stats := make(map[uint64]optimizerStat)
+	dict.ForEach(func(k string, v []byte) {
+		id := parseBeeID(k)
+		var os optimizerStat
+		if err := bhgob.Decode(&os, v); err != nil {
+			glog.Errorf("cannot decode optimizer stat: %v", err)
+			return
+		}
+		stats[id] = os
+	})
+
+	infos := make(map[uint64]BeeInfo)
+	for id, os := range stats {
+		infos[id] = BeeInfo{}
+		for bid := range os.Matrix {
+			infos[bid] = BeeInfo{}
+		}
+	}
+
+	var err error
+	for id := range infos {
+		infos[id], err = beeInfoFromContext(ctx, id)
+		if err != nil {
+			delete(infos, id)
+		}
+	}
+
+	bhmx := make(map[uint64]map[uint64]uint64)
+	for b, os := range stats {
+		if os.Migrated {
+			continue
+		}
+		bi, ok := infos[b]
+		if !ok || bi.Detached {
+			continue
+		}
+		if app, ok := ctx.Hive().(*hive).app(bi.App); ok && app.sticky() {
+			continue
+		}
+		for fromb, cnt := range os.Matrix {
+			if stats[fromb].Migrated {
+				continue
+			}
+			frombi, ok := infos[fromb]
+			if !ok {
+				continue
+			}
+
+			hmx, ok := bhmx[b]
+			if !ok {
+				hmx = make(map[uint64]uint64)
+				bhmx[b] = hmx
+			}
+			hmx[frombi.Hive] += cnt
+
+			if frombi.Detached {
+				continue
+			}
+			hmx, ok = bhmx[fromb]
+			if !ok {
+				hmx = make(map[uint64]uint64)
+				bhmx[fromb] = hmx
+			}
+			hmx[bi.Hive] += cnt
+		}
+	}
+
+	sorted := make(beeHiveStat, 0, len(stats))
+	for b, hmx := range bhmx {
+		bi := infos[b]
+		local := hmx[bi.Hive]
+		max := uint64(0)
+		maxh := uint64(0)
+		for h, cnt := range hmx {
+			if h == bi.Hive {
+				continue
+			}
+			if max < cnt {
+				max = cnt
+				maxh = h
+			}
+		}
+		if max <= 2*local {
+			continue
+		}
+		os := stats[b]
+		if max == os.LastMax {
+			continue
+		}
+		os.Score++
+		os.LastMax = max
+		k := formatBeeID(b)
+		dict.PutGob(k, &os)
+		if os.Score <= 3 {
+			continue
+		}
+		sorted = append(sorted, beeHiveCnt{
+			Bee:  b,
+			Hive: maxh,
+			Cnt:  max,
+		})
+	}
+	if len(sorted) == 0 {
+		return nil
+	}
+	sort.Sort(sorted)
+
+	blacklist := make(map[uint64]struct{})
+	for _, bhc := range sorted {
+		bi, ok := infos[bhc.Bee]
+		if !ok {
+			continue
+		}
+		if _, ok := blacklist[bi.Hive]; ok {
+			continue
+		}
+		blacklist[bhc.Hive] = struct{}{}
+
+		glog.Infof("%v initiates migration of bee %v to hive %v", ctx, bhc.Bee,
+			bhc.Hive)
+		os := stats[bhc.Bee]
+		ctx.SendToBee(cmdMigrate{Bee: bhc.Bee, To: bhc.Hive}, os.Collector)
+		os.Migrated = true
+		k := formatBeeID(bhc.Bee)
+		dict.PutGob(k, &os)
+	}
+	return nil
+}
 
 func (o optimizer) Map(msg Msg, ctx MapContext) MappedCells {
 	return optimizerCentrlizedCells
@@ -276,7 +408,7 @@ func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
 	dict.ForEach(func(k string, v []byte) {
 		var os optimizerStat
 		if err := bhgob.Decode(&os, v); err == nil {
-			res.Matrix[os.BeeMatrix.Bee] = os.BeeMatrix.Matrix
+			res.Matrix[os.Bee] = os.Matrix
 		}
 	})
 	return ctx.ReplyTo(msg, res)
@@ -375,9 +507,19 @@ type statRequestAndChannel struct {
 }
 
 func init() {
+	gob.Register(beeHiveCnt{})
+	gob.Register(beeHiveStat{})
 	gob.Register(beeMatrix{})
 	gob.Register(beeMatrixUpdate{})
+	gob.Register(beeRecord{})
+	gob.Register(localBeeMatrix{})
+	gob.Register(optimizerStat{})
+	gob.Register(pollLocalStat{})
+	gob.Register(pollOptimizer{})
 	gob.Register(provMatrix{})
+	gob.Register(statHttpHandler{})
 	gob.Register(statRequest{})
+	gob.Register(statRequestAndChannel{})
+	gob.Register(statRequestHandler{})
 	gob.Register(statResponse{})
 }

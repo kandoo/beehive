@@ -566,7 +566,6 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 	// TODO(soheil): we need to do this for persitent apps with a replication
 	// factor of 1 as well.
 	if !q.app.persistent() {
-		fmt.Println(newb)
 		_, err = prx.sendCmd(&cmd{
 			To:   newb,
 			App:  q.app.Name(),
