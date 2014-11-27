@@ -8,15 +8,15 @@ import (
 )
 
 var (
-	beesPagePath = "/bees"
-	beesPage     = genPage("Bees", beesScript, beesStyle, "")
-	bgColor      = `#12191A`
-	beesStyle    = `
-		@import url(http://fonts.googleapis.com/css?family=Ubuntu+Mono);
+	beesPagePath   = "/bees"
+	matrixPagePath = "/matrix"
+	beesPage       = genPage("Bees", beesScript, beesStyle, "")
+	matrixPage     = genPage("Matrix", matrixScript, matrixStyle, "")
 
-		body {
-			background: ` + bgColor + `
-		}
+	bgColor = `#12191A`
+
+	beesStyle = `
+		@import url(http://fonts.googleapis.com/css?family=Ubuntu+Mono);
 
 		.infobox {
 			color: #EEE;
@@ -220,6 +220,89 @@ var (
 			}
 		}
 	`
+
+	matrixStyle  = ""
+	matrixScript = `
+		$(document).ready(function() {
+			$.ajax({
+				url: '/api/v1/bees',
+				context: document.body
+			}).done(function(data) {
+				drawMatrix(data);
+			}).error(function() {
+				$('body').append('cannot fetch data');
+			});
+		})
+
+		function drawMatrix(bees) {
+			bees.sort(function(a, b) {
+				if (a.hive < b.hive) {
+					return -1;
+				}
+				if (a.hive > b.hive) {
+					return 1;
+				}
+				return b.id - a.id;
+			});
+
+			var svg = d3.select('body').append('svg')
+																 .attr('width', bees.length * 30)
+																 .attr('height', bees.length * 30);
+
+			svg.selectAll('.beeXLables')
+				.data(bees)
+				.enter().append('text')
+				.text(function (d) { return d.hive + "/" + d.id; })
+				.attr('x', function(d, i) { return i * 20 + 70; })
+				.attr('y', 50)
+				.attr('fill', '#EEE')
+				.attr('transform', function(d, i) {
+					return 'rotate(270 ' + (i * 20 + 70) + ',50)'; }
+				);
+			svg.selectAll('.beeYLables')
+				.data(bees)
+				.enter().append('text')
+				.text(function (d) { return d.hive + "/" + d.id; })
+				.attr('x', 50)
+				.attr('y', function(d, i) { return i * 20 + 70; })
+				.attr('fill', '#EEE')
+				.style('text-anchor', 'end');
+
+			matrix = {
+				0: {
+					3: 4,
+					2: 1,
+					12: 1,
+					10:1,
+					9: 3,
+					7: 1
+				},
+				1: {
+					5: 4
+				},
+				4: {
+					3: 2
+				}
+			};
+
+			for (var i = 0; i < bees.length; i++) {
+				var bx = bees[i];
+				for (var j = 0; j < bees.length; j++) {
+					var by = bees[j];
+					var rect = svg.append('rect')
+												.attr('x', 55 + i * 20)
+												.attr('y', 55 + j * 20)
+												.attr('width', 20)
+												.attr('height', 20);
+					if (!bx || !by || !matrix[i] || !matrix[i][j]) {
+						rect.attr('fill', '#12171A');
+						continue;
+					}
+					rect.attr('fill', '#' + (matrix[i][j]*20) + '171A');
+				}
+			}
+		}
+	`
 )
 
 func genPage(title, script, style, body string) []byte {
@@ -234,6 +317,30 @@ func genPage(title, script, style, body string) []byte {
 	b.WriteString(`
 			</title>
 			<style>
+				body {
+					background: ` + bgColor + `;
+					color: #EEE;
+					font-family: 'Ubuntu Mono';
+					margin: 0;
+					padding: 0;
+				}
+
+				.bar {
+					background: #345;
+					padding: 1em 0em 1em 0em;
+					vertical-align: middle;
+					width: 100%;
+				}
+
+				.bar a {
+					margin: 0em 1em 0em 1em;
+					color: #999;
+					text-decoration: none;
+				}
+
+				.bar a:hover {
+					color: #FFF;
+				}
 	`)
 	b.WriteString(style)
 	b.WriteString(`
@@ -250,7 +357,13 @@ func genPage(title, script, style, body string) []byte {
 			</script>
 		</head>
 		<body>
-			<div class="bar">MENU</div>
+			<div class="bar">
+				<a href="/">Status</a>
+				///
+				<a href="/bees">Bees</a>
+				///
+				<a href="/matrix">Matrix</a>
+			</div>
 		`)
 	b.WriteString(body)
 	b.WriteString(`
@@ -266,8 +379,13 @@ type webHandler struct {
 
 func (h *webHandler) Install(r *mux.Router) {
 	r.HandleFunc(beesPagePath, h.handleBees)
+	r.HandleFunc(matrixPagePath, h.handleMatrix)
 }
 
 func (h *webHandler) handleBees(w http.ResponseWriter, r *http.Request) {
 	w.Write(beesPage)
+}
+
+func (h *webHandler) handleMatrix(w http.ResponseWriter, r *http.Request) {
+	w.Write(matrixPage)
 }
