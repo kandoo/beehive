@@ -517,9 +517,10 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mh msgAndHandler),
 	mfn := func(mh msgAndHandler) {
 		// TODO(soheil): send redirects.
 		glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
-		mh.msg.MsgTo = to
-		if err := p.sendMsg(mh.msg); err != nil {
-			glog.Errorf("cannot send message %v to %v: %v", mh.msg, b, err)
+		msg := *mh.msg
+		msg.MsgTo = to
+		if err := p.sendMsg(&msg); err != nil {
+			glog.Errorf("cannot send message %v to %v: %v", msg, b, err)
 		}
 	}
 	cfn := func(cc cmdAndChannel) {
