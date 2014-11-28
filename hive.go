@@ -575,11 +575,11 @@ func (h *hive) initServer(addr string) {
 	handlerV1 := v1Handler{
 		srv: h.server,
 	}
-	handlerV1.Install(r)
+	handlerV1.install(r)
 	webHandler := webHandler{
 		h: h,
 	}
-	webHandler.Install(r)
+	webHandler.install(r)
 }
 
 func (h *hive) newProxyToHive(to uint64) (*proxy, error) {

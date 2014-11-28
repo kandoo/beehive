@@ -56,7 +56,7 @@ type v1Handler struct {
 	srv *server
 }
 
-func (h *v1Handler) Install(r *mux.Router) {
+func (h *v1Handler) install(r *mux.Router) {
 	r.HandleFunc(serverV1StatePath, h.handleHiveState)
 	r.HandleFunc(serverV1BeesPath, h.handleBees)
 	r.HandleFunc(serverV1MsgPath, h.handleMsg)
