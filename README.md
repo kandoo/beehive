@@ -148,8 +148,7 @@ and register these functions as a handler for type `string`.
 
 ```go
 func main() {
-	app := bh.NewApp("HelloWorld")
-	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
+	app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
 	app.HandleFunc(string(""), mapf, rcvf)
 	...
 }
@@ -159,8 +158,7 @@ After that, she needs to start the hive and emit messages:
 
 ```go
 func main() {
-	app := bh.NewApp("HelloWorld")
-	app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
+	app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
 	app.HandleFunc(string(""), mapf, rcvf)
 	name1 := "1st name"
 	name2 := "2nd name"
@@ -190,7 +188,7 @@ Note that "1st name" and "2nd name" are handled by different bees.
 
 In our example, we made the application persisent and transactional:
 ```go
-app.SetFlags(bh.AppFlagPersistent | bh.AppFlagTransactional)
+bh.NewApp(..., bh.AppPersistent(1))
 ```
 
 This means that any update to the state will be written to disk,
