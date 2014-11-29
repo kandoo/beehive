@@ -105,7 +105,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
 	} else {
-		h.collector = &dummyStatCollector{}
+		h.collector = &noOpStatCollector{}
 	}
 	return h
 }

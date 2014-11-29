@@ -19,9 +19,9 @@ type collector interface {
 	collect(bee uint64, in Msg, out []Msg)
 }
 
-type dummyStatCollector struct{}
+type noOpStatCollector struct{}
 
-func (c *dummyStatCollector) collect(bee uint64, in Msg, out []Msg) {}
+func (c *noOpStatCollector) collect(bee uint64, in Msg, out []Msg) {}
 
 const (
 	appCollector  = "bh_collector"

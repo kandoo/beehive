@@ -33,7 +33,7 @@ func testStatUpdate(t *testing.T, ctx *MockRcvContext, infos []BeeInfo,
 		t.Errorf("error in loading the optimizer stat: %v", err)
 		return ctx, os, err
 	}
-	for id, cnt := range os.BeeMatrix.Matrix {
+	for id, cnt := range os.Matrix {
 		if up.Matrix[id] != cnt {
 			t.Errorf("invalid bee matrix for %v: actual=%v want=%v", id, cnt,
 				up.Matrix[id])
