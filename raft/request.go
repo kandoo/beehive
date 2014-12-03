@@ -1,6 +1,10 @@
 package raft
 
-import "github.com/kandoo/beehive/gob"
+import (
+	"encoding/gob"
+
+	bhgob "github.com/kandoo/beehive/gob"
+)
 
 // RequestID represents a unique request throughout the cluster.
 type RequestID struct {
@@ -15,11 +19,11 @@ type Request struct {
 }
 
 func (r *Request) Decode(b []byte) error {
-	return gob.Decode(r, b)
+	return bhgob.Decode(r, b)
 }
 
 func (r *Request) Encode() ([]byte, error) {
-	return gob.Encode(r)
+	return bhgob.Encode(r)
 }
 
 // Response represents a response to a request.
@@ -27,4 +31,9 @@ type Response struct {
 	ID   RequestID   // Response ID is always set to the ID of the request.
 	Data interface{} // Data is set if there was no error.
 	Err  error       // Error, if any.
+}
+
+func init() {
+	gob.Register(Request{})
+	gob.Register(Response{})
 }
