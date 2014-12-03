@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"fmt"
 )
 
 var (
@@ -62,7 +63,7 @@ func (d inMemDict) Name() string {
 func (d *inMemDict) Get(k string) ([]byte, error) {
 	v, ok := d.Dict[k]
 	if !ok {
-		return v, errors.New("string does not exist.")
+		return v, fmt.Errorf("%v does not exist", k)
 	}
 	return v, nil
 }
