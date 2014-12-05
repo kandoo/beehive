@@ -599,13 +599,14 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 
 func (q *qee) defaultLocalBee(id uint64) *bee {
 	return &bee{
-		qee:    q,
-		beeID:  id,
-		dataCh: newMsgChannel(q.hive.config.DataChBufSize),
-		ctrlCh: make(chan cmdAndChannel, cap(q.ctrlCh)),
-		hive:   q.hive,
-		app:    q.app,
-		peers:  make(map[uint64]*proxy),
+		qee:       q,
+		beeID:     id,
+		dataCh:    newMsgChannel(q.hive.config.DataChBufSize),
+		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
+		hive:      q.hive,
+		app:       q.app,
+		peers:     make(map[uint64]*proxy),
+		batchSize: q.hive.config.BatchSize,
 	}
 }
 

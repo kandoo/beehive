@@ -40,8 +40,9 @@ type bee struct {
 
 	dataCh    *msgChannel
 	ctrlCh    chan cmdAndChannel
-	handleMsg func(mh msgAndHandler)
+	handleMsg func(mhs []msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
+	batchSize int
 
 	node       *raft.Node
 	ticker     *time.Ticker
@@ -333,10 +334,22 @@ func (b *bee) start() {
 	b.status = beeStatusStarted
 	glog.V(2).Infof("%v started", b)
 	dataCh := b.dataCh.out()
+	batch := make([]msgAndHandler, 0, b.batchSize)
 	for b.status == beeStatusStarted {
 		select {
 		case d := <-dataCh:
-			b.handleMsg(d)
+			batch = append(batch, d)
+		loop:
+			for len(batch) < b.batchSize {
+				select {
+				case d = <-dataCh:
+					batch = append(batch, d)
+				default:
+					break loop
+				}
+			}
+			b.handleMsg(batch)
+			batch = batch[0:0]
 
 		case c := <-b.ctrlCh:
 			b.handleCmd(c)
@@ -359,35 +372,70 @@ func (b *bee) recoverFromError(mh msgAndHandler, err interface{},
 	}
 }
 
-func (b *bee) callRcv(mh msgAndHandler) {
+var (
+	errRcv = errors.New("error in rcv")
+)
+
+func (b *bee) callRcv(mh msgAndHandler) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			b.recoverFromError(mh, r, true)
 		}
+		err = errRcv
 	}()
 
 	if err := mh.handler.Rcv(mh.msg, b); err != nil {
 		b.recoverFromError(mh, err, false)
-		return
+		return errRcv
 	}
 
 	// FIXME(soheil): Provenence works when the application is transactional.
 	b.hive.collector.collect(b.beeID, mh.msg, b.bufferedMsgs)
+	return nil
 }
 
-func (b *bee) handleMsgLeader(mh msgAndHandler) {
-	glog.V(2).Infof("%v handles message %v", b, mh.msg)
+func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 
-	if b.app.transactional() {
-		b.BeginTx()
+	usetx := b.app.transactional()
+	var st *state.Transactional
+	if usetx && len(mhs) > 1 {
+		st, b.state = b.state, state.NewTransactional(b.state)
+		st.BeginTx()
 	}
 
-	b.callRcv(mh)
-
-	if b.app.transactional() {
-		if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
-			glog.Errorf("%v cannot commit a transaction: %v", b, err)
+	var msgs []Msg
+	for i := range mhs {
+		if usetx {
+			b.BeginTx()
 		}
+
+		mh := mhs[i]
+		glog.V(2).Infof("%v handles message %v", b, mh.msg)
+		b.callRcv(mh)
+
+		if usetx {
+			if st == nil {
+				if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
+					glog.Errorf("%v cannot commit a transaction: %v", b, err)
+				}
+				continue
+			}
+
+			msgs = append(msgs, b.bufferedMsgs...)
+			b.state.CommitTx()
+			b.resetTx()
+		}
+	}
+
+	if !usetx || st == nil {
+		return
+	}
+
+	b.state = st
+	b.bufferedMsgs = msgs
+	b.txStatus = state.TxOpen
+	if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
+		glog.Errorf("%v cannot commit a transaction: %v", b, err)
 	}
 }
 
@@ -466,7 +514,7 @@ func (b *bee) becomeLeader() {
 	b.handleMsg, b.handleCmd = b.leaderHandlers()
 }
 
-func (b *bee) leaderHandlers() (func(mh msgAndHandler),
+func (b *bee) leaderHandlers() (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
 
 	return b.handleMsgLeader, b.handleCmdLocal
@@ -476,15 +524,15 @@ func (b *bee) becomeZombie() {
 	b.handleMsg, b.handleCmd = b.dropMsg, b.handleCmdLocal
 }
 
-func (b *bee) dropMsg(mh msgAndHandler) {
-	glog.Errorf("%v drops %v", b, mh.msg)
+func (b *bee) dropMsg(mhs []msgAndHandler) {
+	glog.Errorf("%v drops %v", b, mhs)
 }
 
 func (b *bee) becomeFollower() {
 	b.handleMsg, b.handleCmd = b.followerHandlers()
 }
 
-func (b *bee) followerHandlers() (func(mh msgAndHandler),
+func (b *bee) followerHandlers() (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
 
 	c := b.colony()
@@ -511,16 +559,18 @@ func (b *bee) becomeProxy(p *proxy) {
 	b.handleMsg, b.handleCmd = b.proxyHandlers(p, b.ID())
 }
 
-func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mh msgAndHandler),
+func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
 
-	mfn := func(mh msgAndHandler) {
+	mfn := func(mhs []msgAndHandler) {
 		// TODO(soheil): send redirects.
-		glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
-		msg := *mh.msg
-		msg.MsgTo = to
-		if err := p.sendMsg(&msg); err != nil {
-			glog.Errorf("cannot send message %v to %v: %v", msg, b, err)
+		for _, mh := range mhs {
+			glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
+			msg := *mh.msg
+			msg.MsgTo = to
+			if err := p.sendMsg(&msg); err != nil {
+				glog.Errorf("cannot send message %v to %v: %v", msg, b, err)
+			}
 		}
 	}
 	cfn := func(cc cmdAndChannel) {
@@ -542,11 +592,13 @@ func (b *bee) becomeDetached(h DetachedHandler) {
 	b.handleMsg, b.handleCmd = b.detachedHandlers(h)
 }
 
-func (b *bee) detachedHandlers(h DetachedHandler) (func(mh msgAndHandler),
+func (b *bee) detachedHandlers(h DetachedHandler) (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
 
-	mfn := func(mh msgAndHandler) {
-		h.Rcv(mh.msg, b)
+	mfn := func(mhs []msgAndHandler) {
+		for i := range mhs {
+			h.Rcv(mhs[i].msg, b)
+		}
 	}
 	return mfn, b.handleCmdLocal
 }
