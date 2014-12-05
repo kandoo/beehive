@@ -141,7 +141,7 @@ func (q *msgChannel) pipe() {
 }
 
 func (q *msgChannel) maybeReadMore() {
-	for {
+	for l := len(q.chin); l > 0; l-- {
 		select {
 		case mh := <-q.chin:
 			q.enque(mh)
@@ -152,8 +152,7 @@ func (q *msgChannel) maybeReadMore() {
 }
 
 func (q *msgChannel) maybeWriteMore() {
-	l := q.len()
-	for i := 0; i < l; i++ {
+	for l := q.len(); l > 0; l-- {
 		select {
 		case q.chout <- q.buf[q.start]:
 			q.deque()
