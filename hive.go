@@ -67,6 +67,7 @@ type HiveConfig struct {
 	StatePath       string        // where to store state data.
 	DataChBufSize   int           // buffer size of the data channels.
 	CmdChBufSize    int           // buffer size of the control channels.
+	BatchSize       int           // number of messages to batch.
 	Instrument      bool          // whether to instrument apps on the hive.
 	OptimizeThresh  uint          // when to notify the optimizer (in msg/s).
 	HBQueryInterval time.Duration // heartbeating interval.
@@ -134,6 +135,8 @@ func init() {
 		"buffer size of data channels")
 	flag.IntVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
 		"buffer size of command channels")
+	flag.IntVar(&DefaultCfg.BatchSize, "batch", 1024,
+		"number of messages to batch per transaction")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"whether to insturment apps")
 	flag.UintVar(&DefaultCfg.OptimizeThresh, "optthresh", 10,

@@ -28,6 +28,8 @@ const (
 	dictLocalStat = "LocalStatDict"
 	dictLocalProv = "LocalProvDict"
 	dictOptimizer = "OptimizerDict"
+
+	defaultMinScore = 3
 )
 
 type collectorApp struct {
@@ -44,7 +46,7 @@ func newAppStatCollector(h *hive) collector {
 	})
 
 	a.Handle(beeMatrixUpdate{}, optimizerCollector{})
-	a.Handle(pollOptimizer{}, optimizer{})
+	a.Handle(pollOptimizer{}, optimizer{defaultMinScore})
 
 	a.Detached(NewTimer(1*time.Second, func() {
 		h.Emit(pollOptimizer{})
@@ -258,12 +260,12 @@ func (s beeHiveStat) Less(i, j int) bool { return s[i].Cnt < s[j].Cnt }
 
 type pollOptimizer struct{}
 
-type optimizer struct{}
+type optimizer struct {
+	minScore int
+}
 
-func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
-	dict := ctx.Dict(dictOptimizer)
-
-	stats := make(map[uint64]optimizerStat)
+func getOptimizerStats(dict state.Dict) (stats map[uint64]optimizerStat) {
+	stats = make(map[uint64]optimizerStat)
 	dict.ForEach(func(k string, v []byte) {
 		id := parseBeeID(k)
 		var os optimizerStat
@@ -273,6 +275,12 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		}
 		stats[id] = os
 	})
+	return
+}
+
+func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
+	dict := ctx.Dict(dictOptimizer)
+	stats := getOptimizerStats(dict)
 
 	infos := make(map[uint64]BeeInfo)
 	for id, os := range stats {
@@ -356,7 +364,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		os.LastMax = max
 		k := formatBeeID(b)
 		dict.PutGob(k, &os)
-		if os.Score <= 3 {
+		if os.Score <= o.minScore {
 			continue
 		}
 		sorted = append(sorted, beeHiveCnt{
