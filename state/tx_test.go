@@ -2,8 +2,6 @@ package state
 
 import "testing"
 
-var ()
-
 func testTx(t *testing.T, parent State, tx *Transactional, open bool) {
 	d := "d"
 	k1 := "testkey1"
@@ -54,4 +52,17 @@ func TestLayeredTxCommit(t *testing.T) {
 	tx2 := NewTransactional(tx1)
 	testTx(t, tx1, tx2, false)
 	testTx(t, inm, tx1, true)
+}
+
+func BenchmarkTransactions(b *testing.B) {
+	inm := NewInMem()
+	tx := NewTransactional(inm)
+	d := "d"
+	k := "k"
+	v := []byte("v")
+	for i := 0; i < b.N; i++ {
+		tx.BeginTx()
+		tx.Dict(d).Put(k, v)
+		tx.CommitTx()
+	}
 }

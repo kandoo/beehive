@@ -126,8 +126,11 @@ func (t *Transactional) AbortTx() error {
 
 func (t *Transactional) Reset() {
 	t.status = TxNone
-	if len(t.stage) != 0 {
-		t.stage = make(map[string]*TxDict)
+	if len(t.stage) == 0 {
+		return
+	}
+	for _, d := range t.stage {
+		d.reset()
 	}
 }
 
@@ -165,13 +168,13 @@ func (t *Transactional) Dict(name string) Dict {
 
 	d, ok := t.stage[name]
 	if ok {
+		d.Status = TxOpen
 		return d
 	}
 
 	d = &TxDict{
-		Dict:   t.State.Dict(name),
-		Ops:    make(map[string]Op),
-		Status: TxNone,
+		Dict: t.State.Dict(name),
+		Ops:  make(map[string]Op),
 	}
 	d.BeginTx()
 	t.stage[name] = d
@@ -191,9 +194,6 @@ func (d *TxDict) Name() string {
 }
 
 func (d *TxDict) Put(k string, v []byte) error {
-	if d.Status != TxOpen {
-		return ErrNoTx
-	}
 	d.Ops[k] = Op{
 		T: Put,
 		D: d.Dict.Name(),
@@ -213,14 +213,10 @@ func (d *TxDict) Get(k string) ([]byte, error) {
 			return nil, errors.New("No such key")
 		}
 	}
-
 	return d.Dict.Get(k)
 }
 
 func (d *TxDict) Del(k string) error {
-	if d.Status != TxOpen {
-		return ErrNoTx
-	}
 	d.Ops[k] = Op{
 		T: Del,
 		D: d.Dict.Name(),
@@ -288,7 +284,16 @@ func (d *TxDict) AbortTx() error {
 
 func (d *TxDict) reset() {
 	d.Status = TxNone
-	if len(d.Ops) != 0 {
+	if len(d.Ops) == 0 {
+		return
+	}
+	// if there are more than 10 ops, re-create the map.
+	if len(d.Ops) > 10 {
 		d.Ops = make(map[string]Op)
+		return
+	}
+
+	for k := range d.Ops {
+		delete(d.Ops, k)
 	}
 }

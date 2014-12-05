@@ -141,3 +141,26 @@ func TestSaveRestore(t *testing.T) {
 		t.Error("Invalid value in the dictionary")
 	}
 }
+
+func TestInMemNoTx(t *testing.T) {
+	d := "d"
+	k := "k"
+	v := []byte("v")
+	inm := NewInMem()
+	if err := inm.Dict(d).Put(k, v); err != nil {
+		t.Errorf("error in put: %v", err)
+	}
+	v, err := inm.Dict(d).Get(k)
+	if err != nil {
+		t.Errorf("error in get: %v", err)
+	}
+	if string(v) != "v" {
+		t.Errorf("invalid value: actual=%v want=v", v)
+	}
+	if err := inm.Dict(d).Del(k); err != nil {
+		t.Errorf("error in del: %v", err)
+	}
+	if _, err := inm.Dict(d).Get(k); err == nil {
+		t.Error("value fount for deleted key")
+	}
+}
