@@ -18,7 +18,9 @@ func (c cmd) String() string {
 	return fmt.Sprintf("CMD -> %v\t%#v", c.To, c.Data)
 }
 
-var ErrInvalidCmd = errors.New("Invalid command")
+// ErrInvalidCmd is returned when the requested command is invalid or is not
+// supported by the receiver of the command.
+var ErrInvalidCmd = errors.New("invalid command")
 
 type cmdAndChannel struct {
 	cmd cmd
