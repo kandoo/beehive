@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-func benchmarkEndToEnd(b *testing.B, name string, hives int, handler Handler,
-	app ...AppOption) {
+func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
+	handler Handler, app ...AppOption) {
 
 	// Warm up.
 	b.StopTimer()
@@ -32,7 +32,7 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, handler Handler,
 		h := NewHiveWithConfig(cfg)
 
 		a := h.NewApp("handler", app...)
-		a.Handle(benchMsg(0), handler)
+		a.Handle(BenchMsg(0), handler)
 		a.Handle(benchKill{}, benchKillHandler{ch: kch})
 
 		go h.Start()
@@ -42,17 +42,18 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, handler Handler,
 
 	mainHive := hs[0]
 	for i := 1; i <= bees; i++ {
-		mainHive.Emit(benchMsg(i))
-		mainHive.Emit(benchKill{benchMsg: benchMsg(i)})
+		mainHive.Emit(BenchMsg(i))
+		mainHive.Emit(benchKill{BenchMsg: BenchMsg(i)})
 		<-kch
 	}
 
 	b.StartTimer()
+	emitting := hs[emittingHive]
 	for i := 0; i < b.N; i++ {
-		mainHive.Emit(benchMsg(i%bees + 1))
+		emitting.Emit(BenchMsg(i%bees + 1))
 	}
 	for i := 1; i <= bees; i++ {
-		mainHive.Emit(benchKill{benchMsg: benchMsg(i)})
+		emitting.Emit(benchKill{BenchMsg: BenchMsg(i)})
 	}
 	for i := 1; i <= bees; i++ {
 		<-kch
@@ -64,61 +65,73 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, handler Handler,
 }
 
 func BenchmarkEndToEndTransientNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-noop", 1, benchNoOpHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{}, AppNonTransactional)
 }
 
 func BenchmarkEndToEndTransientBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-bytes", 1, benchBytesHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{}, AppNonTransactional)
 }
 
 func BenchmarkEndToEndTransientGob(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-gob", 1, benchGobHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppNonTransactional)
 }
 
 func BenchmarkEndToEndTransactionalNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-noop", 1, benchNoOpHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{}, AppTransactional)
 }
 
 func BenchmarkEndToEndTransactionalBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-bytes", 1, benchBytesHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{}, AppTransactional)
 }
 
 func BenchmarkEndToEndTransactionalGob(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-gob", 1, benchGobHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppTransactional)
 }
 
 func BenchmarkEndToEndPersistentNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "p-noop", 1, benchNoOpHandler{}, AppPersistent(1))
+	benchmarkEndToEnd(b, "p-noop", 1, 0, benchNoOpHandler{}, AppPersistent(1))
 }
 
 func BenchmarkEndToEndPersistentBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "p-bytes", 1, benchBytesHandler{}, AppPersistent(1))
+	benchmarkEndToEnd(b, "p-bytes", 1, 0, benchBytesHandler{}, AppPersistent(1))
 }
 
 func BenchmarkEndToEndPersistentGob(b *testing.B) {
-	benchmarkEndToEnd(b, "p-gob", 1, benchGobHandler{}, AppPersistent(1))
+	benchmarkEndToEnd(b, "p-gob", 1, 0, benchGobHandler{}, AppPersistent(1))
 }
 
 func BenchmarkEndToEndReplicatedNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "r-noop", 3, benchNoOpHandler{}, AppPersistent(3))
+	benchmarkEndToEnd(b, "r-noop", 3, 0, benchNoOpHandler{}, AppPersistent(3))
 }
 
 func BenchmarkEndToEndReplicatedBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "r-bytes", 3, benchBytesHandler{}, AppPersistent(3))
+	benchmarkEndToEnd(b, "r-bytes", 3, 0, benchBytesHandler{}, AppPersistent(3))
 }
 
 func BenchmarkEndToEndReplicatedGob(b *testing.B) {
-	benchmarkEndToEnd(b, "r-gob", 3, benchGobHandler{}, AppPersistent(3))
+	benchmarkEndToEnd(b, "r-gob", 3, 0, benchGobHandler{}, AppPersistent(3))
 }
 
-type benchMsg int
+func BenchmarkEndToEndRemoteNoOp(b *testing.B) {
+	benchmarkEndToEnd(b, "rr-noop", 3, 2, benchNoOpHandler{}, AppPersistent(3))
+}
 
-func (m benchMsg) key() string {
+func BenchmarkEndToEndRemoteBytes(b *testing.B) {
+	benchmarkEndToEnd(b, "rr-bytes", 3, 2, benchBytesHandler{}, AppPersistent(3))
+}
+
+func BenchmarkEndToEndRemoteGob(b *testing.B) {
+	benchmarkEndToEnd(b, "rr-gob", 3, 2, benchGobHandler{}, AppPersistent(3))
+}
+
+type BenchMsg int
+
+func (m BenchMsg) key() string {
 	return strconv.Itoa(int(m))
 }
 
 func keyForTestBenchMsg(m Msg) string {
-	return m.Data().(benchMsg).key()
+	return m.Data().(BenchMsg).key()
 }
 
 const (
@@ -176,7 +189,7 @@ func benchMap(msg Msg, ctx MapContext) MappedCells {
 }
 
 type benchKill struct {
-	benchMsg
+	BenchMsg
 }
 
 type benchKillHandler struct {
