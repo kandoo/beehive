@@ -13,7 +13,7 @@ func TestPersistentApp(t *testing.T) {
 	cfg := DefaultCfg
 	cfg.StatePath = "/tmp/bhtest"
 	cfg.Addr = newHiveAddrForTest()
-	defer removeState(cfg)
+	removeState(cfg)
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("persistent", AppPersistent(3))
@@ -59,7 +59,7 @@ func TestReplicatedApp(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
 	go h1.Start()
@@ -69,7 +69,7 @@ func TestReplicatedApp(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
@@ -79,7 +79,7 @@ func TestReplicatedApp(t *testing.T) {
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = newHiveAddrForTest()
 	cfg3.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg3)
+	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -102,7 +102,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
 	go h1.Start()
@@ -112,7 +112,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
@@ -122,7 +122,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = newHiveAddrForTest()
 	cfg3.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg3)
+	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -170,7 +170,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
@@ -180,7 +180,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
@@ -190,7 +190,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = newHiveAddrForTest()
 	cfg3.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg3)
+	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -230,7 +230,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
@@ -240,7 +240,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
@@ -250,7 +250,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = newHiveAddrForTest()
 	cfg3.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg3)
+	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -291,7 +291,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
@@ -301,7 +301,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
@@ -311,7 +311,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	cfg3.StatePath = "/tmp/bhtest3"
 	cfg3.Addr = newHiveAddrForTest()
 	cfg3.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg3)
+	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -326,7 +326,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	cfg4.StatePath = "/tmp/bhtest4"
 	cfg4.Addr = newHiveAddrForTest()
 	cfg4.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg4)
+	removeState(cfg4)
 	h4 := NewHiveWithConfig(cfg4)
 	registerPersistentApp(h4, ch)
 	go h4.Start()

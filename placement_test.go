@@ -41,7 +41,7 @@ func TestPlacement(t *testing.T) {
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
-	defer removeState(cfg1)
+	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
 	registerPlacementApp(h1, ch)
 	go h1.Start()
@@ -51,7 +51,7 @@ func TestPlacement(t *testing.T) {
 	cfg2.StatePath = "/tmp/bhtest2"
 	cfg2.Addr = newHiveAddrForTest()
 	cfg2.PeerAddrs = []string{cfg1.Addr}
-	defer removeState(cfg2)
+	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
 	registerPlacementApp(h2, ch)
 	go h2.Start()
