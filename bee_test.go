@@ -36,7 +36,7 @@ func BenchmarkBeePersistence(b *testing.B) {
 			name:  "test",
 			flags: appFlagTransactional | appFlagPersistent,
 		},
-		state:     state.NewTransactional(state.NewInMem()),
+		stateL1:   state.NewTransactional(state.NewInMem()),
 		dataCh:    newMsgChannel(b.N),
 		batchSize: 1024,
 	}

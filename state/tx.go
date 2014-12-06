@@ -84,7 +84,14 @@ func (t *Transactional) maybeNewTransaction() {
 	}
 }
 
-func (t *Transactional) Tx() []Op {
+func (t *Transactional) Tx() Tx {
+	return Tx{
+		Status: t.TxStatus(),
+		Ops:    t.TxOps(),
+	}
+}
+
+func (t *Transactional) TxOps() []Op {
 	if t.stage == nil {
 		return nil
 	}

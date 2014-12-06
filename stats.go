@@ -16,12 +16,12 @@ import (
 )
 
 type collector interface {
-	collect(bee uint64, in Msg, out []Msg)
+	collect(bee uint64, in *msg, out []*msg)
 }
 
 type noOpStatCollector struct{}
 
-func (c *noOpStatCollector) collect(bee uint64, in Msg, out []Msg) {}
+func (c *noOpStatCollector) collect(bee uint64, in *msg, out []*msg) {}
 
 const (
 	appCollector  = "bh_collector"
@@ -64,8 +64,8 @@ func newAppStatCollector(h *hive) collector {
 
 type beeRecord struct {
 	Bee uint64
-	In  Msg
-	Out []Msg
+	In  *msg
+	Out []*msg
 }
 
 func formatBeeID(id uint64) string {
@@ -80,7 +80,7 @@ func parseBeeID(str string) uint64 {
 	return id
 }
 
-func (c *collectorApp) collect(bee uint64, in Msg, out []Msg) {
+func (c *collectorApp) collect(bee uint64, in *msg, out []*msg) {
 	switch in.Data().(type) {
 	case beeMatrixUpdate, cmdMigrate:
 		return

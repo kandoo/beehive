@@ -8,11 +8,7 @@ import (
 )
 
 // MockMsg is a mock for Msg.
-type MockMsg struct {
-	MsgData interface{}
-	MsgTo   uint64
-	MsgFrom uint64
-}
+type MockMsg msg
 
 func (m MockMsg) To() uint64 {
 	return m.MsgTo

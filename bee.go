@@ -37,6 +37,7 @@ type bee struct {
 	app       *app
 	hive      *hive
 	timers    []*time.Timer
+	cells     map[CellKey]bool
 
 	dataCh    *msgChannel
 	ctrlCh    chan cmdAndChannel
@@ -49,10 +50,10 @@ type bee struct {
 	peers      map[uint64]*proxy
 	emitInRaft bool
 
-	cells        map[CellKey]bool
-	txStatus     state.TxStatus
-	state        *state.Transactional
-	bufferedMsgs []Msg
+	stateL1  *state.Transactional
+	stateL2  *state.Transactional
+	msgBufL1 []*msg
+	msgBufL2 []*msg
 
 	local interface{}
 }
@@ -303,7 +304,7 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 }
 
 func (b *bee) setState(s state.State) {
-	b.state = state.NewTransactional(s)
+	b.stateL1 = state.NewTransactional(s)
 }
 
 func (b *bee) startDetached(h DetachedHandler) {
@@ -389,21 +390,25 @@ func (b *bee) callRcv(mh msgAndHandler) (err error) {
 		return errRcv
 	}
 
-	// FIXME(soheil): Provenence works when the application is transactional.
-	b.hive.collector.collect(b.beeID, mh.msg, b.bufferedMsgs)
+	// FIXME(soheil): Provenence works only when the application is transactional.
+	var msgs []*msg
+	if b.stateL2 != nil {
+		msgs = b.msgBufL2
+	} else {
+		msgs = b.msgBufL1
+	}
+	b.hive.collector.collect(b.beeID, mh.msg, msgs)
 	return nil
 }
 
 func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 
 	usetx := b.app.transactional()
-	var st *state.Transactional
 	if usetx && len(mhs) > 1 {
-		st, b.state = b.state, state.NewTransactional(b.state)
-		st.BeginTx()
+		b.stateL2 = state.NewTransactional(b.stateL1)
+		b.stateL1.BeginTx()
 	}
 
-	var msgs []Msg
 	for i := range mhs {
 		if usetx {
 			b.BeginTx()
@@ -414,26 +419,25 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 		b.callRcv(mh)
 
 		if usetx {
-			if st == nil {
-				if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
-					glog.Errorf("%v cannot commit a transaction: %v", b, err)
-				}
-				continue
+
+			var err error
+			if b.stateL2 == nil {
+				err = b.CommitTx()
+			} else {
+				err = b.commitTxL2()
 			}
 
-			msgs = append(msgs, b.bufferedMsgs...)
-			b.state.CommitTx()
-			b.resetTx()
+			if err != nil && err != state.ErrNoTx {
+				glog.Errorf("%v cannot commit a transaction: %v", b, err)
+			}
 		}
 	}
 
-	if !usetx || st == nil {
+	if !usetx || b.stateL2 == nil {
 		return
 	}
 
-	b.state = st
-	b.bufferedMsgs = msgs
-	b.txStatus = state.TxOpen
+	b.stateL2 = nil
 	if err := b.CommitTx(); err != nil && err != state.ErrNoTx {
 		glog.Errorf("%v cannot commit a transaction: %v", b, err)
 	}
@@ -457,7 +461,7 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		_, err = b.raftNode().Process(context.TODO(), noOp{})
 
 	case cmdRestoreState:
-		err = b.state.Restore(cmd.State)
+		err = b.stateL1.Restore(cmd.State)
 
 	case cmdCampaign:
 		err = b.raftNode().Campaign(context.TODO())
@@ -565,7 +569,7 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
 	mfn := func(mhs []msgAndHandler) {
 		// TODO(soheil): send redirects.
 		for _, mh := range mhs {
-			glog.V(2).Infof("proxy %v sends msg %v", b, mh.msg)
+			glog.V(2).Infof("%v sends msg %v", b, mh.msg)
 			msg := *mh.msg
 			msg.MsgTo = to
 			if err := p.sendMsg(&msg); err != nil {
@@ -682,12 +686,9 @@ func (b *bee) Hive() Hive {
 	return b.hive
 }
 
-func (b *bee) State() State {
-	return b.state
-}
-
 func (b *bee) Dict(n string) state.Dict {
-	return b.State().Dict(n)
+	dicts, _ := b.currentState()
+	return dicts.Dict(n)
 }
 
 func (b *bee) App() string {
@@ -703,18 +704,15 @@ func (b *bee) doEmit(msg *msg) {
 	b.hive.enqueMsg(msg)
 }
 
-func (b *bee) bufferMsg(msg *msg) {
-	b.bufferedMsgs = append(b.bufferedMsgs, msg)
-}
-
 func (b *bee) bufferOrEmit(msg *msg) {
-	if b.txStatus != state.TxOpen {
+	dicts, msgs := b.currentState()
+	if dicts.TxStatus() != state.TxOpen {
 		b.doEmit(msg)
 		return
 	}
 
 	glog.V(2).Infof("buffers msg %+v in tx", msg)
-	b.bufferMsg(msg)
+	*msgs = append(*msgs, msg)
 }
 
 func (b *bee) SendToCell(msgData interface{}, app string, cell CellKey) {
@@ -767,54 +765,107 @@ func (b *bee) StartDetachedFunc(start StartFunc, stop StopFunc,
 }
 
 func (b *bee) BeginTx() error {
-	if b.txStatus == state.TxOpen {
+	dicts, _ := b.currentState()
+	if dicts.TxStatus() == state.TxOpen {
 		return state.ErrOpenTx
 	}
 
-	if err := b.state.BeginTx(); err != nil {
+	if err := dicts.BeginTx(); err != nil {
 		glog.Errorf("Cannot begin a transaction for %v: %v", b, err)
 		return err
 	}
 
-	b.txStatus = state.TxOpen
 	glog.V(2).Infof("%v begins a new transaction", b)
 	return nil
 }
 
-func (b *bee) emitTxMsgs() {
-	if len(b.bufferedMsgs) == 0 {
-		return
+func (b *bee) commitTxBothLayers() (err error) {
+	hasL2 := b.stateL2 != nil
+	if hasL2 {
+		if err = b.stateL2.CommitTx(); err != nil {
+			goto reset
+		}
+	}
+	if err = b.stateL1.CommitTx(); err != nil {
+		goto reset
+	}
+	for i := range b.msgBufL1 {
+		b.doEmit(b.msgBufL1[i])
+	}
+	if hasL2 {
+		for i := range b.msgBufL2 {
+			b.doEmit(b.msgBufL2[i])
+		}
 	}
 
-	for _, m := range b.bufferedMsgs {
-		b.doEmit(m.(*msg))
+reset:
+	if hasL2 {
+		b.resetTx(b.stateL2, &b.msgBufL2)
 	}
+	b.resetTx(b.stateL1, &b.msgBufL1)
+	return
 }
 
-func (b *bee) doCommitTx() error {
-	defer b.resetTx()
-	b.emitTxMsgs()
-	if err := b.state.CommitTx(); err != nil {
-		return err
+func (b *bee) commitTxL1() (err error) {
+	if b.stateL2 != nil {
+		glog.Errorf("%v has open L2 transaction while committing L1", b)
+		b.commitTxL2()
 	}
 
-	return nil
+	if err = b.stateL1.CommitTx(); err == nil {
+		for i := range b.msgBufL1 {
+			b.doEmit(b.msgBufL1[i])
+		}
+	}
+	b.resetTx(b.stateL1, &b.msgBufL1)
+	return
 }
 
-func (b *bee) resetTx() {
-	b.txStatus = state.TxNone
-	b.state.Reset()
-	b.bufferedMsgs = nil
+func (b *bee) commitTxL2() (err error) {
+	if b.stateL2 == nil {
+		return state.ErrNoTx
+	}
+	if err = b.stateL2.CommitTx(); err == nil {
+		b.msgBufL1 = append(b.msgBufL1, b.msgBufL2...)
+	}
+	b.resetTx(b.stateL2, &b.msgBufL2)
+	return
+}
+
+func (b *bee) resetTx(dicts *state.Transactional, msgs *[]*msg) {
+	dicts.Reset()
+	for i := range *msgs {
+		(*msgs)[i] = nil
+	}
+	*msgs = (*msgs)[:0]
 }
 
 func (b *bee) replicate() error {
 	glog.V(2).Infof("%v replicates transaction", b)
-	tx := b.tx()
-	if len(tx.Ops) == 0 {
-		return b.doCommitTx()
+
+	if b.stateL2 != nil {
+		err := b.commitTxL2()
+		b.stateL2 = nil
+		if err != nil && err != state.ErrNoTx {
+			return err
+		}
+	}
+
+	if b.stateL1.TxStatus() != state.TxOpen {
+		return state.ErrNoTx
+	}
+
+	stx := b.stateL1.Tx()
+	if len(stx.Ops) == 0 {
+		return b.commitTxL1()
 	}
 
 	b.maybeRecruitFollowers()
+
+	tx := tx{
+		Tx:   stx,
+		Msgs: b.msgBufL1,
+	}
 	_, err := b.raftNode().Process(context.TODO(), commitTx(tx))
 	if err == nil {
 		glog.V(2).Infof("%v successfully replicates transaction", b)
@@ -901,7 +952,7 @@ func (b *bee) handoffNonPersistent(to uint64) error {
 		return err
 	}
 
-	s, err := b.state.Save()
+	s, err := b.stateL1.Save()
 	if err != nil {
 		return err
 	}
@@ -960,24 +1011,22 @@ func (b *bee) handoff(to uint64) error {
 	return <-ch
 }
 
-func (b *bee) tx() Tx {
-	return Tx{
-		Tx:   state.Tx{Status: b.txStatus, Ops: b.state.Tx()},
-		Msgs: b.bufferedMsgs,
+func (b *bee) currentState() (dicts *state.Transactional, msgs *[]*msg) {
+	if b.stateL2 != nil {
+		dicts = b.stateL2
+		msgs = &b.msgBufL2
+	} else {
+		dicts = b.stateL1
+		msgs = &b.msgBufL1
 	}
+	return
 }
 
 func (b *bee) CommitTx() error {
-	if b.txStatus != state.TxOpen {
-		return state.ErrNoTx
-	}
-
-	defer b.resetTx()
-
-	// No need to update sequences.
+	// No need to replicate and/or persist the transaction.
 	if !b.app.persistent() || b.detached {
 		glog.V(2).Infof("%v commits in memory transaction", b)
-		b.doCommitTx()
+		b.commitTxBothLayers()
 		return nil
 	}
 
@@ -986,13 +1035,15 @@ func (b *bee) CommitTx() error {
 }
 
 func (b *bee) AbortTx() error {
-	if b.txStatus != state.TxOpen {
+	dicts, msgs := b.currentState()
+	if dicts.TxStatus() != state.TxOpen {
 		return state.ErrNoTx
 	}
 
 	glog.V(2).Infof("%v aborts tx", b)
-	defer b.resetTx()
-	return b.state.AbortTx()
+	err := dicts.AbortTx()
+	b.resetTx(dicts, msgs)
+	return err
 }
 
 func (b *bee) Snooze(d time.Duration) {
@@ -1000,11 +1051,11 @@ func (b *bee) Snooze(d time.Duration) {
 }
 
 func (b *bee) Save() ([]byte, error) {
-	return b.state.Save()
+	return b.stateL1.Save()
 }
 
 func (b *bee) Restore(buf []byte) error {
-	return b.state.Restore(buf)
+	return b.stateL1.Restore(buf)
 }
 
 func (b *bee) Apply(req interface{}) (interface{}, error) {
@@ -1015,22 +1066,25 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 	case commitTx:
 		glog.V(2).Infof("%v commits %v", b, r)
 		leader := b.isLeader()
-		if b.txStatus == state.TxOpen {
+		if b.stateL2 != nil {
+			b.stateL2 = nil
+			glog.Errorf("%v has an L2 transaction", b)
+		}
+		if b.stateL1.TxStatus() == state.TxOpen {
 			if !leader {
 				glog.Errorf("%v is a follower and has an open transaction", b)
 			}
-			b.state.Reset()
+			b.resetTx(b.stateL1, &b.msgBufL1)
 		}
-		if err := b.state.Apply(r.Ops); err != nil {
+		if err := b.stateL1.Apply(r.Ops); err != nil {
 			return nil, err
 		}
 
 		if leader && b.emitInRaft {
-			for _, m := range r.Msgs {
-				msg := m.(msg)
+			for _, msg := range r.Msgs {
 				msg.MsgFrom = b.beeID
-				glog.V(2).Infof("%v emits %#v", b, m)
-				b.doEmit(&msg)
+				glog.V(2).Infof("%v emits %#v", b, msg)
+				b.doEmit(msg)
 			}
 		}
 		return nil, nil
@@ -1073,7 +1127,7 @@ func (b *bee) ApplyConfChange(cc raftpb.ConfChange,
 }
 
 // bee raft commands
-type commitTx Tx
+type commitTx tx
 
 func init() {
 	gob.Register(commitTx{})

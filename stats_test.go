@@ -207,8 +207,8 @@ func TestProvenanceUpdate(t *testing.T) {
 	ctx := MockRcvContext{}
 	r := beeRecord{
 		Bee: 1,
-		In:  MockMsg{MsgData: string("test")},
-		Out: []Msg{MockMsg{MsgData: string("test")}},
+		In:  &msg{MsgData: string("test")},
+		Out: []*msg{&msg{MsgData: string("test")}},
 	}
 	c := localCollector{}
 	k := formatBeeID(r.Bee)
