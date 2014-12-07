@@ -2,12 +2,19 @@ package beehive
 
 import (
 	"encoding/binary"
+	"flag"
 	"io/ioutil"
 	"log"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
+)
+
+var (
+	benchmarkEndToEndBees = flag.Int("bench.e2e.bees", runtime.NumCPU(),
+		"number of bees in end-to-end benchmarks")
 )
 
 func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
@@ -17,9 +24,8 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 	b.StopTimer()
 
 	log.SetOutput(ioutil.Discard)
-	bees := runtime.NumCPU()
+	bees := *benchmarkEndToEndBees
 	kch := make(chan benchKill)
-
 	var hs []Hive
 	for i := 0; i < hives; i++ {
 		cfg := DefaultCfg
@@ -47,15 +53,26 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 		<-kch
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(bees)
+
 	b.StartTimer()
 	emitting := hs[emittingHive]
-	for i := 0; i < b.N; i++ {
-		emitting.Emit(BenchMsg(i%bees + 1))
-	}
 	for i := 1; i <= bees; i++ {
-		emitting.Emit(benchKill{BenchMsg: BenchMsg(i)})
+		go func(i int) {
+			for j := 0; j < b.N/bees; j++ {
+				emitting.Emit(BenchMsg(i))
+				mainHive.Emit(benchKill{BenchMsg: BenchMsg(i)})
+				<-kch
+			}
+			wg.Done()
+			emitting.Emit(benchKill{BenchMsg: BenchMsg(i)})
+		}(i)
 	}
-	for i := 1; i <= bees; i++ {
+	for i := 0; i < bees; i++ {
+		wg.Wait()
+	}
+	for i := 0; i < bees; i++ {
 		<-kch
 	}
 	b.StopTimer()
