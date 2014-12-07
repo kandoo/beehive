@@ -112,16 +112,28 @@ func BenchmarkEndToEndReplicatedGob(b *testing.B) {
 	benchmarkEndToEnd(b, "r-gob", 3, 0, benchGobHandler{}, AppPersistent(3))
 }
 
-func BenchmarkEndToEndRemoteNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "rr-noop", 3, 2, benchNoOpHandler{}, AppPersistent(3))
+func BenchmarkEndToEndRemoteTransactionalNoOp(b *testing.B) {
+	benchmarkEndToEnd(b, "rt-noop", 3, 2, benchNoOpHandler{}, AppTransactional)
 }
 
-func BenchmarkEndToEndRemoteBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "rr-bytes", 3, 2, benchBytesHandler{}, AppPersistent(3))
+func BenchmarkEndToEndRemoteTransactionalBytes(b *testing.B) {
+	benchmarkEndToEnd(b, "rt-bytes", 3, 2, benchBytesHandler{}, AppTransactional)
 }
 
-func BenchmarkEndToEndRemoteGob(b *testing.B) {
-	benchmarkEndToEnd(b, "rr-gob", 3, 2, benchGobHandler{}, AppPersistent(3))
+func BenchmarkEndToEndRemoteTransactionalGob(b *testing.B) {
+	benchmarkEndToEnd(b, "rt-gob", 3, 2, benchGobHandler{}, AppTransactional)
+}
+
+func BenchmarkEndToEndRemotePersistentNoOp(b *testing.B) {
+	benchmarkEndToEnd(b, "rp-noop", 3, 2, benchNoOpHandler{}, AppPersistent(3))
+}
+
+func BenchmarkEndToEndRemotePersistentBytes(b *testing.B) {
+	benchmarkEndToEnd(b, "rp-bytes", 3, 2, benchBytesHandler{}, AppPersistent(3))
+}
+
+func BenchmarkEndToEndRemotePersistentGob(b *testing.B) {
+	benchmarkEndToEnd(b, "rp-gob", 3, 2, benchGobHandler{}, AppPersistent(3))
 }
 
 type BenchMsg int
