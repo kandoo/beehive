@@ -572,8 +572,10 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
 		// TODO(soheil): send redirects.
 		enc := gob.NewEncoder(&msgbuf)
 		for i := range mhs {
-			if err := enc.Encode(mhs[i].msg); err != nil {
-				glog.Errorf("%v cannot send message %v: %v", b, mhs[i].msg, err)
+			msg := *(mhs[i].msg)
+			msg.MsgTo = to
+			if err := enc.Encode(msg); err != nil {
+				glog.Errorf("%v cannot send message %v: %v", b, msg, err)
 			}
 		}
 		glog.V(2).Infof("%v sends %v msgs", b, len(mhs))
