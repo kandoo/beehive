@@ -77,11 +77,14 @@ func TestMsgChannelParallel(t *testing.T) {
 }
 
 func BenchmarkMsgChannel(b *testing.B) {
-	sent := 1024 * b.N
+	b.StopTimer()
+
+	sent := b.N
 	ch := newMsgChannel(sent / b.N)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
+	b.StartTimer()
 	go func() {
 		in := ch.in()
 		for i := 0; i < sent; i++ {
