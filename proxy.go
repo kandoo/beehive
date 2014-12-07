@@ -116,13 +116,8 @@ func (p *proxy) get(url string) (resp *http.Response, err error) {
 	})
 }
 
-func (p *proxy) sendMsg(m *msg) error {
-	var data bytes.Buffer
-	if err := gob.NewEncoder(&data).Encode(m); err != nil {
-		return err
-	}
-
-	res, err := p.post(p.msgURL, "application/x-gob", &data)
+func (p *proxy) sendMsg(msgs bytes.Buffer) error {
+	res, err := p.post(p.msgURL, "application/x-gob", &msgs)
 	if err != nil {
 		return err
 	}

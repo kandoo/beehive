@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -66,12 +67,19 @@ func (h *v1Handler) install(r *mux.Router) {
 }
 
 func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
-	var msg msg
-	if err := gob.NewDecoder(r.Body).Decode(&msg); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	dec := gob.NewDecoder(r.Body)
+	var err error
+	for {
+		var m msg
+		err = dec.Decode(&m)
+		if err != nil {
+			break
+		}
+		h.srv.hive.enqueMsg(&m)
 	}
-	h.srv.hive.enqueMsg(&msg)
+	if err != io.EOF {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 }
 
 func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {

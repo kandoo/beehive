@@ -3,6 +3,7 @@ package beehive
 import (
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"sync"
 
@@ -319,7 +320,8 @@ func (q *qee) reloadBee(id uint64, col Colony) (*bee, error) {
 func (q *qee) invokeMap(mh msgAndHandler) (ms MappedCells) {
 	defer func() {
 		if r := recover(); r != nil {
-			glog.Errorf("error in map of %s: %v", q.app.Name(), r)
+			glog.Errorf("error in map of %s: %v\n%s", q.app.Name(), r,
+				string(debug.Stack()))
 			ms = nil
 		}
 	}()

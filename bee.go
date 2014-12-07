@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -566,16 +567,20 @@ func (b *bee) becomeProxy(p *proxy) {
 func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
 
+	var msgbuf bytes.Buffer
 	mfn := func(mhs []msgAndHandler) {
 		// TODO(soheil): send redirects.
-		for _, mh := range mhs {
-			glog.V(2).Infof("%v sends msg %v", b, mh.msg)
-			msg := *mh.msg
-			msg.MsgTo = to
-			if err := p.sendMsg(&msg); err != nil {
-				glog.Errorf("cannot send message %v to %v: %v", msg, b, err)
+		enc := gob.NewEncoder(&msgbuf)
+		for i := range mhs {
+			if err := enc.Encode(mhs[i].msg); err != nil {
+				glog.Errorf("%v cannot send message %v: %v", b, mhs[i].msg, err)
 			}
 		}
+		glog.V(2).Infof("%v sends %v msgs", b, len(mhs))
+		if err := p.sendMsg(msgbuf); err != nil {
+			glog.Errorf("%v cannot send messages: %v", b, err)
+		}
+		msgbuf.Reset()
 	}
 	cfn := func(cc cmdAndChannel) {
 		switch cc.cmd.Data.(type) {

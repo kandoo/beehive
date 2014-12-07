@@ -1,6 +1,8 @@
 package beehive
 
 import (
+	"io/ioutil"
+	"log"
 	"testing"
 	"time"
 
@@ -21,6 +23,8 @@ func (h benchBeeHandler) Map(msg Msg, ctx MapContext) MappedCells {
 
 func BenchmarkBeePersistence(b *testing.B) {
 	b.StopTimer()
+	log.SetOutput(ioutil.Discard)
+
 	bee := bee{
 		beeID: 1,
 		beeColony: Colony{
