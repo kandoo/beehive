@@ -141,7 +141,11 @@ func (q *msgChannel) pipe() {
 }
 
 func (q *msgChannel) maybeReadMore() {
-	for l := len(q.chin); l > 0; l-- {
+	l := len(q.chin)
+	if l < cap(q.chin) {
+		return
+	}
+	for ; l > 0; l-- {
 		select {
 		case mh := <-q.chin:
 			q.enque(mh)
@@ -152,7 +156,15 @@ func (q *msgChannel) maybeReadMore() {
 }
 
 func (q *msgChannel) maybeWriteMore() {
-	for l := q.len(); l > 0; l-- {
+	w := cap(q.chout) - len(q.chout)
+	if w == 0 {
+		return
+	}
+	l := q.len()
+	if w < l {
+		l = w
+	}
+	for ; l > 0; l-- {
 		select {
 		case q.chout <- q.buf[q.start]:
 			q.deque()
@@ -196,6 +208,7 @@ func (q *msgChannel) deque() (msgAndHandler, bool) {
 	}
 
 	mh := q.buf[q.start]
+	q.buf[q.start].msg = nil
 	q.start++
 	if q.start >= len(q.buf) {
 		q.start = 0
@@ -209,6 +222,10 @@ func (q *msgChannel) len() int {
 		return l
 	}
 	return len(q.buf) + l
+}
+
+func (q *msgChannel) free() int {
+	return len(q.buf) - q.len()
 }
 
 func (q *msgChannel) maybeExpand() {
