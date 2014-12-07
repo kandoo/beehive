@@ -135,8 +135,8 @@ type StartFunc func(ctx RcvContext)
 type StopFunc func(ctx RcvContext)
 
 type funcHandler struct {
-	mapFunc  MapFunc
-	recvFunc RcvFunc
+	mapFunc MapFunc
+	rcvFunc RcvFunc
 }
 
 func (h *funcHandler) Map(m Msg, c MapContext) MappedCells {
@@ -144,13 +144,13 @@ func (h *funcHandler) Map(m Msg, c MapContext) MappedCells {
 }
 
 func (h *funcHandler) Rcv(m Msg, c RcvContext) error {
-	return h.recvFunc(m, c)
+	return h.rcvFunc(m, c)
 }
 
 type funcDetached struct {
 	startFunc StartFunc
 	stopFunc  StopFunc
-	recvFunc  RcvFunc
+	rcvFunc   RcvFunc
 }
 
 func (h *funcDetached) Start(c RcvContext) {
@@ -162,7 +162,7 @@ func (h *funcDetached) Stop(c RcvContext) {
 }
 
 func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
-	return h.recvFunc(m, c)
+	return h.rcvFunc(m, c)
 }
 
 var (

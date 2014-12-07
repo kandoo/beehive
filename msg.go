@@ -69,7 +69,7 @@ func (m msg) String() string {
 	return fmt.Sprintf("%v -> %v\t%v(%#v)", m.From(), m.To(), m.Type(), m.Data())
 }
 
-// MsgType returns the message type of the data.
+// MsgType returns the message type for d.
 func MsgType(d interface{}) string {
 	if t, ok := d.(Typed); ok {
 		return t.Type()
