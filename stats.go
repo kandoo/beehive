@@ -4,7 +4,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -53,10 +52,9 @@ func newAppStatCollector(h *hive) collector {
 		h.Emit(pollLocalStat{})
 	}))
 
-	a.Handle(statRequest{}, statRequestHandler{})
-	hh := newStatHttpHandler()
-	a.Detached(hh)
-	a.HTTPHandle("/stats", hh)
+	s := NewSync(a)
+	s.Handle(statRequest{}, statRequestHandler{})
+	a.HTTPHandle("/stats", &statHttpHandler{sync: s})
 
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
@@ -407,10 +405,8 @@ func (o optimizer) Map(msg Msg, ctx MapContext) MappedCells {
 type statRequestHandler struct{}
 
 func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
-	req := msg.Data().(statRequest)
 	dict := ctx.Dict(dictOptimizer)
 	res := statResponse{
-		ID:     req.ID,
 		Matrix: make(map[uint64]map[uint64]uint64),
 	}
 	dict.ForEach(func(k string, v []byte) {
@@ -431,51 +427,17 @@ func beeInfoFromContext(ctx RcvContext, bid uint64) (BeeInfo, error) {
 }
 
 type statHttpHandler struct {
-	reqch   chan statRequestAndChannel
-	resch   chan statResponse
-	done    chan struct{}
-	pending map[uint64]statRequestAndChannel
+	sync *Sync
 }
 
-func (h *statHttpHandler) Start(ctx RcvContext) {
-	for {
-		select {
-		case rc := <-h.reqch:
-			h.pending[rc.r.ID] = rc
-			ctx.Emit(rc.r)
-
-		case res := <-h.resch:
-			rc, ok := h.pending[res.ID]
-			if !ok {
-				glog.Errorf("cannot find request %v", res.ID)
-				continue
-			}
-			rc.c <- res
-
-		case <-h.done:
-			return
-		}
+func (h *statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	res, err := h.sync.Process(statRequest{})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-}
-
-func (h *statHttpHandler) Stop(ctx RcvContext) {
-	h.done <- struct{}{}
-}
-
-func (h *statHttpHandler) Rcv(msg Msg, ctx RcvContext) error {
-	h.resch <- msg.Data().(statResponse)
-	return nil
-}
-
-func (h statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ch := make(chan statResponse)
-	h.reqch <- statRequestAndChannel{
-		r: statRequest{ID: uint64(rand.Int63())},
-		c: ch,
-	}
-	res := <-ch
 	jsonres := make(map[string]map[string]uint64)
-	for to, m := range res.Matrix {
+	for to, m := range res.(statResponse).Matrix {
 		jsonresto := make(map[string]uint64)
 		jsonres[strconv.FormatUint(to, 10)] = jsonresto
 		for from, cnt := range m {
@@ -491,27 +453,10 @@ func (h statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func newStatHttpHandler() *statHttpHandler {
-	return &statHttpHandler{
-		reqch:   make(chan statRequestAndChannel),
-		resch:   make(chan statResponse),
-		done:    make(chan struct{}),
-		pending: make(map[uint64]statRequestAndChannel),
-	}
-}
-
-type statRequest struct {
-	ID uint64
-}
+type statRequest struct{}
 
 type statResponse struct {
-	ID     uint64
 	Matrix map[uint64]map[uint64]uint64
-}
-
-type statRequestAndChannel struct {
-	r statRequest
-	c chan<- statResponse
 }
 
 func init() {
@@ -525,9 +470,6 @@ func init() {
 	gob.Register(pollLocalStat{})
 	gob.Register(pollOptimizer{})
 	gob.Register(provMatrix{})
-	gob.Register(statHttpHandler{})
 	gob.Register(statRequest{})
-	gob.Register(statRequestAndChannel{})
-	gob.Register(statRequestHandler{})
 	gob.Register(statResponse{})
 }

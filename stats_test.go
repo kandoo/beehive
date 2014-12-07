@@ -176,7 +176,7 @@ func TestStatRequest(t *testing.T) {
 	}
 	ctx.CtxMsgs = nil
 
-	req := statRequest{ID: 1}
+	req := statRequest{}
 	msg := MockMsg{
 		MsgData: req,
 		MsgFrom: 1,
@@ -189,9 +189,6 @@ func TestStatRequest(t *testing.T) {
 		t.Fatal("no repsonse from request handler")
 	}
 	res := ctx.CtxMsgs[0].Data().(statResponse)
-	if res.ID != req.ID {
-		t.Errorf("invalid response id: actual=%v want=%v", res.ID, req.ID)
-	}
 	for b, m := range res.Matrix {
 		up := ups[b-1]
 		for id, cnt := range up.Matrix {
