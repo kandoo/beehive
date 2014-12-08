@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math/rand"
 	"sync"
+
+	bhgob "github.com/kandoo/beehive/gob"
 )
 
 // request represents a generic sync request.
@@ -44,7 +46,7 @@ type requestAndChan struct {
 // Sync is a generic DetachedHandler for sync request processing, and also
 // provides Handle, HandleFunc, and Process for the clients.
 type Sync struct {
-	app App
+	app *app
 
 	reqch chan requestAndChan
 	done  chan chan struct{}
@@ -57,7 +59,7 @@ type Sync struct {
 // This method should be called only once for each application.
 func NewSync(a App) *Sync {
 	s := &Sync{
-		app:   a,
+		app:   a.(*app),
 		reqch: make(chan requestAndChan, 2048),
 		done:  make(chan chan struct{}),
 		reqs:  make(map[uint64]chan response),
@@ -68,7 +70,7 @@ func NewSync(a App) *Sync {
 
 // Process processes a request and returns the response and error.
 func (h *Sync) Process(req interface{}) (res interface{}, err error) {
-	ch := make(chan response)
+	ch := make(chan response, 1)
 	h.reqch <- requestAndChan{
 		req: request{
 			ID:   uint64(rand.Int63()),
@@ -77,7 +79,10 @@ func (h *Sync) Process(req interface{}) (res interface{}, err error) {
 		ch: ch,
 	}
 	r := <-ch
-	return r.Data, r.Err
+	if r.Err != nil {
+		return nil, errors.New(r.Err.Error())
+	}
+	return r.Data, nil
 }
 
 // Start is to implement DetachedHandler.
@@ -97,10 +102,13 @@ func (h *Sync) Start(ctx RcvContext) {
 var (
 	// ErrSyncStopped returned when the sync handler is stopped before receiving
 	// the response.
-	ErrSyncStopped = errors.New("sync: stopped")
+	ErrSyncStopped = bhgob.Error("sync: stopped")
 	// ErrSyncNoSuchRequest returned when we cannot find the request for that
 	// response.
-	ErrSyncNoSuchRequest = errors.New("sync: request not found")
+	ErrSyncNoSuchRequest = bhgob.Error("sync: request not found")
+	// ErrSyncDuplicateResponse returned when there is a duplicate repsonse to the
+	// sync request.
+	ErrSyncDuplicateResponse = bhgob.Error("sync: duplicate response")
 )
 
 // Stop is to implement DetachedHandler.
@@ -151,15 +159,25 @@ func (h *Sync) deque(id uint64) (chan response, error) {
 
 type syncRcvContext struct {
 	RcvContext
-	id uint64
+	id      uint64
+	from    uint64
+	replied bool
 }
 
-func (ctx syncRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+func (ctx *syncRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+	if msg.From() != ctx.from {
+		return ctx.RcvContext.ReplyTo(msg, replyData)
+	}
+
+	if ctx.replied {
+		return ErrSyncDuplicateResponse
+	}
+
+	ctx.replied = true
 	r := response{
 		ID:   ctx.id,
 		Data: replyData,
 	}
-
 	return ctx.RcvContext.ReplyTo(msg, r)
 }
 
@@ -169,12 +187,33 @@ type syncHandler struct {
 
 func (h syncHandler) Rcv(m Msg, ctx RcvContext) error {
 	req := m.Data().(request)
-	s := msg{
+	sm := msg{
 		MsgData: req.Data,
 		MsgFrom: m.From(),
 		MsgTo:   m.To(),
 	}
-	return h.handler.Rcv(s, syncRcvContext{RcvContext: ctx, id: req.ID})
+	sc := syncRcvContext{
+		RcvContext: ctx,
+		id:         req.ID,
+		from:       m.From(),
+	}
+	err := h.handler.Rcv(&sm, &sc)
+	if err != nil {
+		ctx.AbortTx()
+		r := response{
+			ID:  req.ID,
+			Err: bhgob.Error(err.Error()),
+		}
+		ctx.ReplyTo(m, r)
+		return err
+	}
+	if !sc.replied {
+		r := response{
+			ID: req.ID,
+		}
+		ctx.ReplyTo(m, r)
+	}
+	return nil
 }
 
 func (h syncHandler) Map(m Msg, ctx MapContext) MappedCells {
@@ -189,6 +228,7 @@ func (h syncHandler) Map(m Msg, ctx MapContext) MappedCells {
 // Handle wraps h as a handler that can handle sync requests and install it on
 // the application.
 func (s *Sync) Handle(msg interface{}, h Handler) {
+	s.app.hive.RegisterMsg(msg)
 	req := request{Data: msg}
 	s.app.Handle(req, syncHandler{handler: h})
 }
