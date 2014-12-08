@@ -185,6 +185,7 @@ type app struct {
 	flags      appFlag
 	replFactor int
 	placement  PlacementMethod
+	router     *mux.Router
 }
 
 func (a *app) String() string {
@@ -247,7 +248,10 @@ func (a *app) HandleHTTPFunc(path string,
 }
 
 func (a *app) subrouter() *mux.Router {
-	return a.hive.server.router.PathPrefix(a.appHTTPPrefix()).Subrouter()
+	if a.router == nil {
+		a.router = a.hive.server.router.PathPrefix(a.appHTTPPrefix()).Subrouter()
+	}
+	return a.router
 }
 
 func (a *app) appHTTPPrefix() string {
