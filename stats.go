@@ -54,7 +54,7 @@ func newAppStatCollector(h *hive) collector {
 
 	s := NewSync(a)
 	s.Handle(statRequest{}, statRequestHandler{})
-	a.HTTPHandle("/stats", &statHttpHandler{sync: s})
+	a.HandleHTTP("/stats", &statHttpHandler{sync: s})
 
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
