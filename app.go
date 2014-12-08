@@ -37,18 +37,18 @@ type App interface {
 	// Returns the app name.
 	Name() string
 
-	// HTTPHandle registers an HTTP handler for this application on
+	// HandleHTTP registers an HTTP handler for this application on
 	// "/apps/name/path".
 	//
 	// Note: Gorilla mux is used internally. As such, it is legal to use path
 	// parameters.
-	HTTPHandle(path string, handler http.Handler) *mux.Route
-	// HTTPHandleFunc registers an HTTP handler func for this application on
+	HandleHTTP(path string, handler http.Handler) *mux.Route
+	// HandleHTTPFunc registers an HTTP handler func for this application on
 	// "/app/name/path".
 	//
 	// Note: Gorilla mux is used internally. As such, it is legal to use path
 	// parameters.
-	HTTPHandleFunc(path string,
+	HandleHTTPFunc(path string,
 		handler func(http.ResponseWriter, *http.Request)) *mux.Route
 }
 
@@ -237,13 +237,12 @@ func (a *app) Name() string {
 	return a.name
 }
 
-func (a *app) HTTPHandle(path string, handler http.Handler) *mux.Route {
+func (a *app) HandleHTTP(path string, handler http.Handler) *mux.Route {
 	return a.subrouter().Handle(path, handler)
 }
 
-func (a *app) HTTPHandleFunc(path string,
+func (a *app) HandleHTTPFunc(path string,
 	handler func(http.ResponseWriter, *http.Request)) *mux.Route {
-
 	return a.subrouter().HandleFunc(path, handler)
 }
 
@@ -252,7 +251,7 @@ func (a *app) subrouter() *mux.Router {
 }
 
 func (a *app) appHTTPPrefix() string {
-	return "/apps/" + a.name
+	return "/apps/" + a.name + "/"
 }
 
 func (a *app) initQee() {

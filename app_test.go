@@ -365,8 +365,7 @@ func TestAppHTTP(t *testing.T) {
 		name: "testapp",
 		hive: &h,
 	}
-	a.HTTPHandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-	})
+	a.HandleHTTPFunc("/test", func(w http.ResponseWriter, r *http.Request) {})
 	go h.server.ListenAndServe()
 	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", addr))
 	if err != nil {
