@@ -357,7 +357,11 @@ func (h *hive) handleMsg(m *msg) {
 		if !ok {
 			glog.Fatalf("no such application %s", i.App)
 		}
-		a.qee.enqueMsg(msgAndHandler{m, a.handler(m.Type())})
+		if i.Detached {
+			a.qee.enqueMsg(msgAndHandler{msg: m})
+			return
+		}
+		a.qee.enqueMsg(msgAndHandler{msg: m, handler: a.handler(m.Type())})
 	default:
 		for _, qh := range h.qees[m.Type()] {
 			qh.q.enqueMsg(msgAndHandler{m, qh.h})
