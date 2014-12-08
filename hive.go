@@ -17,7 +17,6 @@ import (
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
 )
@@ -101,7 +100,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
-	h.initServer(cfg.Addr)
+	h.server = newServer(h, cfg.Addr)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -561,28 +560,6 @@ func (h *hive) listen() error {
 		glog.Infof("%v closed listener", h)
 	}()
 	return nil
-}
-
-// initServer creates a server for the given addr. It installs all required
-// handlers for Beehive.
-func (h *hive) initServer(addr string) {
-	r := mux.NewRouter()
-	h.server = &server{
-		Server: http.Server{
-			Addr:    addr,
-			Handler: r,
-		},
-		router: r,
-		hive:   h,
-	}
-	handlerV1 := v1Handler{
-		srv: h.server,
-	}
-	handlerV1.install(r)
-	webHandler := webHandler{
-		h: h,
-	}
-	webHandler.install(r)
 }
 
 func (h *hive) newProxyToHive(to uint64) (*proxy, error) {

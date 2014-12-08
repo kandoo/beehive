@@ -46,6 +46,24 @@ type server struct {
 	router *mux.Router
 }
 
+// newServer creates a new server for the hive.
+func newServer(h *hive, addr string) *server {
+	r := mux.NewRouter()
+	s := &server{
+		Server: http.Server{
+			Addr:    addr,
+			Handler: r,
+		},
+		router: r,
+		hive:   h,
+	}
+	handlerV1 := v1Handler{srv: s}
+	handlerV1.install(r)
+	webHandler := webHandler{h: h}
+	webHandler.install(r)
+	return s
+}
+
 // Provides the net/http interface for the server.
 func (s *server) HandleFunc(p string,
 	h func(http.ResponseWriter, *http.Request)) {
