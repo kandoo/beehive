@@ -15,6 +15,9 @@ type request struct {
 
 // Type returns the type of this request. It is unique for each data type.
 func (r request) Type() string {
+	if r.Data == nil {
+		return "request"
+	}
 	return "request-" + MsgType(r.Data)
 }
 
@@ -27,6 +30,9 @@ type response struct {
 
 // Type returns the type of this response. It is unique for each data type.
 func (r response) Type() string {
+	if r.Data == nil {
+		return "response"
+	}
 	return "response-" + MsgType(r.Data)
 }
 
