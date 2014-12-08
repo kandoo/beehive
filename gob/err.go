@@ -4,14 +4,12 @@ import (
 	gogob "encoding/gob"
 )
 
-type GobError struct {
-	Err string
-}
+type Error string
 
-func (e GobError) Error() string {
-	return e.Err
+func (e Error) Error() string {
+	return string(e)
 }
 
 func init() {
-	gogob.Register(GobError{})
+	gogob.Register(Error(""))
 }

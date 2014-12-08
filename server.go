@@ -133,7 +133,7 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		case res := <-ch:
 			if res.Err != nil {
 				glog.Errorf("Error in running the remote command: %v", res.Err)
-				res.Err = bhgob.GobError{Err: res.Err.Error()}
+				res.Err = bhgob.Error(res.Err.Error())
 			}
 
 			if err := gob.NewEncoder(w).Encode(res); err != nil {
