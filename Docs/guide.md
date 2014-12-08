@@ -11,7 +11,7 @@ For API documents, checkout
 
 ## Table of Contents
 1. [Overview](overview.md)
-1. [Write Your First App](quick.md)
+1. [Write Your First App](helloworld.md)
 1. [Handlers: Map + Rcv](handlers.md)
 1. [Transactions](transactions.md)
 1. [Detached Handlers](detached.md)

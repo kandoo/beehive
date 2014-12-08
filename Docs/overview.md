@@ -38,7 +38,7 @@ the message.
      +-----------------------+                         +-----------------------+
 ```
 
-# Consistency and `map`
+## Consistency and `map`
 To scale, we want to balance the load of message processing among 
 multiple hives. But, we need to do this in a way that the application's
 behavior remains identical to when we use only a single, centralized
