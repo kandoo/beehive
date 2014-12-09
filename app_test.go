@@ -360,7 +360,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 func TestAppHTTP(t *testing.T) {
 	h := hive{}
 	addr := newHiveAddrForTest()
-	h.initServer(addr)
+	h.server = newServer(&h, addr)
 	a := &app{
 		name: "testapp",
 		hive: &h,
