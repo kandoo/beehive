@@ -1,4 +1,4 @@
-// +build go1.1,!go1.3
+// +build !go1.3
 
 package connpool
 
@@ -15,8 +15,9 @@ func NewHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
 				Dialer:         net.Dialer{Timeout: timeout},
 				MaxConnPerHost: maxConnPerHost,
 			}).Dial,
-			Proxy:               http.ProxyFromEnvironment,
-			MaxIdleConnsPerHost: maxConnPerHost,
+			Proxy:                 http.ProxyFromEnvironment,
+			MaxIdleConnsPerHost:   maxConnPerHost,
+			ResponseHeaderTimeout: timeout,
 		},
 	}
 	// TODO(soheil): return a client and emulate timeout.
