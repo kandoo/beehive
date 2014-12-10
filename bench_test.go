@@ -70,27 +70,30 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 }
 
 func BenchmarkEndToEndTransientNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{},
+		AppNonTransactional())
 }
 
 func BenchmarkEndToEndTransientBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{},
+		AppNonTransactional())
 }
 
 func BenchmarkEndToEndTransientGob(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppNonTransactional)
+	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppNonTransactional())
 }
 
 func BenchmarkEndToEndTransactionalNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{}, AppTransactional())
 }
 
 func BenchmarkEndToEndTransactionalBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{},
+		AppTransactional())
 }
 
 func BenchmarkEndToEndTransactionalGob(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppTransactional())
 }
 
 func BenchmarkEndToEndPersistentNoOp(b *testing.B) {
@@ -118,15 +121,16 @@ func BenchmarkEndToEndReplicatedGob(b *testing.B) {
 }
 
 func BenchmarkEndToEndRemoteTransactionalNoOp(b *testing.B) {
-	benchmarkEndToEnd(b, "rt-noop", 3, 2, benchNoOpHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "rt-noop", 3, 2, benchNoOpHandler{}, AppTransactional())
 }
 
 func BenchmarkEndToEndRemoteTransactionalBytes(b *testing.B) {
-	benchmarkEndToEnd(b, "rt-bytes", 3, 2, benchBytesHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "rt-bytes", 3, 2, benchBytesHandler{},
+		AppTransactional())
 }
 
 func BenchmarkEndToEndRemoteTransactionalGob(b *testing.B) {
-	benchmarkEndToEnd(b, "rt-gob", 3, 2, benchGobHandler{}, AppTransactional)
+	benchmarkEndToEnd(b, "rt-gob", 3, 2, benchGobHandler{}, AppTransactional())
 }
 
 func BenchmarkEndToEndRemotePersistentNoOp(b *testing.B) {

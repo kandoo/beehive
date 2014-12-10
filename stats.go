@@ -37,7 +37,7 @@ type collectorApp struct {
 
 func newAppStatCollector(h *hive) collector {
 	c := &collectorApp{hive: h}
-	a := h.NewApp(appCollector, AppNonTransactional)
+	a := h.NewApp(appCollector, AppNonTransactional())
 	a.Handle(beeRecord{}, localCollector{})
 	a.Handle(cmdMigrate{}, localCollector{})
 	a.Handle(pollLocalStat{}, localStatPoller{

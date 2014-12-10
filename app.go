@@ -67,23 +67,29 @@ func AppPersistent(replicationFactor int) AppOption {
 
 // AppTransactional is an application option that makes the application
 // transactional. Transactions embody both application messages and its state.
-func AppTransactional(a *app) {
-	a.flags |= appFlagTransactional
+func AppTransactional() AppOption {
+	return func(a *app) {
+		a.flags |= appFlagTransactional
+	}
 }
 
 // AppSticky is an application option that makes the application sticky. Bees of
 // sticky apps are not migrated by the optimizer.
-func AppSticky(a *app) {
-	a.flags |= appFlagSticky
+func AppSticky() AppOption {
+	return func(a *app) {
+		a.flags |= appFlagSticky
+	}
 }
 
 // AppNonTransactional is an application option that makes the application
 // non-transactional.
-func AppNonTransactional(a *app) {
-	a.flags &= ^appFlagTransactional
+func AppNonTransactional() AppOption {
+	return func(a *app) {
+		a.flags &= ^appFlagTransactional
+	}
 }
 
-// AppWithPlacement represents an application option that customizes the default
+// AppWithPlacement is an application option that customizes the default
 // placement strategy for the application.
 func AppWithPlacement(p PlacementMethod) AppOption {
 	return func(a *app) {
@@ -166,7 +172,7 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 }
 
 var (
-	defaultAppOptions = []AppOption{AppTransactional}
+	defaultAppOptions = []AppOption{AppTransactional()}
 )
 
 type appFlag uint64
