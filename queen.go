@@ -468,7 +468,7 @@ fallback:
 }
 
 func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
-	res, err := q.hive.node.Process(context.TODO(), LockMappedCell{
+	res, err := q.hive.node.Process(context.TODO(), lockMappedCell{
 		Colony: b.Colony,
 		App:    b.App,
 		Cells:  cells,

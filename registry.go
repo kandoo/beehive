@@ -61,8 +61,8 @@ type updateColony struct {
 	New Colony
 }
 
-// LockMappedCell locks a mapped cell for a colony.
-type LockMappedCell struct {
+// lockMappedCell locks a mapped cell for a colony.
+type lockMappedCell struct {
 	Colony Colony
 	App    string
 	Cells  MappedCells
@@ -84,7 +84,7 @@ func init() {
 	gob.Register(addBee{})
 	gob.Register(delBee(0))
 	gob.Register(updateColony{})
-	gob.Register(LockMappedCell{})
+	gob.Register(lockMappedCell{})
 	gob.Register(transferCells{})
 	gob.Register(cellStore{})
 }
@@ -144,7 +144,7 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 		return nil, r.moveBee(tr)
 	case updateColony:
 		return nil, r.updateColony(tr)
-	case LockMappedCell:
+	case lockMappedCell:
 		return r.lock(tr)
 	case transferCells:
 		return nil, r.transfer(tr)
@@ -322,7 +322,7 @@ func (r *registry) mustFindBee(id uint64) BeeInfo {
 	return info
 }
 
-func (r *registry) lock(l LockMappedCell) (Colony, error) {
+func (r *registry) lock(l lockMappedCell) (Colony, error) {
 	if l.Colony.Leader == 0 {
 		return Colony{}, ErrInvalidParam
 	}
