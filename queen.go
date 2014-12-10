@@ -47,12 +47,8 @@ func (q *qee) String() string {
 	return fmt.Sprintf("%d/%s/Q", q.hive.ID(), q.app.Name())
 }
 
-func (q *qee) State() State {
-	return q.state
-}
-
 func (q *qee) Dict(n string) state.Dict {
-	return q.State().Dict(n)
+	return q.state.Dict(n)
 }
 
 func (q *qee) Hive() Hive {

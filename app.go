@@ -16,6 +16,9 @@ import (
 // Methods in this interface are not thread-safe and must be called before the
 // Hive starts.
 type App interface {
+	// Returns the app name.
+	Name() string
+
 	// Handles a specific message type using the handler. If msgType is an
 	// name of msgType's reflection type.
 	// instnace of MsgType, we use it as the type. Otherwise, we use the qualified
@@ -30,12 +33,9 @@ type App interface {
 	// Registers the detached handler using functions.
 	DetachedFunc(start StartFunc, stop StopFunc, r RcvFunc)
 
-	// Returns the state of this app that is shared among all instances and the
-	// map function. This state is NOT thread-safe and apps must synchronize for
-	// themselves.
-	State() State
-	// Returns the app name.
-	Name() string
+	// Returns the state of this app that is used in the map function. This state
+	// is NOT thread-safe and apps must synchronize for themselves.
+	Dict(name string) state.Dict
 
 	// HandleHTTP registers an HTTP handler for this application on
 	// "/apps/name/path".
@@ -236,8 +236,8 @@ func (a *app) Detached(h DetachedHandler) {
 		nil)
 }
 
-func (a *app) State() State {
-	return a.qee.State()
+func (a *app) Dict(name string) state.Dict {
+	return a.qee.Dict(name)
 }
 
 func (a *app) Name() string {
