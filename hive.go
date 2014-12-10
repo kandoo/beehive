@@ -17,6 +17,7 @@ import (
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/connpool"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
 )
@@ -94,7 +95,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(defaultRaftTick),
-		client: newHTTPClient(cfg.ConnTimeout),
+		client: connpool.NewHTTPClient(64, cfg.ConnTimeout),
 		peers:  make(map[uint64]*proxy),
 	}
 

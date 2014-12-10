@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/connpool"
 	"github.com/kandoo/beehive/raft"
 )
 
@@ -23,7 +24,7 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 	}
 
 	ch := make(chan []HiveInfo, len(addrs))
-	client := newHTTPClient(0)
+	client := connpool.NewHTTPClient(1, 0)
 	for _, a := range addrs {
 		go func(a string) {
 			p := newProxy(client, a)
@@ -49,7 +50,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	}
 
 	ch := make(chan uint64, len(paddrs))
-	client := newHTTPClient(0)
+	client := connpool.NewHTTPClient(1, 0)
 	for _, a := range paddrs {
 		glog.V(2).Infof("requesting hive ID from %v", a)
 		go func(a string) {

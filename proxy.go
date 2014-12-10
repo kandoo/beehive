@@ -7,34 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/kandoo/beehive/connpool"
 )
 
 const (
 	defaultMaxRetries = 5
 	defaultBackoff    = 50 * time.Millisecond
 )
-
-func newHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Dial: (&connpool.Dialer{
-				Dialer:         net.Dialer{Timeout: timeout},
-				MaxConnPerHost: 64,
-			}).Dial,
-			Proxy:               http.ProxyFromEnvironment,
-			MaxIdleConnsPerHost: 64,
-		},
-		// TODO(soheil): maybe only go1.3?
-		// Timeout: timeout,
-	}
-}
 
 type proxy struct {
 	client *http.Client
