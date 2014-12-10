@@ -74,21 +74,6 @@ type transferCells struct {
 	To   Colony
 }
 
-func init() {
-	gob.Register(noOp{})
-	gob.Register(newBeeID{})
-	gob.Register(newHiveID{})
-	gob.Register(HiveInfo{})
-	gob.Register([]HiveInfo{})
-	gob.Register(BeeInfo{})
-	gob.Register(addBee{})
-	gob.Register(delBee(0))
-	gob.Register(updateColony{})
-	gob.Register(lockMappedCell{})
-	gob.Register(transferCells{})
-	gob.Register(cellStore{})
-}
-
 type registry struct {
 	m    sync.RWMutex
 	name string
@@ -480,4 +465,19 @@ func (r *registry) beeForCells(app string, cells MappedCells) (info BeeInfo,
 		return info, hasAll, ErrNoSuchBee
 	}
 	return info, hasAll, nil
+}
+
+func init() {
+	gob.Register(noOp{})
+	gob.Register(newBeeID{})
+	gob.Register(newHiveID{})
+	gob.Register(HiveInfo{})
+	gob.Register([]HiveInfo{})
+	gob.Register(BeeInfo{})
+	gob.Register(addBee{})
+	gob.Register(delBee(0))
+	gob.Register(updateColony{})
+	gob.Register(lockMappedCell{})
+	gob.Register(transferCells{})
+	gob.Register(cellStore{})
 }
