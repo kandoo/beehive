@@ -2,6 +2,7 @@ package connpool
 
 import (
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -11,6 +12,22 @@ const (
 	// address.
 	DefaultMaxConnsPerHost = 10
 )
+
+// ErrTimeout represents that no connection could be grabbed from the pool after
+// the connection timeout.
+type ErrTimeout struct{}
+
+func (err ErrTimeout) Error() string {
+	return "dial timeout error"
+}
+
+func (err ErrTimeout) Temporary() bool {
+	return true
+}
+
+func (err ErrTimeout) Timeout() bool {
+	return true
+}
 
 type DialFunc func(network, addr string) (net.Conn, error)
 
@@ -67,10 +84,12 @@ func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
 		return conn, nil
 	}
 
+	toch := time.After(d.Dialer.Timeout)
 	for {
 		select {
 		case conn := <-pool.connCh:
 			return conn, nil
+
 		case <-time.After(10 * time.Millisecond):
 			conn, err := pool.maybeDial(network, addr, d.Dialer.Dial)
 			if err != nil {
@@ -80,6 +99,9 @@ func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
 			if err == nil && conn != nil {
 				return conn, nil
 			}
+
+		case <-toch:
+			return nil, ErrTimeout{}
 		}
 	}
 }
@@ -97,6 +119,7 @@ func (p *pool) maybeDial(network, addr string, d DialFunc) (net.Conn,
 	if p.getToken() != 0 {
 		c, err := d(network, addr)
 		if err != nil {
+			p.putToken()
 			return c, err
 		}
 
@@ -143,4 +166,11 @@ func (c *conn) Close() error {
 		c.pool.putToken()
 		return c.Conn.Close()
 	}
+}
+
+// NewHTTPClient creates an HTTP client, with the given timeout. Unlike
+// the http package, this method does not allow more than maxConnPerHost
+// connections towards each remote host.
+func NewHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
+	return newHTTPClient(maxConnPerHost, timeout)
 }

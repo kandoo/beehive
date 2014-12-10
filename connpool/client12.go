@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func NewHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
+func newHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Dial: (&Dialer{
@@ -20,5 +20,4 @@ func NewHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
 			ResponseHeaderTimeout: timeout,
 		},
 	}
-	// TODO(soheil): return a client and emulate timeout.
 }
