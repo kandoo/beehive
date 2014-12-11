@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"log"
 	"testing"
+
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 )
 
 func TestSync(t *testing.T) {
@@ -30,12 +32,28 @@ func TestSync(t *testing.T) {
 	defer h.Stop()
 
 	req := query("test")
-	res, err := sync.Process(req)
+	res, err := sync.Process(context.Background(), req)
 	if err != nil {
 		t.Fatalf("error in process: %v", err)
 	}
 	if res != req {
 		t.Errorf("sync.Process(%v) = %v; want=%v", req, res, req)
+	}
+}
+
+func TestSyncCancel(t *testing.T) {
+	type query string
+	sync := &Sync{
+		reqch: make(chan requestAndChan, 2048),
+		done:  make(chan chan struct{}),
+		reqs:  make(map[uint64]chan response),
+	}
+	req := query("test")
+	ctx, ccl := context.WithCancel(context.Background())
+	go ccl()
+	_, err := sync.Process(ctx, req)
+	if err == nil {
+		t.Errorf("no error in process: %v", err)
 	}
 }
 
@@ -70,7 +88,7 @@ func BenchmarkSync(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		sync.Process(i)
+		sync.Process(context.Background(), i)
 	}
 	b.StopTimer()
 }
@@ -93,7 +111,7 @@ func ExampleSyncInstall() {
 
 	go hive.Start()
 
-	result, err := sync.Process(query("your name"))
+	result, err := sync.Process(context.Background(), query("your name"))
 	if err != nil {
 		fmt.Printf("error in sync: %v", err)
 	}

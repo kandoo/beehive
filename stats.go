@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	bhgob "github.com/kandoo/beehive/gob"
 	"github.com/kandoo/beehive/state"
@@ -431,7 +432,9 @@ type statHttpHandler struct {
 }
 
 func (h *statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	res, err := h.sync.Process(statRequest{})
+	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
+	defer ccl()
+	res, err := h.sync.Process(ctx, statRequest{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

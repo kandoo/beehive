@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+
 	bhgob "github.com/kandoo/beehive/gob"
 )
 
@@ -69,20 +71,27 @@ func NewSync(a App) *Sync {
 }
 
 // Process processes a request and returns the response and error.
-func (h *Sync) Process(req interface{}) (res interface{}, err error) {
+func (h *Sync) Process(ctx context.Context, req interface{}) (res interface{},
+	err error) {
+
+	id := uint64(rand.Int63())
 	ch := make(chan response, 1)
 	h.reqch <- requestAndChan{
-		req: request{
-			ID:   uint64(rand.Int63()),
-			Data: req,
-		},
-		ch: ch,
+		req: request{ID: id, Data: req},
+		ch:  ch,
 	}
-	r := <-ch
-	if r.Err != nil {
-		return nil, errors.New(r.Err.Error())
+	select {
+	case r := <-ch:
+		if r.Err != nil {
+			return nil, errors.New(r.Err.Error())
+		}
+		return r.Data, nil
+
+	case <-ctx.Done():
+		// TODO(soheil): what if the request is not enqued yet?
+		h.deque(id)
+		return nil, ctx.Err()
 	}
-	return r.Data, nil
 }
 
 // Start is to implement DetachedHandler.
@@ -154,6 +163,7 @@ func (h *Sync) deque(id uint64) (chan response, error) {
 	if !ok {
 		return nil, ErrSyncNoSuchRequest
 	}
+	delete(h.reqs, id)
 	return ch, nil
 }
 
