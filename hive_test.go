@@ -95,7 +95,7 @@ func TestHiveStart(t *testing.T) {
 	cfg.Addr = newHiveAddrForTest()
 	cfg.StatePath = "/tmp/bhtest"
 	removeState(cfg)
-	runHiveTest(DefaultCfg, t)
+	runHiveTest(cfg, t)
 }
 
 func TestHiveRestart(t *testing.T) {
@@ -103,8 +103,9 @@ func TestHiveRestart(t *testing.T) {
 	cfg.StatePath = "/tmp/bhtest"
 	cfg.Addr = newHiveAddrForTest()
 	removeState(cfg)
-	runHiveTest(DefaultCfg, t)
-	runHiveTest(DefaultCfg, t)
+	runHiveTest(cfg, t)
+	time.Sleep(1 * time.Second)
+	runHiveTest(cfg, t)
 }
 
 func TestHiveCluster(t *testing.T) {
