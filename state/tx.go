@@ -112,7 +112,7 @@ func (t *Transactional) TxOps() []Op {
 
 func (t *Transactional) CommitTx() error {
 	if t.status != TxOpen {
-		return errors.New("No active transaction")
+		return ErrNoTx
 	}
 
 	for _, d := range t.stage {
@@ -124,7 +124,7 @@ func (t *Transactional) CommitTx() error {
 
 func (t *Transactional) AbortTx() error {
 	if t.status != TxOpen {
-		return errors.New("No active transaction")
+		return ErrNoTx
 	}
 
 	t.Reset()
