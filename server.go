@@ -132,20 +132,20 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 		select {
 		case res := <-ch:
 			if res.Err != nil {
-				glog.Errorf("Error in running the remote command: %v", res.Err)
+				glog.Errorf("error in running the remote command: %v", res.Err)
 				res.Err = bhgob.Error(res.Err.Error())
 			}
 
 			if err := gob.NewEncoder(w).Encode(res); err != nil {
-				glog.Errorf("Error in encoding the command results: %s", err)
+				glog.Errorf("error in encoding the command results: %s", err)
 				return
 			}
 
 			glog.V(2).Infof("server %v returned result %#v for command %v",
 				h.srv.hive.ID(), res, c)
 			return
-		case <-time.After(1 * time.Second):
-			glog.Errorf("Server is blocked on %v", c)
+		case <-time.After(10 * time.Second):
+			glog.Errorf("server is blocked on %v", c)
 		}
 	}
 }
