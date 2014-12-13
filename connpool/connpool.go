@@ -85,7 +85,6 @@ func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
 type bucket chan struct{}
 
 func (b bucket) dial(network, addr string, dialer net.Dialer) (net.Conn, error) {
-
 	select {
 	case <-b:
 		c, err := dialer.Dial(network, addr)
@@ -111,7 +110,7 @@ type conn struct {
 
 func (c *conn) Close() error {
 	c.bucket <- struct{}{}
-	return c.Close()
+	return c.Conn.Close()
 }
 
 // NewHTTPClient creates an HTTP client, with the given timeout. Unlike
