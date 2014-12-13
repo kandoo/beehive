@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"hash"
-	"hash/fnv"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/OneOfOne/xxhash"
 	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 )
 
@@ -41,8 +42,8 @@ type result struct {
 type del string
 
 type kvStore struct {
-	hash.Hash32
 	*bh.Sync
+	buckets uint64
 }
 
 func (s *kvStore) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
@@ -72,9 +73,12 @@ func (s *kvStore) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	case del:
 		k = string(data)
 	}
-	io.WriteString(s, k)
-	cells := bh.MappedCells{{dict, strconv.FormatUint(uint64(s.Sum32()), 16)}}
-	s.Reset()
+	cells := bh.MappedCells{
+		{
+			Dict: dict,
+			Key:  strconv.FormatUint(xxhash.Checksum64([]byte(k))%s.buckets, 16),
+		},
+	}
 	return cells
 }
 
@@ -85,21 +89,23 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx, cnl := context.WithTimeout(context.Background(), 1*time.Second)
 	var res interface{}
 	var err error
 	switch r.Method {
 	case "GET":
-		res, err = s.Process(get(k))
+		res, err = s.Process(ctx, get(k))
 	case "PUT":
 		var v []byte
 		v, err = ioutil.ReadAll(r.Body)
 		if err != nil {
 			break
 		}
-		res, err = s.Process(put{Key: k, Val: v})
+		res, err = s.Process(ctx, put{Key: k, Val: v})
 	case "DELETE":
-		res, err = s.Process(del(k))
+		res, err = s.Process(ctx, del(k))
 	}
+	cnl()
 
 	if err != nil {
 		switch {
@@ -128,19 +134,6 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-type hash32Bucket struct {
-	hash.Hash32
-	buckets uint32
-}
-
-func (h hash32Bucket) Sum32() uint32 {
-	s := h.Hash32.Sum32()
-	if h.buckets == 0 {
-		return s
-	}
-	return s % h.buckets
-}
-
 var (
 	replFactor = flag.Int("kv.rf", 3, "replication factor")
 )
@@ -152,8 +145,8 @@ func main() {
 		bh.AppWithPlacement(bh.RandomPlacement{Rand: rand.New(rand.NewSource(99))}))
 	s := bh.NewSync(a)
 	kv := &kvStore{
-		Hash32: hash32Bucket{Hash32: fnv.New32(), buckets: 10},
-		Sync:   s,
+		Sync:    s,
+		buckets: 10,
 	}
 	s.Handle(put{}, kv)
 	s.Handle(get(""), kv)
