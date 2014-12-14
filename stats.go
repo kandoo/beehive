@@ -92,7 +92,7 @@ func (c *collectorApp) collect(bee uint64, in *msg, out []*msg) {
 	// TODO(soheil): We should batch here.
 	oc := make([]*msg, len(out))
 	copy(oc, out)
-	c.hive.Emit(beeRecord{Bee: bee, In: in, Out: out})
+	c.hive.Emit(beeRecord{Bee: bee, In: in, Out: oc})
 }
 
 type beeMatrix struct {
