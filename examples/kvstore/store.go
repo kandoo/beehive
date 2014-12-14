@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/OneOfOne/xxhash"
 	bh "github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 )
 
@@ -89,7 +87,7 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cnl := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cnl := context.WithTimeout(context.Background(), 30*time.Second)
 	var res interface{}
 	var err error
 	switch r.Method {
@@ -136,17 +134,18 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var (
 	replFactor = flag.Int("kv.rf", 3, "replication factor")
+	buckets    = flag.Int("kv.b", 1024, "number of buckets")
 )
 
 func main() {
 	flag.Parse()
 
-	a := bh.NewApp("kvstore", bh.AppPersistent(*replFactor),
-		bh.AppWithPlacement(bh.RandomPlacement{Rand: rand.New(rand.NewSource(99))}))
+	a := bh.NewApp("kvstore", bh.AppPersistent(*replFactor))
+	//bh.AppWithPlacement(bh.RandomPlacement{Rand: rand.New(rand.NewSource(99))}))
 	s := bh.NewSync(a)
 	kv := &kvStore{
 		Sync:    s,
-		buckets: 10,
+		buckets: *buckets,
 	}
 	s.Handle(put{}, kv)
 	s.Handle(get(""), kv)
