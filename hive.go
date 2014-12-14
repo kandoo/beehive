@@ -150,7 +150,7 @@ func init() {
 		"timeout to announce a non-responsive bee dead")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
 		10*time.Millisecond, "timeout to retry locking an entry in the registry")
-	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 1*time.Second,
+	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
 		"timeout for trying to connect to other hives")
 	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
 		"whether to use high-granular bee heartbeating in addition to registry"+
