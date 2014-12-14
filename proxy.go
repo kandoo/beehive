@@ -121,12 +121,12 @@ func (p *proxy) sendCmd(c *cmd) (interface{}, error) {
 		return nil, err
 	}
 
-	glog.V(2).Infof("Proxy to %v sends command %v", p.to, c)
+	glog.V(2).Infof("proxy to %v sends command %v", p.to, c)
 	pRes, err := p.post(p.cmdURL, "application/x-gob", &data)
 	if err != nil {
 		return nil, err
 	}
-	glog.V(2).Infof("Proxy to %v receives the result for command %v", p.to, c)
+	glog.V(2).Infof("proxy to %v receives the result for command %v", p.to, c)
 
 	defer pRes.Body.Close()
 	if pRes.StatusCode != http.StatusOK {
@@ -152,6 +152,7 @@ func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 
 	r, err := p.post(url, "application/x-protobuf", bytes.NewBuffer(d))
 	if err != nil {
+		glog.V(2).Infof("proxy to %v cannot send raft message: %v", p.to, err)
 		return err
 	}
 
