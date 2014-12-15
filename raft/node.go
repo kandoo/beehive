@@ -386,7 +386,7 @@ func (n *Node) Start() {
 			// Recover from snapshot if it is more recent than the currently applied.
 			if rd.Snapshot.Index > appliedi {
 				if err := n.store.Restore(rd.Snapshot.Data); err != nil {
-					panic("TODO: this is bad, what do we do about it?")
+					glog.Fatalf("TODO: %v", err)
 				}
 				appliedi = rd.Snapshot.Index
 			}
@@ -404,7 +404,7 @@ func (n *Node) Start() {
 func (n *Node) snapshot(snapi uint64, snapnodes []uint64) {
 	d, err := n.store.Save()
 	if err != nil {
-		panic("TODO: this is bad, what do we do about it?")
+		glog.Fatalf("TODO: %v", err)
 	}
 	n.node.Compact(snapi, snapnodes, d)
 	n.wal.Cut()

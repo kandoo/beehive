@@ -141,6 +141,10 @@ func (t *Transactional) Reset() {
 	}
 }
 
+func (t *Transactional) HasEmptyTx() bool {
+	return len(t.stage) == 0
+}
+
 func (t *Transactional) Apply(ops []Op) error {
 	if t.status == TxOpen {
 		return ErrOpenTx
