@@ -22,29 +22,27 @@ const (
 var client *http.Client
 
 type target struct {
-	*http.Request
+	method string
+	url    string
+	body   []byte
 }
 
-func newTarget(method, url string, body []byte) (target, error) {
-	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
-	if err != nil {
-		return target{}, err
+func newTarget(method, url string, body []byte) target {
+	return target{
+		method: method,
+		url:    url,
+		body:   body,
 	}
-	return target{Request: req}, nil
-}
-
-func mustNewTarget(method, url string, body []byte) target {
-	t, err := newTarget(method, url, body)
-	if err != nil {
-		panic(err)
-	}
-	return t
 }
 
 func (t *target) Do() (d time.Duration, in int64, out int64, err error) {
-	in = t.Request.ContentLength
+	req, err := http.NewRequest(t.method, t.url, bytes.NewBuffer(t.body))
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	in = req.ContentLength
 	start := time.Now()
-	res, err := client.Do(t.Request)
+	res, err := client.Do(req)
 	d = time.Since(start)
 	if err != nil {
 		return
@@ -95,17 +93,17 @@ func generateTargets(addr string, writes, localReads,
 		k := randString(keyLen)
 		keys = append(keys, k)
 		bl := randRange(minBodyLen, maxBodyLen)
-		t := mustNewTarget("PUT", "http://"+addr+"/apps/kvstore/"+k,
+		t := newTarget("PUT", "http://"+addr+"/apps/kvstore/"+k,
 			[]byte(randString(bl)))
 		targets = append(targets, t)
 	}
 	for i := 0; i < localReads; i++ {
-		t := mustNewTarget("GET",
+		t := newTarget("GET",
 			"http://"+addr+"/apps/kvstore/"+keys[rand.Intn(len(keys))], []byte{})
 		targets = append(targets, t)
 	}
 	for i := 0; i < randReads; i++ {
-		t := mustNewTarget("GET",
+		t := newTarget("GET",
 			"http://"+addr+"/apps/kvstore/"+randString(keyLen), []byte{})
 		targets = append(targets, t)
 	}
@@ -118,8 +116,8 @@ func run(targets []target, rounds int) []result {
 		for _, t := range targets {
 			var err error
 			res := result{
-				Method: t.Request.Method,
-				URL:    t.Request.URL.String(),
+				Method: t.method,
+				URL:    t.url,
 			}
 			res.Dur, res.In, res.Out, err = t.Do()
 			if err != nil {
