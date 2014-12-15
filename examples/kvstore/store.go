@@ -145,7 +145,7 @@ func main() {
 	s := bh.NewSync(a)
 	kv := &kvStore{
 		Sync:    s,
-		buckets: *buckets,
+		buckets: uint64(*buckets),
 	}
 	s.Handle(put{}, kv)
 	s.Handle(get(""), kv)
