@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultRaftTick = 100 * time.Millisecond
+	defaultRaftTick = 30 * time.Millisecond
 )
 
 // Hive represents is the main active entity of beehive. It mananges all
