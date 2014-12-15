@@ -424,6 +424,13 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 			var err error
 			if b.stateL2 == nil {
 				err = b.CommitTx()
+			} else if len(b.msgBufL1) == 0 && b.stateL2.HasEmptyTx() {
+				// If there is no pending L1 message and there is no state change,
+				// emit the buffered messages in L2 as a shortcut.
+				for m := range b.msgBufL2 {
+					b.doEmit(b.msgBufL2[m])
+				}
+				b.resetTx(b.stateL2, &b.msgBufL2)
 			} else {
 				err = b.commitTxL2()
 			}
