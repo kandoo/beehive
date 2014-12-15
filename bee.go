@@ -473,6 +473,7 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 	case cmdJoinColony:
 		if !cmd.Colony.Contains(b.ID()) {
 			err = fmt.Errorf("%v is not in this colony %v", b, cmd.Colony)
+			break
 		}
 		if !b.colony().IsNil() {
 			err = fmt.Errorf("%v is already in colony %v", b, b.colony())

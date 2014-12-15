@@ -110,12 +110,12 @@ func ExampleSyncInstall() {
 	sync.HandleFunc(query(""), mapf, rcvf)
 
 	go hive.Start()
+	defer hive.Stop()
 
 	result, err := sync.Process(context.Background(), query("your name"))
 	if err != nil {
 		fmt.Printf("error in sync: %v", err)
+		return
 	}
 	fmt.Println(result)
-
-	hive.Stop()
 }

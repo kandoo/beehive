@@ -13,19 +13,23 @@ const (
 	DefaultMaxConnsPerHost = 10
 )
 
-// ErrTimeout represents that no connection could be grabbed from the pool after
-// the connection timeout.
-type ErrTimeout struct{}
+var (
+	// ErrTimeout represents that no connection could be grabbed from the pool
+	// after the connection timeout.
+	ErrTimeout = errTimeout{}
+)
 
-func (err ErrTimeout) Error() string {
+type errTimeout struct{}
+
+func (err errTimeout) Error() string {
 	return "dial timeout error"
 }
 
-func (err ErrTimeout) Temporary() bool {
+func (err errTimeout) Temporary() bool {
 	return true
 }
 
-func (err ErrTimeout) Timeout() bool {
+func (err errTimeout) Timeout() bool {
 	return true
 }
 
@@ -35,7 +39,7 @@ type DialFunc func(network, addr string) (net.Conn, error)
 // the number of parallel connections towards each address.
 type Dialer struct {
 	sync.Mutex
-	conns map[netAndAddr]*pool
+	conns map[netAndAddr]bucket
 	// MaxConnPerHost is the maximum number of parallel connections dialed for
 	// each host. If it is set to 0 we use DefaultMaxConnsPerHost.
 	MaxConnPerHost int
@@ -48,9 +52,8 @@ type netAndAddr struct {
 	addr string
 }
 
-func (d *Dialer) pool(network, addr string) *pool {
+func (d *Dialer) bucket(network, addr string) bucket {
 	d.Lock()
-	defer d.Unlock()
 
 	max := d.MaxConnPerHost
 	if max == 0 {
@@ -58,114 +61,56 @@ func (d *Dialer) pool(network, addr string) *pool {
 	}
 
 	if d.conns == nil {
-		d.conns = make(map[netAndAddr]*pool)
+		d.conns = make(map[netAndAddr]bucket)
 	}
 
-	p, ok := d.conns[netAndAddr{network, addr}]
+	b, ok := d.conns[netAndAddr{network, addr}]
 	if !ok {
-		p = &pool{
-			connCh: make(chan *conn),
-			tokens: max,
+		b = make(bucket, max)
+		for i := 0; i < max; i++ {
+			b <- struct{}{}
 		}
-		d.conns[netAndAddr{network, addr}] = p
+		d.conns[netAndAddr{network, addr}] = b
 	}
 
-	return p
+	d.Unlock()
+	return b
 }
 
 func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
-	pool := d.pool(network, addr)
-	conn, err := pool.maybeDial(network, addr, d.Dialer.Dial)
-	if err != nil {
-		return nil, err
-	}
-
-	if err == nil && conn != nil {
-		return conn, nil
-	}
-
-	toch := time.After(d.Dialer.Timeout)
-	for {
-		select {
-		case conn := <-pool.connCh:
-			return conn, nil
-
-		case <-time.After(10 * time.Millisecond):
-			conn, err := pool.maybeDial(network, addr, d.Dialer.Dial)
-			if err != nil {
-				return nil, err
-			}
-
-			if err == nil && conn != nil {
-				return conn, nil
-			}
-
-		case <-toch:
-			return nil, ErrTimeout{}
-		}
-	}
+	b := d.bucket(network, addr)
+	return b.dial(network, addr, d.Dialer)
 }
 
-type pool struct {
-	sync.Mutex
+type bucket chan struct{}
 
-	connCh chan *conn // Used to wait for a new free connection.
-	tokens int        // Cap minus the number of open connections.
-}
-
-func (p *pool) maybeDial(network, addr string, d DialFunc) (net.Conn,
-	error) {
-
-	if p.getToken() != 0 {
-		c, err := d(network, addr)
+func (b bucket) dial(network, addr string, dialer net.Dialer) (net.Conn, error) {
+	select {
+	case <-b:
+		c, err := dialer.Dial(network, addr)
 		if err != nil {
-			p.putToken()
+			b <- struct{}{}
 			return c, err
 		}
-
 		pc := &conn{
-			Conn: c,
-			pool: p,
+			Conn:   c,
+			bucket: b,
 		}
 		return pc, nil
+
+	case <-time.After(dialer.Timeout):
+		return nil, ErrTimeout
 	}
-
-	return nil, nil
-}
-
-func (p *pool) getToken() int {
-	p.Lock()
-	defer p.Unlock()
-
-	t := p.tokens
-	if t > 0 {
-		p.tokens--
-	}
-	return t
-}
-
-func (p *pool) putToken() int {
-	p.Lock()
-	defer p.Unlock()
-
-	t := p.tokens
-	p.tokens++
-	return t
 }
 
 type conn struct {
 	net.Conn
-	pool *pool
+	bucket bucket
 }
 
 func (c *conn) Close() error {
-	select {
-	case c.pool.connCh <- c:
-		return nil
-	default:
-		c.pool.putToken()
-		return c.Conn.Close()
-	}
+	c.bucket <- struct{}{}
+	return c.Conn.Close()
 }
 
 // NewHTTPClient creates an HTTP client, with the given timeout. Unlike
