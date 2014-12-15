@@ -207,7 +207,7 @@ func (h syncHandler) Rcv(m Msg, ctx RcvContext) error {
 		id:         req.ID,
 		from:       m.From(),
 	}
-	err := h.handler.Rcv(&sm, &sc)
+	err := h.handler.Rcv(sm, &sc)
 	if err != nil {
 		ctx.AbortTx()
 		r := response{
