@@ -78,6 +78,9 @@ func (d *Dialer) bucket(network, addr string) bucket {
 }
 
 func (d *Dialer) Dial(network, addr string) (net.Conn, error) {
+	if d.MaxConnPerHost <= 0 {
+		return d.Dialer.Dial(network, addr)
+	}
 	b := d.bucket(network, addr)
 	return b.dial(network, addr, d.Dialer)
 }
