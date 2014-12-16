@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -74,6 +73,7 @@ type HiveConfig struct {
 	HBDeadTimeout   time.Duration // when to announce a bee dead.
 	RegLockTimeout  time.Duration // when to retry to lock an entry in a registry.
 	UseBeeHeartbeat bool          // heartbeat bees instead of the registry.
+	MaxConnPerHost  int           // max parallel data connections to a host.
 	ConnTimeout     time.Duration // timeout for connections between hives.
 }
 
@@ -95,8 +95,12 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(defaultRaftTick),
-		client: connpool.NewHTTPClient(64, cfg.ConnTimeout),
-		peers:  make(map[uint64]*proxy),
+		client: httpClient{
+			dataClient: connpool.NewHTTPClient(cfg.MaxConnPerHost, cfg.ConnTimeout),
+			cmdClient:  connpool.NewHTTPClient(cfg.MaxConnPerHost, cfg.ConnTimeout),
+			raftClient: connpool.NewHTTPClient(-1, cfg.ConnTimeout),
+		},
+		peers: make(map[uint64]*proxy),
 	}
 
 	h.registry = newRegistry(h.String())
@@ -150,6 +154,8 @@ func init() {
 		"timeout to announce a non-responsive bee dead")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
 		10*time.Millisecond, "timeout to retry locking an entry in the registry")
+	flag.IntVar(&DefaultCfg.MaxConnPerHost, "maxconn", 32,
+		"maximum number of parallel data connectons to a remote host")
 	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
 		"timeout for trying to connect to other hives")
 	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
@@ -194,7 +200,7 @@ type hive struct {
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	client   *http.Client
+	client   httpClient
 	peers    map[uint64]*proxy
 
 	replStrategy replicationStrategy
@@ -638,6 +644,16 @@ func (h *hive) raftPeer(hid uint64) (*proxy, error) {
 func (h *hive) resetRaftPeer(hid uint64) {
 	h.Lock()
 	defer h.Unlock()
+
+	p, ok := h.peers[hid]
+	if !ok {
+		return
+	}
+
+	a, err := h.hiveAddr(hid)
+	if err == nil && a == p.to {
+		return
+	}
 
 	delete(h.peers, hid)
 }

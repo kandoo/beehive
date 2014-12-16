@@ -27,7 +27,7 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 	client := connpool.NewHTTPClient(1, 0)
 	for _, a := range addrs {
 		go func(a string) {
-			p := newProxy(client, a)
+			p := newProxy(newSimpleHttpClient(client), a)
 			if s, err := p.state(); err == nil {
 				ch <- s.Peers
 			}
@@ -54,7 +54,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	for _, a := range paddrs {
 		glog.V(2).Infof("requesting hive ID from %v", a)
 		go func(a string) {
-			p := newProxy(client, a)
+			p := newProxy(newSimpleHttpClient(client), a)
 			id, err := p.sendCmd(&cmd{Data: cmdNewHiveID{Addr: addr}})
 			if err != nil {
 				glog.Error(err)

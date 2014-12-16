@@ -133,6 +133,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	<-ch
 
+	time.Sleep(30 * defaultRaftTick)
 	h1.Stop()
 	time.Sleep(30 * defaultRaftTick)
 
@@ -151,6 +152,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 		time.Sleep(10 * defaultRaftTick)
 	}
 
+	time.Sleep(10 * defaultRaftTick)
 	h2.Emit(AppTestMsg(0))
 	id1 := <-ch
 	h3.Emit(AppTestMsg(0))

@@ -217,13 +217,15 @@ func (b *bee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
 	}
 
 	for _, m := range msgs {
-		glog.V(2).Infof("%v tries to send bee raft message to %v@%v", b, m.To, p.to)
+		glog.V(2).Infof("%v tries to send bee raft message %v to %v@%v", b, m.Index,
+			m.To, p.to)
 		if err = p.sendBeeRaft(b.app.Name(), m.To, m); err != nil {
-			glog.Errorf("%v cannot send bee raft message to %v: %v", b, m.To, err)
+			glog.Errorf("%v cannot send bee raft message %v to %v: %v", b, m.Index,
+				m.To, err)
 			b.resetRaftPeer(to)
 			return err
 		}
-		glog.V(2).Infof("%v successfully sent bee raft message %v to %v", b,
+		glog.V(2).Info("%v successfully sent bee raft message %v to %v", b,
 			m.Index, m.To)
 	}
 
@@ -250,6 +252,16 @@ func (b *bee) raftPeer(bid uint64) (*proxy, error) {
 func (b *bee) resetRaftPeer(bid uint64) {
 	b.Lock()
 	defer b.Unlock()
+
+	p, ok := b.peers[bid]
+	if !ok {
+		return
+	}
+
+	_, hi, err := b.hive.registry.beeAndHive(bid)
+	if err == nil && p.to == hi.Addr {
+		return
+	}
 
 	delete(b.peers, bid)
 }

@@ -21,7 +21,7 @@ const (
 )
 
 type proxy struct {
-	client *http.Client
+	client httpClient
 
 	to       string
 	stateURL string
@@ -35,11 +35,11 @@ type proxy struct {
 	maxRetries  uint32
 }
 
-func newProxy(client *http.Client, addr string) *proxy {
+func newProxy(client httpClient, addr string) *proxy {
 	return newProxyWithRetry(client, addr, 0, 1)
 }
 
-func newProxyWithRetry(client *http.Client, addr string,
+func newProxyWithRetry(client httpClient, addr string,
 	backoffStep time.Duration, maxRetries uint32) *proxy {
 	// TODO(soheil): add scheme.
 	return &proxy{
@@ -91,22 +91,24 @@ func closeResponse(r *http.Response) {
 	r.Body.Close()
 }
 
-func (p *proxy) post(url string, bodyType string, body io.Reader) (
-	*http.Response, error) {
+func (p *proxy) post(client *http.Client, url string, bodyType string,
+	body io.Reader) (*http.Response, error) {
 
 	return p.doWithRetry(func() (*http.Response, error) {
-		return p.client.Post(url, bodyType, body)
+		return client.Post(url, bodyType, body)
 	})
 }
 
-func (p *proxy) get(url string) (resp *http.Response, err error) {
+func (p *proxy) get(client *http.Client, url string) (resp *http.Response,
+	err error) {
+
 	return p.doWithRetry(func() (*http.Response, error) {
-		return p.client.Get(url)
+		return client.Get(url)
 	})
 }
 
 func (p *proxy) sendMsg(msgs bytes.Buffer) error {
-	r, err := p.post(p.msgURL, "application/x-gob", &msgs)
+	r, err := p.post(p.client.dataClient, p.msgURL, "application/x-gob", &msgs)
 	if err != nil {
 		return err
 	}
@@ -127,7 +129,7 @@ func (p *proxy) sendCmd(c *cmd) (interface{}, error) {
 	}
 
 	glog.V(2).Infof("proxy to %v sends command %v", p.to, c)
-	r, err := p.post(p.cmdURL, "application/x-gob", &data)
+	r, err := p.post(p.client.cmdClient, p.cmdURL, "application/x-gob", &data)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +157,8 @@ func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 		glog.Fatalf("cannot marshal raft message")
 	}
 
-	r, err := p.post(url, "application/x-protobuf", bytes.NewBuffer(d))
+	r, err := p.post(p.client.raftClient, url, "application/x-protobuf",
+		bytes.NewBuffer(d))
 	if err != nil {
 		glog.V(2).Infof("proxy to %v cannot send raft message: %v", p.to, err)
 		return err
@@ -178,13 +181,14 @@ func (p proxy) sendRaft(m raftpb.Message) error {
 func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
 	url := buildURL("http", p.to,
 		fmt.Sprintf("%s/%s/%v", serverV1RaftPath, app, b))
-	glog.V(2).Infof("proxy to %v sends bee raft message %v", url, m)
+	//serverV1RaftPath+"/"+app+"/"+strconv.FormatUint(b, 10))
+	glog.V(0).Infof("proxy to %v sends bee raft message %v", url, m)
 	return p.doSendRaft(url, m)
 }
 
 func (p proxy) state() (hiveState, error) {
 	s := hiveState{}
-	r, err := p.get(p.stateURL)
+	r, err := p.get(p.client.dataClient, p.stateURL)
 	if err != nil {
 		return s, err
 	}
