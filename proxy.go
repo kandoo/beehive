@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -85,6 +86,11 @@ func (p *proxy) doWithRetry(method clientMethod) (*http.Response, error) {
 	return nil, err
 }
 
+func closeResponse(r *http.Response) {
+	io.Copy(ioutil.Discard, r.Body)
+	r.Body.Close()
+}
+
 func (p *proxy) post(url string, bodyType string, body io.Reader) (
 	*http.Response, error) {
 
@@ -100,15 +106,14 @@ func (p *proxy) get(url string) (resp *http.Response, err error) {
 }
 
 func (p *proxy) sendMsg(msgs bytes.Buffer) error {
-	res, err := p.post(p.msgURL, "application/x-gob", &msgs)
+	r, err := p.post(p.msgURL, "application/x-gob", &msgs)
 	if err != nil {
 		return err
 	}
-
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	defer closeResponse(r)
+	if r.StatusCode != http.StatusOK {
 		var b bytes.Buffer
-		b.ReadFrom(res.Body)
+		b.ReadFrom(r.Body)
 		return errors.New(string(b.Bytes()))
 	}
 	return nil
@@ -122,23 +127,23 @@ func (p *proxy) sendCmd(c *cmd) (interface{}, error) {
 	}
 
 	glog.V(2).Infof("proxy to %v sends command %v", p.to, c)
-	pRes, err := p.post(p.cmdURL, "application/x-gob", &data)
+	r, err := p.post(p.cmdURL, "application/x-gob", &data)
 	if err != nil {
 		return nil, err
 	}
 	glog.V(2).Infof("proxy to %v receives the result for command %v", p.to, c)
 
-	defer pRes.Body.Close()
-	if pRes.StatusCode != http.StatusOK {
+	defer closeResponse(r)
+	if r.StatusCode != http.StatusOK {
 		var b bytes.Buffer
-		b.ReadFrom(pRes.Body)
+		b.ReadFrom(r.Body)
 		return nil, errors.New(string(b.Bytes()))
 	}
-	cRes := cmdResult{}
-	if err := gob.NewDecoder(pRes.Body).Decode(&cRes); err != nil {
+	cr := cmdResult{}
+	if err := gob.NewDecoder(r.Body).Decode(&cr); err != nil {
 		return nil, err
 	}
-	return cRes.get()
+	return cr.get()
 }
 
 func (p proxy) doSendRaft(url string, m raftpb.Message) error {
@@ -156,7 +161,7 @@ func (p proxy) doSendRaft(url string, m raftpb.Message) error {
 		return err
 	}
 
-	defer r.Body.Close()
+	defer closeResponse(r)
 	if r.StatusCode != http.StatusOK {
 		var b bytes.Buffer
 		b.ReadFrom(r.Body)
@@ -184,7 +189,7 @@ func (p proxy) state() (hiveState, error) {
 		return s, err
 	}
 
-	defer r.Body.Close()
+	defer closeResponse(r)
 	if r.StatusCode != http.StatusOK {
 		var b bytes.Buffer
 		b.ReadFrom(r.Body)
