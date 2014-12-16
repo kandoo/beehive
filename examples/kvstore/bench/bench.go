@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -47,7 +48,10 @@ func (t *target) Do() (d time.Duration, in int64, out int64, err error) {
 	if err != nil {
 		return
 	}
-	defer res.Body.Close()
+	defer func() {
+		io.Copy(ioutil.Discard, res.Body)
+		res.Body.Close()
+	}()
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return
@@ -110,10 +114,11 @@ func generateTargets(addr string, writes, localReads,
 	return targets
 }
 
-func run(targets []target, rounds int) []result {
+func run(id int, targets []target, rounds int) []result {
 	results := make([]result, 0, len(targets)*rounds)
 	for i := 0; i < rounds; i++ {
 		for _, t := range targets {
+			fmt.Printf("%v-%v-%s ", id, i, t.method)
 			var err error
 			res := result{
 				Method: t.method,
@@ -142,7 +147,7 @@ var (
 	writes  = flag.Int("writes", 10, "number of random keys to writes per round")
 	localr  = flag.Int("localreads", 100, "number of reads from written keys")
 	randr   = flag.Int("randomreads", 0, "number of random keys to read")
-	rounds  = flag.Int("round", 1, "number of rounds")
+	rounds  = flag.Int("rounds", 1, "number of rounds")
 	workers = flag.Int("workers", 1, "number of parallel clients")
 	timeout = flag.Duration("timeout", 60*time.Second, "request timeout")
 	output  = flag.String("out", "bench.out", "benchmark output file")
@@ -160,11 +165,11 @@ func main() {
 	client = &http.Client{Timeout: *timeout}
 
 	ch := make(chan []result)
-	for i := 0; i < *workers; i++ {
-		go func() {
+	for w := 0; w < *workers; w++ {
+		go func(w int) {
 			t := generateTargets(*addr, *writes, *localr, *randr)
-			ch <- run(t, *rounds)
-		}()
+			ch <- run(w, t, *rounds)
+		}(w)
 	}
 
 	var res []result
