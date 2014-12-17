@@ -13,8 +13,7 @@ func newHTTPClient(maxConnPerHost int, timeout time.Duration) *http.Client {
 		Transport: &http.Transport{
 			Dial: (&Dialer{
 				Dialer: net.Dialer{
-					Timeout:   timeout,
-					KeepAlive: 30 * time.Second,
+					Timeout: timeout,
 				},
 				MaxConnPerHost: maxConnPerHost,
 			}).Dial,
