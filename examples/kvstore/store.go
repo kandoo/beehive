@@ -7,10 +7,13 @@ import (
 	"flag"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"runtime/pprof"
 	"strconv"
 	"time"
 
 	"github.com/OneOfOne/xxhash"
+	"github.com/golang/glog"
 	bh "github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
@@ -135,10 +138,20 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var (
 	replFactor = flag.Int("kv.rf", 3, "replication factor")
 	buckets    = flag.Int("kv.b", 1024, "number of buckets")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 )
 
 func main() {
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	a := bh.NewApp("kvstore", bh.AppPersistent(*replFactor))
 	//bh.AppWithPlacement(bh.RandomPlacement{Rand: rand.New(rand.NewSource(99))}))
