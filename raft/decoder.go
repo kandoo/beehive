@@ -28,13 +28,19 @@ func (d *Decoder) Decode(m *raftpb.Message) error {
 	var buf [4]byte
 	b := buf[:4]
 	n, err := d.r.Read(b)
-	if err != nil || n != 4 {
+	if err != nil {
+		return err
+	}
+	if n != 4 {
 		return ErrNoEnoughData
 	}
 	s := int(binary.BigEndian.Uint32(b))
 	b = make([]byte, s)
-	n, err = d.r.Read(b)
-	if err != nil || n != s {
+	n, err = io.ReadFull(d.r, b)
+	if err != nil {
+		return err
+	}
+	if n != s {
 		return ErrNoEnoughData
 	}
 	m.Unmarshal(b)
