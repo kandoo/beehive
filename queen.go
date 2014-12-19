@@ -175,16 +175,12 @@ func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 		glog.Fatalf("%v cannot find local bee %v", q, bid)
 	}
 
-	prx, err := q.hive.newProxyToHive(info.Hive)
-	if err != nil {
-		return nil, err
-	}
-
-	return prx.sendCmd(&cmd{
+	cmd := cmd{
 		To:   bid,
 		App:  q.app.Name(),
 		Data: data,
-	})
+	}
+	return q.hive.streamer.sendCmd(cmd, info.Hive)
 }
 
 func (q *qee) stopBees() {
@@ -429,12 +425,11 @@ func (q *qee) placeBee(cells MappedCells) (*bee, error) {
 	var col Colony
 	var bi BeeInfo
 	var b *bee
-	cmd := &cmd{
+	cmd := cmd{
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	p := newProxy(q.hive.client, h.Addr)
-	res, err := p.sendCmd(cmd)
+	res, err := q.hive.streamer.sendCmd(cmd, h.ID)
 	if err != nil {
 		goto fallback
 	}
@@ -444,7 +439,7 @@ func (q *qee) placeBee(cells MappedCells) (*bee, error) {
 	cmd.Data = cmdJoinColony{
 		Colony: col,
 	}
-	if _, err = p.sendCmd(cmd); err != nil {
+	if _, err = q.hive.streamer.sendCmd(cmd, h.ID); err != nil {
 		goto fallback
 	}
 
@@ -527,8 +522,8 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 
 	glog.V(2).Infof("%v starts to migrate %v to %v", q, bid, to)
 
-	var prx *proxy
-	var res interface{}
+	var r interface{}
+	var c cmd
 
 	oldb, ok := q.beeByID(bid)
 	if !ok {
@@ -548,28 +543,25 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 		}
 	}
 
-	if prx, err = q.hive.newProxyToHive(to); err != nil {
-		return Nil, err
-	}
-
-	res, err = prx.sendCmd(&cmd{
+	c = cmd{
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
-	})
+	}
+	r, err = q.hive.streamer.sendCmd(c, to)
 	if err != nil {
 		return Nil, err
 	}
 
-	newb = res.(uint64)
+	newb = r.(uint64)
 	// TODO(soheil): we need to do this for persitent apps with a replication
 	// factor of 1 as well.
 	if !q.app.persistent() {
-		_, err = prx.sendCmd(&cmd{
+		c = cmd{
 			To:   newb,
 			App:  q.app.Name(),
 			Data: cmdJoinColony{Colony: Colony{Leader: newb}},
-		})
-		if err != nil {
+		}
+		if _, err = q.hive.streamer.sendCmd(c, to); err != nil {
 			return Nil, err
 		}
 		goto handoff

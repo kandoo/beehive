@@ -1,0 +1,534 @@
+package beehive
+
+import (
+	"bytes"
+	"encoding/gob"
+	"errors"
+	"sync"
+	"time"
+
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/raft"
+)
+
+var (
+	errStreamerBcastMsg  = errors.New("streamer: cannot stream a b-cast message")
+	errStreamerStopped   = errors.New("streamer: stopped")
+	errStreamerCancelled = errors.New("streamer: ")
+)
+
+type streamer interface {
+	sendMsg(ms []msg) error
+	sendCmd(c cmd, to uint64) (interface{}, error)
+	sendRaft(ms []raftpb.Message) error
+	sendBeeRaft(ms []raftpb.Message) error
+	stop()
+	// TODO(soheil): do we need start()?
+}
+
+type loadBalancer struct {
+	sync.RWMutex
+
+	h *hive
+
+	bph  int                    // batchers per host.
+	htob map[uint64]*rrBatchers // batchers for the hive.
+	btob map[uint64]*batcher    // batcher for the bee.
+
+	done chan struct{}
+}
+
+var _ streamer = &loadBalancer{}
+
+func newLoadBalancer(h *hive, bph int) *loadBalancer {
+	return &loadBalancer{
+		h:    h,
+		bph:  bph,
+		htob: make(map[uint64]*rrBatchers),
+		btob: make(map[uint64]*batcher),
+		done: make(chan struct{}),
+	}
+}
+
+func (lb *loadBalancer) hiveRRBatchersUnsafe(h uint64) *rrBatchers {
+	rrb, ok := lb.htob[h]
+	if !ok {
+		rrb = newRRBatchers(lb.h, h)
+		lb.htob[h] = rrb
+	}
+	return rrb
+}
+
+func (lb *loadBalancer) beeBatcher(b uint64) (*batcher, error) {
+	lb.Lock()
+	defer lb.Unlock()
+
+	btchr, ok := lb.btob[b]
+	if ok {
+		return btchr, nil
+	}
+
+	bi, err := lb.h.bee(b)
+	if err != nil {
+		return nil, err
+	}
+
+	rrb := lb.hiveRRBatchersUnsafe(bi.Hive)
+	if rrb.len() < lb.bph {
+		if err := rrb.add(); err != nil {
+			return nil, err
+		}
+	}
+
+	btchr = rrb.batcher()
+	lb.btob[b] = btchr
+	return btchr, nil
+}
+
+func (lb *loadBalancer) hiveBatcher(h uint64) (*batcher, error) {
+	lb.Lock()
+	defer lb.Unlock()
+
+	rrb, ok := lb.htob[h]
+	if !ok {
+		rrb = newRRBatchers(lb.h, h)
+		lb.htob[h] = rrb
+	}
+	if rrb.len() < 1 {
+		if err := rrb.add(); err != nil {
+			return nil, err
+		}
+	}
+	return rrb.bts[0], nil
+}
+
+func (lb *loadBalancer) sendMsg(ms []msg) error {
+	if lb.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		if m.To() == Nil {
+			glog.Error("loadbalancer cannot send b-case message")
+			continue
+		}
+		btchr, err := lb.beeBatcher(m.To())
+		if err != nil {
+			glog.Errorf("cannot create batcher for bee %v: %v", m.To(), err)
+			continue
+		}
+		btchr.enqueMsg(m)
+	}
+	return nil
+}
+
+func (lb *loadBalancer) sendCmd(c cmd, to uint64) (interface{}, error) {
+	if lb.stopped() {
+		return nil, errStreamerStopped
+	}
+
+	var btchr *batcher
+	var err error
+	if c.To == Nil {
+		btchr, err = lb.hiveBatcher(to)
+	} else {
+		btchr, err = lb.beeBatcher(c.To)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return btchr.sendCmd(c, to)
+}
+
+func (lb *loadBalancer) sendRaft(ms []raftpb.Message) error {
+	if lb.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		btchr, err := lb.hiveBatcher(m.To)
+		if err != nil {
+			return err
+		}
+		if err = btchr.enqueRaft(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (lb *loadBalancer) sendBeeRaft(ms []raftpb.Message) error {
+	if lb.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		btchr, err := lb.beeBatcher(m.To)
+		if err != nil {
+			return err
+		}
+		if err = btchr.enqueBeeRaft(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (lb *loadBalancer) stop() {
+	close(lb.done)
+}
+
+type rrBatchers struct {
+	h  *hive
+	to uint64
+
+	i   int
+	bts []*batcher
+}
+
+func newRRBatchers(h *hive, to uint64) *rrBatchers {
+	return &rrBatchers{h: h, to: to}
+}
+
+func (rr *rrBatchers) add() error {
+	b, err := newBatcher(rr.h, rr.to)
+	if err != nil {
+		return err
+	}
+	rr.bts = append(rr.bts, b)
+	return nil
+}
+
+func (rr *rrBatchers) batcher() *batcher {
+	rr.i = (rr.i + 1) % rr.len()
+	return rr.bts[rr.i]
+}
+
+func (rr *rrBatchers) len() int {
+	return len(rr.bts)
+}
+
+func (lb *loadBalancer) stopped() bool {
+	select {
+	case <-lb.done:
+		return true
+	default:
+		return false
+	}
+}
+
+const (
+	batcherMsgIndex = iota
+	batcherCmdIndex
+	batcherRaftIndex
+	batcherBeeRaftIndex
+)
+
+type batcher struct {
+	h *hive
+
+	batchTick  time.Duration
+	scoreboard [4]int
+	weights    [4]int
+
+	msgs   chan msg
+	cmds   chan cmdAndChannel
+	rafts  chan raftpb.Message
+	bRafts chan raftpb.Message
+
+	flush chan struct{}
+	done  chan struct{}
+
+	prx *proxy
+}
+
+func newBatcher(h *hive, to uint64) (*batcher, error) {
+	// TODO(soheil): should we use inifinite channels here?
+	prx, err := h.newProxyToHive(to)
+	if err != nil {
+		return nil, err
+	}
+	b := &batcher{
+		h:         h,
+		batchTick: defaultRaftTick / 3,
+		weights:   [4]int{1, 5, 10, 10},
+		msgs:      make(chan msg, h.config.DataChBufSize),
+		cmds:      make(chan cmdAndChannel, h.config.CmdChBufSize),
+		rafts:     make(chan raftpb.Message, h.config.DataChBufSize),
+		bRafts:    make(chan raftpb.Message, h.config.DataChBufSize),
+		flush:     make(chan struct{}, 1),
+		done:      make(chan struct{}),
+		prx:       prx,
+	}
+	go b.start()
+	return b, nil
+}
+
+func (b *batcher) start() {
+	var raftBuf bytes.Buffer
+	raftEnc := raft.NewEncoder(&raftBuf)
+	rch := b.rafts
+	resetrch := make(chan struct{})
+
+	var bRaftBuf bytes.Buffer
+	bRaftEnc := raft.NewEncoder(&bRaftBuf)
+	brch := b.bRafts
+	resetbrch := make(chan struct{})
+
+	var cmds []cmdAndChannel
+	var cmdBuf bytes.Buffer
+	cmdEnc := gob.NewEncoder(&cmdBuf)
+	cch := b.cmds
+	resetcch := make(chan struct{})
+
+	var msgBuf bytes.Buffer
+	msgEnc := gob.NewEncoder(&msgBuf)
+	mch := b.msgs
+	resetmch := make(chan struct{})
+
+	ticker := time.NewTicker(b.batchTick)
+
+	for {
+		select {
+		case <-resetrch:
+			rch = b.rafts
+
+		case <-resetbrch:
+			brch = b.bRafts
+
+		case <-resetcch:
+			cch = b.cmds
+
+		case <-resetmch:
+			mch = b.msgs
+
+		case m := <-mch:
+			if err := msgEnc.Encode(m); err != nil {
+				glog.Errorf("cannot encode message: %v", err)
+				msgBuf.Reset()
+				msgEnc = gob.NewEncoder(&msgBuf)
+			}
+
+		case c := <-cch:
+			cmds = append(cmds, c)
+			if err := cmdEnc.Encode(c.cmd); err != nil {
+				glog.Errorf("cannot encode command: %v", err)
+				cmdBuf.Reset()
+				cmdEnc = gob.NewEncoder(&cmdBuf)
+				for _, cc := range cmds {
+					cc.ch <- cmdResult{Err: err}
+				}
+				cmds = cmds[:0]
+			}
+
+		case r := <-rch:
+			if err := raftEnc.Encode(r); err != nil {
+				glog.Errorf("cannot encode raft message: %v", err)
+				raftBuf.Reset()
+				raftEnc = raft.NewEncoder(&raftBuf)
+			}
+
+		case r := <-brch:
+			if err := bRaftEnc.Encode(r); err != nil {
+				glog.Errorf("cannot encode raft message: %v", err)
+				bRaftBuf.Reset()
+				bRaftEnc = raft.NewEncoder(&bRaftBuf)
+			}
+
+		case <-ticker.C:
+			b.flush <- struct{}{}
+
+		case <-b.flush:
+			if rch != nil && raftBuf.Len() > 0 {
+				rch = nil
+				go func() {
+					err := b.prx.sendRaftNew(&raftBuf)
+					if err != nil {
+						glog.Errorf("error in sending raft to %v: %v", b.prx.to, err)
+					}
+					raftBuf.Reset()
+					raftEnc = raft.NewEncoder(&raftBuf)
+					resetrch <- struct{}{}
+				}()
+			}
+
+			if brch != nil && bRaftBuf.Len() > 0 {
+				brch = nil
+				go func() {
+					err := b.prx.sendBeeRaftNew(&bRaftBuf)
+					if err != nil {
+						glog.Errorf("error in sending bee raft to %v: %v", b.prx.to, err)
+					}
+					bRaftBuf.Reset()
+					bRaftEnc = raft.NewEncoder(&bRaftBuf)
+					resetbrch <- struct{}{}
+				}()
+			}
+
+			if cch != nil && cmdBuf.Len() > 0 {
+				cch = nil
+				go func() {
+					res, err := b.prx.sendCmdNew(&cmdBuf)
+					if err != nil {
+						glog.Errorf("error in sending cmd to %v: %v", b.prx.to, err)
+					} else {
+						dec := gob.NewDecoder(res.Body)
+						var i int
+						for i = range cmds {
+							var cr cmdResult
+							if err := dec.Decode(&cr); err != nil {
+								glog.Errorf("error in decoding results from %v: %v", b.prx.to, err)
+								break
+							}
+							if cmds[i].ch == nil {
+								continue
+							}
+							cmds[i].ch <- cr
+						}
+						for ; i < len(cmds); i++ {
+							if cmds[i].ch == nil {
+								continue
+							}
+							cmds[i].ch <- cmdResult{Err: errStreamerCancelled}
+						}
+					}
+					maybeCloseResponse(res)
+					cmdBuf.Reset()
+					cmdEnc = gob.NewEncoder(&cmdBuf)
+					cmds = cmds[:0]
+					resetcch <- struct{}{}
+				}()
+			}
+
+			if mch != nil && msgBuf.Len() > 0 {
+				mch = nil
+				go func() {
+					err := b.prx.sendMsgNew(&msgBuf)
+					if err != nil {
+						glog.Errorf("error in sending messages %v: %v", b.prx.to, err)
+					}
+					msgBuf.Reset()
+					msgEnc = gob.NewEncoder(&msgBuf)
+					resetmch <- struct{}{}
+				}()
+			}
+
+		case <-b.done:
+			ticker.Stop()
+			return
+		}
+	}
+}
+
+func (b *batcher) flushbuffers() {
+	b.flush <- struct{}{}
+}
+
+func (b *batcher) sendMsg(ms []msg) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		b.msgs <- m
+	}
+	return nil
+}
+
+func (b *batcher) enqueMsg(m msg) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	b.msgs <- m
+	return nil
+}
+
+func (b *batcher) sendCmd(c cmd, to uint64) (interface{}, error) {
+	if b.stopped() {
+		return nil, errStreamerStopped
+	}
+
+	ch := make(chan cmdResult, 1)
+	cc := cmdAndChannel{
+		cmd: c,
+		ch:  ch,
+	}
+	b.cmds <- cc
+	return (<-ch).get()
+}
+
+func (b *batcher) sendRaft(ms []raftpb.Message) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		b.rafts <- m
+	}
+	return nil
+}
+
+func (b *batcher) enqueRaft(m raftpb.Message) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	b.rafts <- m
+	return nil
+}
+
+func (b *batcher) sendBeeRaft(ms []raftpb.Message) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	for _, m := range ms {
+		b.bRafts <- m
+	}
+	return nil
+}
+
+func (b *batcher) enqueBeeRaft(m raftpb.Message) error {
+	if b.stopped() {
+		return errStreamerStopped
+	}
+
+	b.bRafts <- m
+	return nil
+}
+
+func (b *batcher) stop() {
+	close(b.done)
+}
+
+func (b *batcher) stopped() bool {
+	select {
+	case <-b.done:
+		return true
+	default:
+		return false
+	}
+}
+
+var _ streamer = &batcher{}
+
+func sendCmd(prx *proxy, c cmd) (interface{}, error) {
+	var cmdBuf bytes.Buffer
+	cmdEnc := gob.NewEncoder(&cmdBuf)
+	if err := cmdEnc.Encode(c); err != nil {
+		return nil, err
+	}
+	res, err := prx.sendCmdNew(&cmdBuf)
+	defer maybeCloseResponse(res)
+	if err != nil {
+		return nil, err
+	}
+	dec := gob.NewDecoder(res.Body)
+	var cr cmdResult
+	if err := dec.Decode(&cr); err != nil {
+		return nil, err
+	}
+	return cr.get()
+}

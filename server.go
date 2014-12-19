@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
@@ -16,6 +14,7 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	bhgob "github.com/kandoo/beehive/gob"
+	"github.com/kandoo/beehive/raft"
 )
 
 // state is served as json while other endpoints serve gob. The reason is that
@@ -26,7 +25,7 @@ const (
 	serverV1MsgPath     = "/api/v1/msg"
 	serverV1CmdPath     = "/api/v1/cmd"
 	serverV1RaftPath    = "/api/v1/raft"
-	serverV1BeeRaftPath = serverV1RaftPath + "/{app}/{id}"
+	serverV1BeeRaftPath = "/api/v1/beeraft"
 )
 
 func buildURL(scheme, addr, path string) string {
@@ -102,28 +101,48 @@ func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
 
 func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 	var c cmd
-	if err := gob.NewDecoder(r.Body).Decode(&c); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	dec := gob.NewDecoder(r.Body)
+	enc := gob.NewEncoder(w)
 
-	ch := make(chan cmdResult)
+	for {
+		err := dec.Decode(&c)
+		if err != nil {
+			if err != io.EOF {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			return
+		}
+
+		res := h.processCommand(c)
+		if res.Err != nil {
+			glog.Errorf("error in running the remote command: %v", res.Err)
+			res.Err = bhgob.Errorf(res.Err.Error())
+		}
+		if err := enc.Encode(res); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+func (h *v1Handler) processCommand(c cmd) cmdResult {
 	var ctrlCh chan cmdAndChannel
 	if c.App == "" {
-		glog.V(2).Infof("server %v handles command to hive: %v", h.srv.hive.ID(), c)
+		glog.V(2).Infof("%v handles command to hive: %v", h.srv.hive, c)
 		ctrlCh = h.srv.hive.ctrlCh
 	} else {
 		a, ok := h.srv.hive.app(c.App)
-		glog.V(2).Infof("server %v handles command to app %v: %v", h.srv.hive.ID(),
-			a, c)
+		glog.V(2).Infof("%v handles command to app %v: %v", h.srv.hive, a, c)
 		if !ok {
-			http.Error(w, fmt.Sprintf("cannot find app %s", c.App),
-				http.StatusBadRequest)
-			return
+			return cmdResult{
+				Err: bhgob.Errorf("%v cannot find app %v", h.srv.hive, c.App),
+			}
 		}
 		ctrlCh = a.qee.ctrlCh
 	}
 
+	ch := make(chan cmdResult, 1)
 	ctrlCh <- cmdAndChannel{
 		cmd: c,
 		ch:  ch,
@@ -131,93 +150,91 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case res := <-ch:
-			if res.Err != nil {
-				glog.Errorf("error in running the remote command: %v", res.Err)
-				res.Err = bhgob.Error(res.Err.Error())
-			}
-
-			if err := gob.NewEncoder(w).Encode(res); err != nil {
-				glog.Errorf("error in encoding the command results: %s", err)
-				return
-			}
-
 			glog.V(2).Infof("server %v returned result %#v for command %v",
 				h.srv.hive.ID(), res, c)
-			return
+			return res
+
 		case <-time.After(10 * time.Second):
-			glog.Errorf("server is blocked on %v", c)
+			glog.Errorf("%v is blocked on %v", h.srv.hive, c)
 		}
 	}
 }
 
 func (h *v1Handler) handleRaft(w http.ResponseWriter, r *http.Request) {
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	dec := raft.NewDecoder(r.Body)
+	for {
+		var msg raftpb.Message
+		err := dec.Decode(&msg)
+		if err != nil {
+			if err != io.EOF {
+				glog.Errorf("%v cannot handle raft message: %v", h.srv.hive, err)
+			}
+			break
+		}
 
-	var msg raftpb.Message
-	if err = msg.Unmarshal(b); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+		if msg.To != h.srv.hive.ID() {
+			glog.Errorf("%v recieves a raft message for %v", h.srv.hive, msg.To)
+			continue
+		}
 
-	if err = h.srv.hive.stepRaft(context.TODO(), msg); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		glog.V(2).Infof("%v handles a raft message", h.srv.hive, msg.To)
+
+		if err = h.srv.hive.stepRaft(context.TODO(), msg); err != nil {
+			glog.Errorf("%v cannot step: %v", h.srv.hive, err)
+		}
 	}
 }
 
 func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	a, ok := h.srv.hive.app(vars["app"])
-	if !ok {
-		http.Error(w, fmt.Sprintf("cannot find app %s", a.Name()),
-			http.StatusBadRequest)
-		return
-	}
+	dec := raft.NewDecoder(r.Body)
+	var wg sync.WaitGroup
+	for {
+		var msg raftpb.Message
+		err := dec.Decode(&msg)
+		if err != nil {
+			break
+		}
 
-	id, err := strconv.ParseUint(vars["id"], 10, 64)
-	if err != nil {
-		glog.Errorf("cannot parse id %v: %v", vars["id"], err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+		glog.V(2).Infof("%v handles a bee raft message for %v", h.srv.hive, msg.To)
 
-	b, ok := a.qee.beeByID(id)
-	if !ok {
-		glog.Errorf("%v cannot find bee %v", h.srv.hive, id)
-		http.Error(w, fmt.Sprintf("cannot find bee %v", id), http.StatusBadRequest)
-		return
-	}
+		bi, err := h.srv.hive.bee(msg.To)
+		if err != nil {
+			glog.Errorf("%v cannot find bee %v", h.srv.hive, msg.To)
+			continue
+		}
 
-	if b.proxy || b.detached {
-		glog.Errorf("%v not local to %v", b, h.srv.hive)
-		http.Error(w, fmt.Sprintf("not a local bee %v", id), http.StatusBadRequest)
-		return
-	}
+		a, ok := h.srv.hive.app(bi.App)
+		if !ok {
+			glog.Errorf("%v cannot find app %v", h.srv.hive, bi.App)
+			continue
+		}
 
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+		b, ok := a.qee.beeByID(msg.To)
+		if !ok {
+			glog.Errorf("%v cannot find bee %v", h.srv.hive, msg.To)
+			continue
+		}
 
-	var msg raftpb.Message
-	if err = msg.Unmarshal(buf); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		if b.proxy || b.detached {
+			glog.Errorf("%v not local to %v", b, h.srv.hive)
+			continue
+		}
+
+		node := b.raftNode()
+		if node == nil {
+			glog.Errorf("%v's node is not started", b)
+			continue
+		}
+
+		wg.Add(1)
+		go func() {
+			if err = b.stepRaft(msg); err != nil {
+				glog.Errorf("%v cannot step: %v", b, err)
+			}
+			wg.Done()
+		}()
 	}
-	node := b.raftNode()
-	if node == nil {
-		http.Error(w, "node is not started", http.StatusInternalServerError)
-		return
-	}
-	if err = b.stepRaft(msg); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	wg.Wait()
 }
 
 type hiveState struct {

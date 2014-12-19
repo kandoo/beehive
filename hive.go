@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -16,13 +17,12 @@ import (
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/kandoo/beehive/connpool"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
 )
 
 const (
-	defaultRaftTick = 30 * time.Millisecond
+	defaultRaftTick = 50 * time.Millisecond
 )
 
 // Hive represents is the main active entity of beehive. It mananges all
@@ -95,14 +95,10 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(defaultRaftTick),
-		client: httpClient{
-			dataClient: connpool.NewHTTPClient(cfg.MaxConnPerHost, cfg.ConnTimeout),
-			cmdClient:  connpool.NewHTTPClient(cfg.MaxConnPerHost, cfg.ConnTimeout),
-			raftClient: connpool.NewHTTPClient(-1, cfg.ConnTimeout),
-		},
-		peers: make(map[uint64]*proxy),
+		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
+	h.streamer = newLoadBalancer(h, 4)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
 	h.server = newServer(h, cfg.Addr)
@@ -200,8 +196,8 @@ type hive struct {
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	client   httpClient
-	peers    map[uint64]*proxy
+	client   *http.Client
+	streamer streamer
 
 	replStrategy replicationStrategy
 	collector    collector
@@ -593,67 +589,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message) {
 		return
 	}
 
-	peerq := make(map[uint64][]raftpb.Message)
-	for _, m := range msgs {
-		pmsgs := peerq[m.To]
-		pmsgs = append(pmsgs, m)
-		peerq[m.To] = pmsgs
+	if err := h.streamer.sendRaft(msgs); err != nil {
+		glog.Errorf("%v cannot send raft messages: %v", h, err)
 	}
-
-	for hid, pmsgs := range peerq {
-		go h.sendRaftToPeer(hid, pmsgs)
-	}
-}
-
-func (h *hive) sendRaftToPeer(hid uint64, msgs []raftpb.Message) error {
-	p, err := h.raftPeer(hid)
-	if err != nil {
-		return err
-	}
-
-	for _, m := range msgs {
-		glog.V(2).Infof("%v sends raft to %v: %v", h, p.to, m)
-		if err = p.sendRaft(m); err != nil {
-			h.resetRaftPeer(hid)
-			glog.Errorf("%v cannot send raft message to %v: %v", h, p.to, err)
-			return err
-		}
-		glog.V(2).Infof("%v sucessfully sent raft to %v", h, hid)
-	}
-	return nil
-}
-
-func (h *hive) raftPeer(hid uint64) (*proxy, error) {
-	h.Lock()
-	defer h.Unlock()
-
-	var err error
-	p, ok := h.peers[hid]
-	if !ok {
-		p, err = h.newProxyToHive(hid)
-		if err != nil {
-			glog.Errorf("%v has no address for node %v", h, hid)
-			return nil, err
-		}
-		h.peers[hid] = p
-	}
-
-	return p, nil
-}
-
-func (h *hive) resetRaftPeer(hid uint64) {
-	h.Lock()
-	defer h.Unlock()
-
-	p, ok := h.peers[hid]
-	if !ok {
-		return
-	}
-
-	a, err := h.hiveAddr(hid)
-	if err == nil && a == p.to {
-		return
-	}
-
-	delete(h.peers, hid)
 }

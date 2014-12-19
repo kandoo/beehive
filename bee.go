@@ -113,7 +113,6 @@ func (b *bee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
-
 	b.ticker = time.NewTicker(defaultRaftTick)
 	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
 		b.statePath(), b, 1024, b.ticker.C, 10, 1)
@@ -195,75 +194,13 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 }
 
 func (b *bee) sendRaft(msgs []raftpb.Message) {
-	peerq := make(map[uint64][]raftpb.Message)
-	for _, m := range msgs {
-		q := peerq[m.To]
-		q = append(q, m)
-		peerq[m.To] = q
-	}
-
-	for to, msgs := range peerq {
-		if to == b.ID() {
-			glog.Fatalf("%v sends raft message to itself", b)
-		}
-		go b.sendRaftToPeer(to, msgs)
-	}
-}
-
-func (b *bee) sendRaftToPeer(to uint64, msgs []raftpb.Message) error {
-	p, err := b.raftPeer(to)
-	if err != nil {
-		return err
-	}
-
-	for _, m := range msgs {
-		glog.V(2).Infof("%v tries to send bee raft message %v to %v@%v", b, m.Index,
-			m.To, p.to)
-		if err = p.sendBeeRaft(b.app.Name(), m.To, m); err != nil {
-			glog.Errorf("%v cannot send bee raft message %v to %v: %v", b, m.Index,
-				m.To, err)
-			b.resetRaftPeer(to)
-			return err
-		}
-		glog.V(2).Info("%v successfully sent bee raft message %v to %v", b,
-			m.Index, m.To)
-	}
-
-	return nil
-}
-
-func (b *bee) raftPeer(bid uint64) (*proxy, error) {
-	b.Lock()
-	defer b.Unlock()
-
-	p, ok := b.peers[bid]
-	if !ok {
-		_, hi, err := b.hive.registry.beeAndHive(bid)
-		if err != nil {
-			glog.Errorf("%v cannot find the address of bee %v: %v", b, bid, err)
-			return nil, err
-		}
-		p = newProxy(b.hive.client, hi.Addr)
-		b.peers[bid] = p
-	}
-	return p, nil
-}
-
-func (b *bee) resetRaftPeer(bid uint64) {
-	b.Lock()
-	defer b.Unlock()
-
-	p, ok := b.peers[bid]
-	if !ok {
+	if len(msgs) == 0 {
 		return
 	}
 
-	_, hi, err := b.hive.registry.beeAndHive(bid)
-	if err == nil && p.to == hi.Addr {
-		return
+	if err := b.hive.streamer.sendBeeRaft(msgs); err != nil {
+		glog.Errorf("%v cannot send raft: %v", b, err)
 	}
-
-	delete(b.peers, bid)
 }
 
 func (b *bee) statePath() string {
@@ -299,16 +236,12 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 		return err
 	}
 
-	p, err := b.hive.newProxyToHive(hid)
-	if err != nil {
-		return err
-	}
 	cmd := cmd{
 		To:   bid,
 		App:  b.app.Name(),
 		Data: cmdJoinColony{Colony: newc},
 	}
-	if _, err = p.sendCmd(&cmd); err != nil {
+	if _, err := b.hive.streamer.sendCmd(cmd, hid); err != nil {
 		return err
 	}
 
@@ -565,41 +498,37 @@ func (b *bee) followerHandlers() (func(mhs []msgAndHandler),
 		glog.Fatalf("%v is the leader", b)
 	}
 
-	bi, err := b.hive.registry.bee(c.Leader)
+	_, err := b.hive.registry.bee(c.Leader)
 	if err != nil {
 		glog.Fatalf("%v cannot find leader %v", b, c.Leader)
 	}
 
-	p, err := b.hive.newProxyToHive(bi.Hive)
-	if err != nil {
-		glog.Fatalf("%v cannot create proxy to %v: %v", b, bi.Hive, err)
-	}
-
-	mfn, _ := b.proxyHandlers(p, c.Leader)
+	mfn, _ := b.proxyHandlers(c.Leader)
 	return mfn, b.handleCmdLocal
 }
 
 func (b *bee) becomeProxy(p *proxy) {
 	b.proxy = true
-	b.handleMsg, b.handleCmd = b.proxyHandlers(p, b.ID())
+	b.handleMsg, b.handleCmd = b.proxyHandlers(b.ID())
 }
 
-func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
+func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 	func(cc cmdAndChannel)) {
+
+	bi, err := b.hive.bee(to)
+	if err != nil {
+		glog.Fatalf("cannot find bee %v: %v", to, err)
+	}
 
 	var msgbuf bytes.Buffer
 	mfn := func(mhs []msgAndHandler) {
-		// TODO(soheil): send redirects.
-		enc := gob.NewEncoder(&msgbuf)
+		msgs := make([]msg, 0, len(mhs))
 		for i := range mhs {
 			msg := *(mhs[i].msg)
 			msg.MsgTo = to
-			if err := enc.Encode(msg); err != nil {
-				glog.Errorf("%v cannot send message %v: %v", b, msg, err)
-			}
+			msgs = append(msgs, msg)
 		}
-		glog.V(2).Infof("%v sends %v msgs", b, len(mhs))
-		if err := p.sendMsg(msgbuf); err != nil {
+		if err := b.hive.streamer.sendMsg(msgs); err != nil {
 			glog.Errorf("%v cannot send messages: %v", b, err)
 		}
 		msgbuf.Reset()
@@ -609,9 +538,10 @@ func (b *bee) proxyHandlers(p *proxy, to uint64) (func(mhs []msgAndHandler),
 		case cmdStop, cmdStart:
 			b.handleCmdLocal(cc)
 		default:
-			d, err := p.sendCmd(&cc.cmd)
+			cc.cmd.To = to
+			res, err := b.hive.streamer.sendCmd(cc.cmd, bi.Hive)
 			if cc.ch != nil {
-				cc.ch <- cmdResult{Data: d, Err: err}
+				cc.ch <- cmdResult{Data: res, Err: err}
 			}
 		}
 	}
@@ -945,16 +875,13 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 		}
 
 		blacklist = append(blacklist, hives[0])
-		prx, err := b.hive.newProxyToHive(hives[0])
-		if err != nil {
-			continue
-		}
 		glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
 			hives[0])
-		res, err := prx.sendCmd(&cmd{
+		cmd := cmd{
 			App:  b.app.Name(),
 			Data: cmdCreateBee{},
-		})
+		}
+		res, err := b.hive.streamer.sendCmd(cmd, hives[0])
 		if err != nil {
 			glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
 			continue

@@ -2,16 +2,13 @@ package beehive
 
 import (
 	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
@@ -21,13 +18,14 @@ const (
 )
 
 type proxy struct {
-	client httpClient
+	client *http.Client
 
-	to       string
-	stateURL string
-	msgURL   string
-	cmdURL   string
-	raftURL  string
+	to         string
+	stateURL   string
+	msgURL     string
+	cmdURL     string
+	raftURL    string
+	beeRaftURL string
 
 	lastRTT     time.Duration
 	avgRTT      time.Duration
@@ -35,11 +33,11 @@ type proxy struct {
 	maxRetries  uint32
 }
 
-func newProxy(client httpClient, addr string) *proxy {
+func newProxy(client *http.Client, addr string) *proxy {
 	return newProxyWithRetry(client, addr, 0, 1)
 }
 
-func newProxyWithRetry(client httpClient, addr string,
+func newProxyWithRetry(client *http.Client, addr string,
 	backoffStep time.Duration, maxRetries uint32) *proxy {
 	// TODO(soheil): add scheme.
 	return &proxy{
@@ -49,6 +47,7 @@ func newProxyWithRetry(client httpClient, addr string,
 		msgURL:      buildURL("http", addr, serverV1MsgPath),
 		cmdURL:      buildURL("http", addr, serverV1CmdPath),
 		raftURL:     buildURL("http", addr, serverV1RaftPath),
+		beeRaftURL:  buildURL("http", addr, serverV1BeeRaftPath),
 		backoffStep: backoffStep,
 		maxRetries:  maxRetries,
 	}
@@ -56,13 +55,41 @@ func newProxyWithRetry(client httpClient, addr string,
 
 type clientMethod func() (*http.Response, error)
 
-func (p *proxy) doWithRetry(method clientMethod) (*http.Response, error) {
-	var err error
-	var res *http.Response
+func (p *proxy) sendRaftNew(buf io.Reader) error {
+	res, err := p.do("POST", p.raftURL, "application/x-raft", buf)
+	maybeCloseResponse(res)
+	return err
+}
+
+func (p *proxy) sendBeeRaftNew(buf io.Reader) error {
+	res, err := p.do("POST", p.beeRaftURL, "application/x-raft", buf)
+	maybeCloseResponse(res)
+	return err
+}
+
+func (p *proxy) sendCmdNew(buf io.Reader) (*http.Response, error) {
+	return p.do("POST", p.cmdURL, "application/x-raft", buf)
+}
+
+func (p *proxy) sendMsgNew(buf io.Reader) error {
+	res, err := p.do("POST", p.msgURL, "application/x-raft", buf)
+	maybeCloseResponse(res)
+	return err
+}
+
+func (p *proxy) do(method, urlStr, bodyType string, body io.Reader) (
+	res *http.Response, err error) {
+
+	req, err := http.NewRequest(method, urlStr, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", bodyType)
+
 	backoff := p.backoffStep
 	for retries := uint32(0); retries < p.maxRetries; retries++ {
 		start := time.Now()
-		res, err = method()
+		res, err = p.client.Do(req)
 		if err != nil {
 			if retries == p.maxRetries-1 {
 				break
@@ -86,114 +113,15 @@ func (p *proxy) doWithRetry(method clientMethod) (*http.Response, error) {
 	return nil, err
 }
 
-func closeResponse(r *http.Response) {
-	io.Copy(ioutil.Discard, r.Body)
-	r.Body.Close()
-}
-
-func (p *proxy) post(client *http.Client, url string, bodyType string,
-	body io.Reader) (*http.Response, error) {
-
-	return p.doWithRetry(func() (*http.Response, error) {
-		return client.Post(url, bodyType, body)
-	})
-}
-
-func (p *proxy) get(client *http.Client, url string) (resp *http.Response,
-	err error) {
-
-	return p.doWithRetry(func() (*http.Response, error) {
-		return client.Get(url)
-	})
-}
-
-func (p *proxy) sendMsg(msgs bytes.Buffer) error {
-	r, err := p.post(p.client.dataClient, p.msgURL, "application/x-gob", &msgs)
-	if err != nil {
-		return err
-	}
-	defer closeResponse(r)
-	if r.StatusCode != http.StatusOK {
-		var b bytes.Buffer
-		b.ReadFrom(r.Body)
-		return errors.New(string(b.Bytes()))
-	}
-	return nil
-}
-
-func (p *proxy) sendCmd(c *cmd) (interface{}, error) {
-	// TODO(soheil): We need to add a retry strategy here.
-	var data bytes.Buffer
-	if err := gob.NewEncoder(&data).Encode(c); err != nil {
-		return nil, err
-	}
-
-	glog.V(2).Infof("proxy to %v sends command %v", p.to, c)
-	r, err := p.post(p.client.cmdClient, p.cmdURL, "application/x-gob", &data)
-	if err != nil {
-		return nil, err
-	}
-	glog.V(2).Infof("proxy to %v receives the result for command %v", p.to, c)
-
-	defer closeResponse(r)
-	if r.StatusCode != http.StatusOK {
-		var b bytes.Buffer
-		b.ReadFrom(r.Body)
-		return nil, errors.New(string(b.Bytes()))
-	}
-	cr := cmdResult{}
-	if err := gob.NewDecoder(r.Body).Decode(&cr); err != nil {
-		return nil, err
-	}
-	return cr.get()
-}
-
-func (p proxy) doSendRaft(url string, m raftpb.Message) error {
-	// TODO(soheil): this should get a slice of messages and send them through the
-	// pipe. But becuase pb does not support encoding of multiple entries, we send
-	// them one by one for now.
-	d, err := m.Marshal()
-	if err != nil {
-		glog.Fatalf("cannot marshal raft message")
-	}
-
-	r, err := p.post(p.client.raftClient, url, "application/x-protobuf",
-		bytes.NewBuffer(d))
-	if err != nil {
-		glog.V(2).Infof("proxy to %v cannot send raft message: %v", p.to, err)
-		return err
-	}
-
-	defer closeResponse(r)
-	if r.StatusCode != http.StatusOK {
-		var b bytes.Buffer
-		b.ReadFrom(r.Body)
-		return errors.New(string(b.Bytes()))
-	}
-	return nil
-}
-
-func (p proxy) sendRaft(m raftpb.Message) error {
-	glog.V(2).Infof("proxy to %v sends raft message %v", p.to, m)
-	return p.doSendRaft(p.raftURL, m)
-}
-
-func (p proxy) sendBeeRaft(app string, b uint64, m raftpb.Message) error {
-	url := buildURL("http", p.to,
-		fmt.Sprintf("%s/%s/%v", serverV1RaftPath, app, b))
-	//serverV1RaftPath+"/"+app+"/"+strconv.FormatUint(b, 10))
-	glog.V(0).Infof("proxy to %v sends bee raft message %v", url, m)
-	return p.doSendRaft(url, m)
-}
-
 func (p proxy) state() (hiveState, error) {
 	s := hiveState{}
-	r, err := p.get(p.client.dataClient, p.stateURL)
+
+	r, err := p.do("GET", p.stateURL, "", nil)
 	if err != nil {
 		return s, err
 	}
 
-	defer closeResponse(r)
+	defer maybeCloseResponse(r)
 	if r.StatusCode != http.StatusOK {
 		var b bytes.Buffer
 		b.ReadFrom(r.Body)
@@ -203,4 +131,12 @@ func (p proxy) state() (hiveState, error) {
 	dec := json.NewDecoder(r.Body)
 	err = dec.Decode(&s)
 	return s, err
+}
+
+func maybeCloseResponse(r *http.Response) {
+	if r == nil {
+		return
+	}
+	io.Copy(ioutil.Discard, r.Body)
+	r.Body.Close()
 }
