@@ -228,64 +228,57 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 
 	glog.V(2).Infof("%v handles command %#v", q, cc.cmd.Data)
 
+	var err error
+	var res interface{}
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		q.stopped = true
 		glog.V(3).Infof("stopping bees of %p", q)
 		q.stopBees()
-		cc.ch <- cmdResult{}
-		return
 
 	case cmdFindBee:
 		id := cmd.ID
 		r, ok := q.beeByID(id)
-		if ok {
-			cc.ch <- cmdResult{Data: r}
-			return
+		if !ok {
+			err = fmt.Errorf("%v cannot find bee %v", q, id)
+			break
 		}
-
-		err := fmt.Errorf("%v cannot find bee %v", q, id)
-		cc.ch <- cmdResult{Err: err}
-		return
+		res = r
 
 	case cmdCreateBee:
-		b, err := q.newLocalBee(false)
+		var b *bee
+		b, err = q.newLocalBee(false)
 		if err != nil {
-			cc.ch <- cmdResult{Err: err}
-			glog.Error(err)
-			return
+			break
 		}
-		cc.ch <- cmdResult{Data: b.ID()}
+		res = b.ID()
 		glog.V(2).Infof("created a new local bee %v", b)
-		return
 
 	case cmdReloadBee:
-		_, err := q.reloadBee(cmd.ID, cmd.Colony)
-		cc.ch <- cmdResult{Err: err}
-		return
+		_, err = q.reloadBee(cmd.ID, cmd.Colony)
 
 	case cmdStartDetached:
-		b, err := q.newDetachedBee(cmd.Handler)
-		if cc.ch != nil {
-			cc.ch <- cmdResult{
-				Data: b.ID(),
-				Err:  err,
-			}
+		var b *bee
+		b, err = q.newDetachedBee(cmd.Handler)
+		if b != nil {
+			res = b.ID()
 		}
 
 	case cmdMigrate:
-		bid, err := q.migrate(cmd.Bee, cmd.To)
-		cc.ch <- cmdResult{
-			Data: bid,
-			Err:  err,
-		}
+		res, err = q.migrate(cmd.Bee, cmd.To)
 
 	default:
-		if cc.ch != nil {
-			glog.Errorf("Unknown bee command %#v", cmd)
-			cc.ch <- cmdResult{
-				Err: fmt.Errorf("Unknown bee command %#v", cmd),
-			}
+		err = fmt.Errorf("unknown queen bee command %#v", cmd)
+	}
+
+	if err != nil {
+		glog.Errorf("%v cannot handle %v: %v", q, cc.cmd, err)
+	}
+
+	if cc.ch != nil {
+		cc.ch <- cmdResult{
+			Err:  err,
+			Data: res,
 		}
 	}
 }
