@@ -21,7 +21,7 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	pb "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 )
 

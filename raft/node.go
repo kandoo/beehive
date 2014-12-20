@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/code.google.com/p/go.net/context"
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/gen"
 	bhgob "github.com/kandoo/beehive/gob"
 )

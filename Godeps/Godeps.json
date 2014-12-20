@@ -1,12 +1,7 @@
 {
-	"ImportPath": "github.com/soheilhy/beehive",
-	"GoVersion": "go1.3.3",
+	"ImportPath": "github.com/kandoo/beehive",
+	"GoVersion": "go1.4",
 	"Deps": [
-		{
-			"ImportPath": "code.google.com/p/go.net/context",
-			"Comment": "null-144",
-			"Rev": "ad01a6fcc8a19d3a4478c836895ffe883bd2ceab"
-		},
 		{
 			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
 			"Rev": "7fd1620f09261338b6b1ca1289ace83aee0ec946"
@@ -47,6 +42,10 @@
 		{
 			"ImportPath": "github.com/gorilla/mux",
 			"Rev": "4b8fbc56f3b2400a7c7ea3dba9b3539787c486b6"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "cbcac7bb8415db9b6cb4d1ebab1dc9afbd688b97"
 		}
 	]
 }
