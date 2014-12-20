@@ -100,11 +100,11 @@ func (h *v1Handler) handleMsg(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
-	var c cmd
 	dec := gob.NewDecoder(r.Body)
 	enc := gob.NewEncoder(w)
 
 	for {
+		var c cmd
 		err := dec.Decode(&c)
 		if err != nil {
 			if err != io.EOF {
@@ -116,8 +116,8 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 
 		res := h.processCommand(c)
 		if res.Err != nil {
-			glog.Errorf("error in running the remote command: %v", res.Err)
-			res.Err = bhgob.Errorf(res.Err.Error())
+			glog.Errorf("error in running remote command: %v", res.Err)
+			res.Err = bhgob.Error(res.Err.Error())
 		}
 		if err := enc.Encode(res); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -139,7 +139,17 @@ func (h *v1Handler) processCommand(c cmd) cmdResult {
 				Err: bhgob.Errorf("%v cannot find app %v", h.srv.hive, c.App),
 			}
 		}
-		ctrlCh = a.qee.ctrlCh
+		if c.To == Nil {
+			ctrlCh = a.qee.ctrlCh
+		} else {
+			b, ok := a.qee.beeByID(c.To)
+			if !ok {
+				return cmdResult{
+					Err: bhgob.Errorf("%v cannot find bee %v", a.qee, c.To),
+				}
+			}
+			ctrlCh = b.ctrlCh
+		}
 	}
 
 	ch := make(chan cmdResult, 1)
@@ -155,7 +165,7 @@ func (h *v1Handler) processCommand(c cmd) cmdResult {
 			return res
 
 		case <-time.After(10 * time.Second):
-			glog.Errorf("%v is blocked on %v", h.srv.hive, c)
+			glog.Errorf("%v is blocked on %v (chan size=%d)", h.srv.hive, c, len(ch))
 		}
 	}
 }
