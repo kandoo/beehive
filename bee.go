@@ -118,7 +118,9 @@ func (b *bee) startNode() error {
 		b.statePath(), b, 1024, b.ticker.C, 10, 1)
 	b.setRaftNode(node)
 	// This will act like a barrier.
-	if _, err := node.Process(context.TODO(), noOp{}); err != nil {
+	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
+	defer ccl()
+	if _, err := node.Process(ctx, noOp{}); err != nil {
 		glog.Errorf("%v cannot start raft: %v", b, err)
 		return err
 	}
@@ -433,7 +435,10 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		}
 		b.setColony(cmd.Colony)
 		if b.app.persistent() {
-			b.startNode()
+			err = b.startNode()
+			if err != nil {
+				break
+			}
 		}
 		if cmd.Colony.Leader == b.ID() {
 			b.becomeLeader()
@@ -456,8 +461,11 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		err = b.addFollower(cmd.Bee, cmd.Hive)
 
 	default:
-		err = fmt.Errorf("Unknown bee command %#v", cmd)
-		glog.Error(err.Error())
+		err = fmt.Errorf("unknown bee command %#v", cmd)
+	}
+
+	if err != nil {
+		glog.Errorf("%v cannot handle %v: %v", b, cc.cmd, err)
 	}
 
 	if cc.ch != nil {
@@ -823,13 +831,14 @@ func (b *bee) replicate() error {
 		Tx:   stx,
 		Msgs: b.msgBufL1,
 	}
-	_, err := b.raftNode().Process(context.TODO(), commitTx(tx))
-	if err == nil {
-		glog.V(2).Infof("%v successfully replicates transaction", b)
-	} else {
-		glog.V(2).Infof("%v cannot replicate the transaction: %v", b, err)
+	ctx, ccl := context.WithTimeout(context.Background(), 5*defaultRaftTick)
+	defer ccl()
+	if _, err := b.raftNode().Process(ctx, commitTx(tx)); err != nil {
+		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
+		return err
 	}
-	return err
+	glog.V(2).Infof("%v successfully replicates transaction", b)
+	return nil
 }
 
 func (b *bee) maybeRecruitFollowers() {
