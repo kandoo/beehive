@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
 )

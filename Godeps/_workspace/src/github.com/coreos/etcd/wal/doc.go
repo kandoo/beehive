@@ -22,7 +22,8 @@ A WAL is created at a particular directory and is made up of a number of
 discrete WAL files. Inside of each file the raft state and entries are appended
 to it with the Save method:
 
-	w, err := wal.Create("/var/lib/etcd")
+	metadata := []byte{}
+	w, err := wal.Create("/var/lib/etcd", metadata)
 	...
 	err := w.Save(s, ents)
 
@@ -47,7 +48,7 @@ Cut issues 0x10 entries with incremental index later then the file will be calle
 
 At a later time a WAL can be opened at a particular raft index:
 
-	w, err := wal.OpenAtIndex("/var/lib/etcd", 0)
+	w, err := wal.Open("/var/lib/etcd", 0)
 	...
 
 The raft index must have been written to the WAL. When opening without a

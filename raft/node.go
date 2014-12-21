@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap"
@@ -46,7 +47,7 @@ func (i NodeInfo) Peer() etcdraft.Peer {
 func (i NodeInfo) MustEncode() []byte {
 	b, err := bhgob.Encode(i)
 	if err != nil {
-		glog.Fatalf("Error in encoding peer: %v", err)
+		glog.Fatalf("error in encoding peer: %v", err)
 	}
 	return b
 }
@@ -58,15 +59,16 @@ type Node struct {
 	line line
 	gen  gen.IDGenerator
 
-	listener  StatusListener
-	store     Store
-	wal       *wal.WAL
-	snap      *snap.Snapshotter
-	snapCount uint64
+	listener    StatusListener
+	store       Store
+	raftStorage *etcdraft.MemoryStorage
+	storage     Storage
+	snapCount   uint64
 
 	send SendFunc
 
 	ticker <-chan time.Time
+	stop   chan struct{}
 	done   chan struct{}
 }
 
@@ -91,6 +93,7 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 
 	var lastIndex uint64
 	var n etcdraft.Node
+	var s *etcdraft.MemoryStorage
 	ss := snap.New(snapdir)
 	var w *wal.WAL
 	waldir := path.Join(datadir, "wal")
@@ -106,21 +109,26 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 		if err != nil {
 			glog.Fatal(err)
 		}
-		n = etcdraft.StartNode(id, peers, election, heartbeat)
+		s = etcdraft.NewMemoryStorage()
+		n = etcdraft.StartNode(id, peers, election, heartbeat, s)
 	} else {
 		var index uint64
+
 		snapshot, err := ss.Load()
 		if err != nil && err != snap.ErrNoSnapshot {
 			glog.Fatal(err)
 		}
 
 		if snapshot != nil {
-			glog.Infof("restarting from snapshot at index %d", snapshot.Index)
-			store.Restore(snapshot.Data)
-			index = snapshot.Index
+			if err := store.Restore(snapshot.Data); err != nil {
+				glog.Fatalf("cannot restore snapshot: %v", err)
+			}
+			glog.Infof("restarting from snapshot at index %d",
+				snapshot.Metadata.Index)
+			index = snapshot.Metadata.Index
 		}
 
-		if w, err = wal.OpenAtIndex(waldir, index); err != nil {
+		if w, err = wal.Open(waldir, index+1); err != nil {
 			glog.Fatal(err)
 		}
 		md, st, ents, err := w.ReadAll()
@@ -134,26 +142,34 @@ func NewNode(name string, id uint64, peers []etcdraft.Peer, send SendFunc,
 		}
 
 		if walid != id {
-			glog.Fatal("id in write-ahead-log is %v and different than %v", walid, id)
+			glog.Fatalf("id in write-ahead-log is %v and different than %v", walid,
+				id)
 		}
 
-		n = etcdraft.RestartNode(id, election, heartbeat, snapshot, st, ents)
+		s = etcdraft.NewMemoryStorage()
+		if snapshot != nil {
+			s.ApplySnapshot(*snapshot)
+		}
+		s.SetHardState(st)
+		s.Append(ents)
+		n = etcdraft.RestartNode(id, election, heartbeat, s)
 		lastIndex = ents[len(ents)-1].Index
 	}
 
 	node := &Node{
-		name:      name,
-		id:        id,
-		node:      n,
-		gen:       gen.NewSeqIDGen(lastIndex + 2*snapCount), // To avoid collisions.
-		listener:  listener,
-		store:     store,
-		wal:       w,
-		snap:      ss,
-		snapCount: snapCount,
-		send:      send,
-		ticker:    ticker,
-		done:      make(chan struct{}),
+		name:        name,
+		id:          id,
+		node:        n,
+		gen:         gen.NewSeqIDGen(lastIndex + 2*snapCount), // avoid collisions.
+		listener:    listener,
+		store:       store,
+		raftStorage: s,
+		storage:     NewStorage(w, ss),
+		snapCount:   snapCount,
+		send:        send,
+		ticker:      ticker,
+		done:        make(chan struct{}),
+		stop:        make(chan struct{}),
 	}
 	node.line.init()
 	go node.Start()
@@ -272,19 +288,21 @@ func containsNode(nodes []uint64, node uint64) bool {
 	return false
 }
 
-func (n *Node) validConfChange(cc raftpb.ConfChange, nodes []uint64) error {
+func (n *Node) validConfChange(cc raftpb.ConfChange,
+	confs *raftpb.ConfState) error {
+
 	if cc.NodeID == etcdraft.None {
 		return errors.New("node id is nil")
 	}
 
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
-		if containsNode(nodes, cc.NodeID) {
+		if containsNode(confs.Nodes, cc.NodeID) {
 			return fmt.Errorf("%v is duplicate", cc.NodeID)
 		}
 	case raftpb.ConfChangeRemoveNode:
-		if !containsNode(nodes, cc.NodeID) {
-			return fmt.Errorf("No such node", cc.NodeID)
+		if !containsNode(confs.Nodes, cc.NodeID) {
+			return fmt.Errorf("no such node %v", cc.NodeID)
 		}
 	default:
 		glog.Fatalf("invalid ConfChange type %v", cc.Type)
@@ -292,26 +310,23 @@ func (n *Node) validConfChange(cc raftpb.ConfChange, nodes []uint64) error {
 	return nil
 }
 
-func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
+func (n *Node) applyConfChange(e raftpb.Entry, confs *raftpb.ConfState) error {
 	var cc raftpb.ConfChange
-	if err := cc.Unmarshal(e.Data); err != nil {
-		glog.Fatalf("raftserver: cannot decode confchange (%v)", err)
-	}
-
+	pbutil.MustUnmarshal(&cc, e.Data)
 	glog.V(2).Infof("%v applies conf change %v: %#v", n, e.Index, cc)
 
-	if err := n.validConfChange(cc, nodes); err != nil {
-		glog.V(2).Infof("%v received an invalid conf change for node %v: %v",
+	if err := n.validConfChange(cc, confs); err != nil {
+		glog.Errorf("%v received an invalid conf change for node %v: %v",
 			n, cc.NodeID, err)
 		cc.NodeID = etcdraft.None
 		n.node.ApplyConfChange(cc)
-		return
+		return err
 	}
 
-	n.node.ApplyConfChange(cc)
+	*confs = *n.node.ApplyConfChange(cc)
 	if len(cc.Context) == 0 {
 		n.store.ApplyConfChange(cc, NodeInfo{})
-		return
+		return nil
 	}
 
 	var info NodeInfo
@@ -320,7 +335,7 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 			glog.Fatalf("invalid config change: %v != %v", info.ID, cc.NodeID)
 		}
 		n.store.ApplyConfChange(cc, info)
-		return
+		return nil
 	}
 
 	var req Request
@@ -333,81 +348,170 @@ func (n *Node) applyConfChange(e raftpb.Entry, nodes []uint64) {
 	}
 	res.Err = n.store.ApplyConfChange(cc, req.Data.(NodeInfo))
 	n.line.call(res)
+	return nil
 }
 
 func (n *Node) Start() {
 	glog.V(2).Infof("%v started", n)
-	var snapi, appliedi uint64
-	var nodes []uint64
+
+	snap, err := n.raftStorage.Snapshot()
+	if err != nil {
+		glog.Fatalf("error in storage snapshot: %v", err)
+	}
+
+	snapi := snap.Metadata.Index
+	appliedi := snap.Metadata.Index
+	confState := snap.Metadata.ConfState
+
 	var prevss *etcdraft.SoftState
+	var shouldStop bool
+
+	defer func() {
+		n.node.Stop()
+		if err := n.storage.Close(); err != nil {
+			glog.Fatalf("error in storage close: %v", err)
+		}
+		close(n.done)
+	}()
+
+	ready := n.node.Ready()
+	adv := make(chan struct{})
 	for {
 		select {
 		case <-n.ticker:
 			n.node.Tick()
-		case rd := <-n.node.Ready():
-			if rd.SoftState != nil {
-				if prevss != nil && prevss.Lead != rd.SoftState.Lead {
-					n.listener.ProcessStatusChange(LeaderChanged{
-						Old: prevss.Lead,
-						New: rd.SoftState.Lead,
-					})
-				}
-				nodes = rd.SoftState.Nodes
-				prevss = rd.SoftState
-			}
 
-			n.wal.Save(rd.HardState, rd.Entries)
-			n.snap.SaveSnap(rd.Snapshot)
-			n.send(rd.Messages)
+		case <-adv:
+			ready = n.node.Ready()
+			n.node.Advance()
 
-			if len(rd.CommittedEntries) > 0 {
-				glog.V(2).Infof("%v receives raft update", n)
-			}
-
-			for _, e := range rd.CommittedEntries {
-				switch e.Type {
-				case raftpb.EntryNormal:
-					n.applyEntry(e)
-
-				case raftpb.EntryConfChange:
-					n.applyConfChange(e, nodes)
-
-				default:
-					panic("unexpected entry type")
+		case rd := <-ready:
+			ready = nil
+			go func(rd etcdraft.Ready) {
+				if rd.SoftState != nil {
+					if prevss != nil && prevss.Lead != rd.SoftState.Lead {
+						n.listener.ProcessStatusChange(LeaderChanged{
+							Old: prevss.Lead,
+							New: rd.SoftState.Lead,
+						})
+					}
+					prevss = rd.SoftState
 				}
 
-				appliedi = e.Index
-			}
+				empty := etcdraft.IsEmptySnap(rd.Snapshot)
 
-			if rd.Snapshot.Index > snapi {
-				snapi = rd.Snapshot.Index
-			}
-
-			// Recover from snapshot if it is more recent than the currently applied.
-			if rd.Snapshot.Index > appliedi {
-				if err := n.store.Restore(rd.Snapshot.Data); err != nil {
-					glog.Fatalf("TODO: %v", err)
+				// Apply snapshot to storage if it is more updated than current snapi.
+				if !empty && rd.Snapshot.Metadata.Index > snapi {
+					if err := n.storage.SaveSnap(rd.Snapshot); err != nil {
+						glog.Fatalf("err in save snapshot: %v", err)
+					}
+					n.raftStorage.ApplySnapshot(rd.Snapshot)
+					snapi = rd.Snapshot.Metadata.Index
+					glog.Infof("saved incoming snapshot at index %d", snapi)
 				}
-				appliedi = rd.Snapshot.Index
-			}
 
-			if appliedi-snapi > n.snapCount {
-				n.snapshot(appliedi, nodes)
-				snapi = appliedi
-			}
-		case <-n.done:
+				if err := n.storage.Save(rd.HardState, rd.Entries); err != nil {
+					glog.Fatalf("err in raft storage save: %v", err)
+				}
+				n.raftStorage.Append(rd.Entries)
+
+				n.send(rd.Messages)
+
+				// Recover from snapshot if it is more recent than the currently applied.
+				if !empty && rd.Snapshot.Metadata.Index > appliedi {
+					if err := n.store.Restore(rd.Snapshot.Data); err != nil {
+						glog.Fatalf("error in store recovery: %v", err)
+					}
+					// FIXME(soheil): update the nodes and notify the application?
+					appliedi = rd.Snapshot.Metadata.Index
+					glog.Infof("recovered from incoming snapshot at index %d", snapi)
+				}
+
+				if len(rd.CommittedEntries) != 0 {
+					glog.V(2).Infof("%v receives raft update", n)
+					firsti := rd.CommittedEntries[0].Index
+					if firsti > appliedi+1 {
+						glog.Fatalf(
+							"1st index of committed entry[%d] should <= appliedi[%d] + 1",
+							firsti, appliedi)
+					}
+					var ents []raftpb.Entry
+					if appliedi+1-firsti < uint64(len(rd.CommittedEntries)) {
+						ents = rd.CommittedEntries[appliedi+1-firsti:]
+					}
+					if len(ents) > 0 {
+						if appliedi, shouldStop = n.apply(ents, &confState); shouldStop {
+							n.Stop()
+							return
+						}
+					}
+				}
+
+				if appliedi-snapi > n.snapCount {
+					glog.Infof("start to snapshot (applied: %d, lastsnap: %d)", appliedi,
+						snapi)
+					n.snapshot(appliedi, &confState)
+					snapi = appliedi
+				}
+
+				select {
+				case adv <- struct{}{}:
+				case <-n.done:
+				}
+			}(rd)
+
+		case <-n.stop:
 			return
 		}
 	}
 }
 
-func (n *Node) snapshot(snapi uint64, snapnodes []uint64) {
+func (n *Node) apply(es []raftpb.Entry, confState *raftpb.ConfState) (
+	appliedi uint64, shouldStop bool) {
+
+	for _, e := range es {
+		switch e.Type {
+		case raftpb.EntryNormal:
+			n.applyEntry(e)
+
+		case raftpb.EntryConfChange:
+			n.applyConfChange(e, confState)
+
+		default:
+			glog.Fatalf("unexpected entry type")
+		}
+		appliedi = e.Index
+	}
+	return
+}
+
+func (n *Node) snapshot(snapi uint64, confs *raftpb.ConfState) {
 	d, err := n.store.Save()
 	if err != nil {
-		glog.Fatalf("TODO: %v", err)
+		glog.Fatalf("error in store save: %v", err)
 	}
-	n.node.Compact(snapi, snapnodes, d)
-	n.wal.Cut()
+	err = n.raftStorage.Compact(snapi, confs, d)
+	if err != nil {
+		// the snapshot was done asynchronously with the progress of raft.
+		// raft might have already got a newer snapshot and called compact.
+		if err == etcdraft.ErrCompacted {
+			return
+		}
+		glog.Fatalf("error in compaction error: %v", err)
+	}
+	glog.Infof("compacted log at index %d", snapi)
+
+	if err := n.storage.Cut(); err != nil {
+		glog.Fatalf("error in rotate wal file: %v", err)
+	}
+	snap, err := n.raftStorage.Snapshot()
+	if err != nil {
+		glog.Fatalf("error in snapshot: %v", err)
+	}
+	if err := n.storage.SaveSnap(snap); err != nil {
+		glog.Fatalf("errro in save snapshot: %v", err)
+	}
+	glog.Infof("saved snapshot at index %d", snap.Metadata.Index)
 }
 
 func (n *Node) String() string {
@@ -415,8 +519,11 @@ func (n *Node) String() string {
 }
 
 func (n *Node) Stop() {
-	n.node.Stop()
-	close(n.done)
+	select {
+	case n.stop <- struct{}{}:
+	case <-n.done:
+	}
+	<-n.done
 }
 
 func (n *Node) Campaign(ctx context.Context) error {

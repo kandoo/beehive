@@ -14,9 +14,9 @@ import (
 
 	"github.com/OneOfOne/xxhash"
 	bh "github.com/kandoo/beehive"
-	"golang.org/x/net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 const (

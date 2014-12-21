@@ -14,28 +14,11 @@
    limitations under the License.
 */
 
-package pbutil
+package types
 
-import "log"
+// Uint64Slice implements sort interface
+type Uint64Slice []uint64
 
-type Marshaler interface {
-	Marshal() (data []byte, err error)
-}
-
-type Unmarshaler interface {
-	Unmarshal(data []byte) error
-}
-
-func MustMarshal(m Marshaler) []byte {
-	d, err := m.Marshal()
-	if err != nil {
-		log.Panicf("marshal protobuf type should never fail: %v", err)
-	}
-	return d
-}
-
-func MustUnmarshal(um Unmarshaler, data []byte) {
-	if err := um.Unmarshal(data); err != nil {
-		log.Panicf("unmarshal protobuf type should never fail: %v", err)
-	}
-}
+func (p Uint64Slice) Len() int           { return len(p) }
+func (p Uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p Uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

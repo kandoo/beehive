@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/snap/snappb"
@@ -37,9 +38,10 @@ const (
 )
 
 var (
-	ErrNoSnapshot  = errors.New("snap: no available snapshot")
-	ErrCRCMismatch = errors.New("snap: crc mismatch")
-	crcTable       = crc32.MakeTable(crc32.Castagnoli)
+	ErrNoSnapshot    = errors.New("snap: no available snapshot")
+	ErrEmptySnapshot = errors.New("snap: empty snapshot")
+	ErrCRCMismatch   = errors.New("snap: crc mismatch")
+	crcTable         = crc32.MakeTable(crc32.Castagnoli)
 )
 
 type Snapshotter struct {
@@ -52,20 +54,16 @@ func New(dir string) *Snapshotter {
 	}
 }
 
-func (s *Snapshotter) SaveSnap(snapshot raftpb.Snapshot) {
+func (s *Snapshotter) SaveSnap(snapshot raftpb.Snapshot) error {
 	if raft.IsEmptySnap(snapshot) {
-		return
+		return nil
 	}
-	s.save(&snapshot)
+	return s.save(&snapshot)
 }
 
 func (s *Snapshotter) save(snapshot *raftpb.Snapshot) error {
-	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Term, snapshot.Index, snapSuffix)
-	b, err := snapshot.Marshal()
-	if err != nil {
-		panic(err)
-	}
-
+	fname := fmt.Sprintf("%016x-%016x%s", snapshot.Metadata.Term, snapshot.Metadata.Index, snapSuffix)
+	b := pbutil.MustMarshal(snapshot)
 	crc := crc32.Update(0, crcTable, b)
 	snap := snappb.Snapshot{Crc: crc, Data: b}
 	d, err := snap.Marshal()
@@ -102,32 +100,37 @@ func loadSnap(dir, name string) (*raftpb.Snapshot, error) {
 
 	b, err = ioutil.ReadFile(fpath)
 	if err != nil {
-		log.Printf("Snapshotter cannot read file %v: %v", name, err)
+		log.Printf("snap: snapshotter cannot read file %v: %v", name, err)
 		return nil, err
 	}
 
 	var serializedSnap snappb.Snapshot
 	if err = serializedSnap.Unmarshal(b); err != nil {
-		log.Printf("Corrupted snapshot file %v: %v", name, err)
+		log.Printf("snap: corrupted snapshot file %v: %v", name, err)
 		return nil, err
 	}
+
+	if len(serializedSnap.Data) == 0 || serializedSnap.Crc == 0 {
+		log.Printf("snap: unexpected empty snapshot")
+		return nil, ErrEmptySnapshot
+	}
+
 	crc := crc32.Update(0, crcTable, serializedSnap.Data)
 	if crc != serializedSnap.Crc {
-		log.Printf("Corrupted snapshot file %v: crc mismatch", name)
-		err = ErrCRCMismatch
-		return nil, err
+		log.Printf("snap: corrupted snapshot file %v: crc mismatch", name)
+		return nil, ErrCRCMismatch
 	}
 
 	var snap raftpb.Snapshot
 	if err = snap.Unmarshal(serializedSnap.Data); err != nil {
-		log.Printf("Corrupted snapshot file %v: %v", name, err)
+		log.Printf("snap: corrupted snapshot file %v: %v", name, err)
 		return nil, err
 	}
 	return &snap, nil
 }
 
 // snapNames returns the filename of the snapshots in logical time order (from newest to oldest).
-// If there is no avaliable snapshots, an ErrNoSnapshot will be returned.
+// If there is no available snapshots, an ErrNoSnapshot will be returned.
 func (s *Snapshotter) snapNames() ([]string, error) {
 	dir, err := os.Open(s.dir)
 	if err != nil {
@@ -152,7 +155,7 @@ func checkSuffix(names []string) []string {
 		if strings.HasSuffix(names[i], snapSuffix) {
 			snaps = append(snaps, names[i])
 		} else {
-			log.Printf("Unexpected non-snap file %v", names[i])
+			log.Printf("snap: unexpected non-snap file %v", names[i])
 		}
 	}
 	return snaps
@@ -161,6 +164,6 @@ func checkSuffix(names []string) []string {
 func renameBroken(path string) {
 	brokenPath := path + ".broken"
 	if err := os.Rename(path, brokenPath); err != nil {
-		log.Printf("Cannot rename broken snapshot file %v to %v: %v", path, brokenPath, err)
+		log.Printf("snap: cannot rename broken snapshot file %v to %v: %v", path, brokenPath, err)
 	}
 }

@@ -8,28 +8,38 @@
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/crc",
-			"Comment": "v0.4.6-1235-g09e9618",
-			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/fileutil",
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/pbutil",
-			"Comment": "v0.4.6-1235-g09e9618",
-			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+		},
+		{
+			"ImportPath": "github.com/coreos/etcd/pkg/types",
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/raft",
-			"Comment": "v0.4.6-1235-g09e9618",
-			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/snap",
-			"Comment": "v0.4.6-1235-g09e9618",
-			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/wal",
-			"Comment": "v0.4.6-1235-g09e9618",
-			"Rev": "09e9618b025bff82a0b61caabf8e1979fe58f3c5"
+			"Comment": "v2.0.0-rc.1-34-gf143948",
+			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
 		},
 		{
 			"ImportPath": "github.com/golang/glog",
