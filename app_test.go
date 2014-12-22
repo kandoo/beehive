@@ -264,22 +264,30 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	id0 := <-ch
 
-	_, err := app1.(*app).qee.processCmd(cmdMigrate{
-		Bee: id0,
-		To:  h3.ID(),
-	})
-	if err != nil {
-		t.Errorf("cannot handoff bee: %v", err)
+	owner := id0
+	for try := 0; try < 3; try++ {
+		_, err := app1.(*app).qee.processCmd(cmdMigrate{
+			Bee: owner,
+			To:  h3.ID(),
+		})
+		if err != nil {
+			t.Fatalf("cannot handoff bee: %v", err)
+		}
+		h2.Emit(AppTestMsg(0))
+		owner = <-ch
+		if owner == 3 {
+			break
+		}
 	}
-	h2.Emit(AppTestMsg(0))
-	id1 := <-ch
+
+	if owner != 3 {
+		t.Fatalf("different bees want=3 given=%v", owner)
+	}
+
 	h3.Emit(AppTestMsg(0))
-	id2 := <-ch
-	if id1 != 3 {
-		t.Errorf("different bees want=3 given=%v", id1)
-	}
-	if id1 != id2 {
-		t.Errorf("different bees want=%v given=%v", id1, id2)
+	next := <-ch
+	if owner != next {
+		t.Errorf("different bees want=%v given=%v", owner, next)
 	}
 
 	time.Sleep(cfg1.RaftElectTimeout())
