@@ -117,8 +117,8 @@ func generateTargets(addr string, writes, localReads,
 func run(id int, targets []target, rounds int) []result {
 	results := make([]result, 0, len(targets)*rounds)
 	for i := 0; i < rounds; i++ {
-		for _, t := range targets {
-			fmt.Printf("%v-%v-%s ", id, i, t.method)
+		for j, t := range targets {
+			fmt.Printf("%v-%v/%v-%s ", id, i, j, t.method)
 			var err error
 			res := result{
 				Method: t.method,
