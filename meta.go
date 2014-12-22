@@ -51,9 +51,9 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	ch := make(chan uint64, len(paddrs))
 	client := newHTTPClient(10 * time.Second)
 	for _, a := range paddrs {
-		glog.V(2).Infof("requesting hive ID from %v", a)
+		glog.Infof("requesting hive ID from %v", a)
 		go func(a string) {
-			p := newProxy(client, a)
+			p := newProxyWithRetry(client, a, 100*time.Millisecond, 5)
 			id, err := sendCmd(p, cmd{Data: cmdNewHiveID{Addr: addr}})
 			if err != nil {
 				glog.Error(err)
@@ -76,7 +76,8 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 		select {
 		case id := <-ch:
 			return id
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(1 * time.Second):
+			glog.Infof("timeout in requesting hive ID from %v", a)
 			continue
 		}
 	}

@@ -95,7 +95,8 @@ func (p *proxy) do(method, urlStr, bodyType string, body io.Reader) (
 				break
 			}
 
-			glog.V(2).Infof("error in communicting with %v: %v", p.to, err)
+			glog.Errorf("error in communicting with %v: %v", p.to, err)
+			glog.Errorf("retrying %v in %v", p.to, backoff)
 			time.Sleep(backoff)
 			backoff *= 2
 			continue
