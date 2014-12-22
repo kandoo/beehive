@@ -90,7 +90,7 @@ func TestReplicatedApp(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	<-ch
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(cfg1.RaftElectTimeout())
 	h1.Stop()
 	h2.Stop()
 	h3.Stop()
@@ -133,26 +133,27 @@ func TestReplicatedAppFailure(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	<-ch
 
-	time.Sleep(30 * defaultRaftTick)
+	elect := cfg1.RaftElectTimeout()
+	time.Sleep(3 * elect)
 	h1.Stop()
-	time.Sleep(30 * defaultRaftTick)
+	time.Sleep(3 * elect)
 
 	for {
 		if _, err := h2.(*hive).processCmd(cmdSync{}); err == nil {
 			break
 		}
 		t.Logf("cannot sync %v, retrying", h2)
-		time.Sleep(10 * defaultRaftTick)
+		time.Sleep(elect)
 	}
 	for {
 		if _, err := h3.(*hive).processCmd(cmdSync{}); err == nil {
 			break
 		}
 		t.Logf("cannot sync %v, retrying", h3)
-		time.Sleep(10 * defaultRaftTick)
+		time.Sleep(elect)
 	}
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(elect)
 	h2.Emit(AppTestMsg(0))
 	id1 := <-ch
 	h3.Emit(AppTestMsg(0))
@@ -161,7 +162,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(elect)
 	h2.Stop()
 	h3.Stop()
 }
@@ -220,7 +221,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(cfg1.RaftElectTimeout())
 	h1.Stop()
 	h2.Stop()
 	h3.Stop()
@@ -281,7 +282,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(cfg1.RaftElectTimeout())
 	h1.Stop()
 	h2.Stop()
 	h3.Stop()
@@ -352,7 +353,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
 	}
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(cfg1.RaftElectTimeout())
 	h1.Stop()
 	h2.Stop()
 	h3.Stop()

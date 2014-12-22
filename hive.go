@@ -21,10 +21,6 @@ import (
 	"github.com/kandoo/beehive/raft"
 )
 
-const (
-	defaultRaftTick = 50 * time.Millisecond
-)
-
 // Hive represents is the main active entity of beehive. It mananges all
 // messages, apps and bees.
 type Hive interface {
@@ -60,21 +56,30 @@ type Hive interface {
 
 // HiveConfig represents the configuration of a hive.
 type HiveConfig struct {
-	Addr            string        // listening address of the hive.
-	PeerAddrs       []string      // peer addresses.
-	RegAddrs        []string      // reigstery service addresses.
-	StatePath       string        // where to store state data.
-	DataChBufSize   int           // buffer size of the data channels.
-	CmdChBufSize    int           // buffer size of the control channels.
-	BatchSize       int           // number of messages to batch.
-	Instrument      bool          // whether to instrument apps on the hive.
-	OptimizeThresh  uint          // when to notify the optimizer (in msg/s).
-	HBQueryInterval time.Duration // heartbeating interval.
-	HBDeadTimeout   time.Duration // when to announce a bee dead.
-	RegLockTimeout  time.Duration // when to retry to lock an entry in a registry.
-	UseBeeHeartbeat bool          // heartbeat bees instead of the registry.
-	MaxConnPerHost  int           // max parallel data connections to a host.
-	ConnTimeout     time.Duration // timeout for connections between hives.
+	Addr      string   // listening address of the hive.
+	PeerAddrs []string // peer addresses.
+	RegAddrs  []string // reigstery service addresses.
+	StatePath string   // where to store state data.
+
+	DataChBufSize int // buffer size of the data channels.
+	CmdChBufSize  int // buffer size of the control channels.
+	BatchSize     int // number of messages to batch.
+
+	Instrument     bool // whether to instrument apps on the hive.
+	OptimizeThresh uint // when to notify the optimizer (in msg/s).
+
+	RegLockTimeout time.Duration // when to retry to lock an entry in a registry.
+	RaftTick       time.Duration // the raft tick interval.
+	RaftElectTicks int           // number of raft ticks that fires election.
+
+	MaxConnPerHost int           // max parallel data connections to a host.
+	ConnTimeout    time.Duration // timeout for connections between hives.
+}
+
+// RaftElectTimeout returns the raft election timeout as
+// RaftTick*RaftElectTicks.
+func (c HiveConfig) RaftElectTimeout() time.Duration {
+	return time.Duration(c.RaftElectTicks) * c.RaftTick
 }
 
 // NewHiveWithConfig creates a new hive based on the given configuration.
@@ -94,7 +99,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		ctrlCh: make(chan cmdAndChannel),
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
-		ticker: time.NewTicker(defaultRaftTick),
+		ticker: time.NewTicker(cfg.RaftTick),
 		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
@@ -143,20 +148,16 @@ func init() {
 		"when the local stat collector should notify the optimizer (in msg/s).")
 	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
 		"where to store persistent state data")
-	flag.DurationVar(&DefaultCfg.HBQueryInterval, "hbqueryinterval",
-		100*time.Millisecond, "heartbeat interval")
-	flag.DurationVar(&DefaultCfg.HBDeadTimeout, "hbdeadtimeout",
-		300*time.Millisecond,
-		"timeout to announce a non-responsive bee dead")
 	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
 		10*time.Millisecond, "timeout to retry locking an entry in the registry")
+	flag.DurationVar(&DefaultCfg.RaftTick, "rafttick", 100*time.Millisecond,
+		"raft tick period")
+	flag.IntVar(&DefaultCfg.RaftElectTicks, "raftelectionticks", 5,
+		"number of raft ticks to start an election (ie, election timeout)")
 	flag.IntVar(&DefaultCfg.MaxConnPerHost, "maxconn", 32,
 		"maximum number of parallel data connectons to a remote host")
 	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
 		"timeout for trying to connect to other hives")
-	flag.BoolVar(&DefaultCfg.UseBeeHeartbeat, "userbeehb", false,
-		"whether to use high-granular bee heartbeating in addition to registry"+
-			"events")
 }
 
 type qeeAndHandler struct {
@@ -325,7 +326,7 @@ func (h *hive) stepRaft(ctx context.Context, msg raftpb.Message) error {
 }
 
 func (h *hive) raftBarrier() error {
-	ctx, _ := context.WithTimeout(context.Background(), defaultRaftTick*300)
+	ctx, _ := context.WithTimeout(context.Background(), 300*h.config.RaftTick)
 	_, err := h.node.Process(ctx, noOp{})
 	return err
 }
@@ -386,7 +387,8 @@ func (h *hive) startRaftNode() {
 		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
 	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
-		h.config.StatePath, h.registry, 1024, h.ticker.C, 10, 1)
+		h.config.StatePath, h.registry, 1024, h.ticker.C, h.config.RaftElectTicks,
+		1)
 	// This will act like a barrier.
 	if err := h.raftBarrier(); err != nil {
 		glog.Fatalf("error when joining the cluster: %v", err)

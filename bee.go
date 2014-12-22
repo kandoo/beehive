@@ -113,9 +113,9 @@ func (b *bee) startNode() error {
 	if c.Leader == b.ID() {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
-	b.ticker = time.NewTicker(defaultRaftTick)
+	b.ticker = time.NewTicker(b.hive.config.RaftTick)
 	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
-		b.statePath(), b, 1024, b.ticker.C, 10, 1)
+		b.statePath(), b, 1024, b.ticker.C, b.hive.config.RaftElectTicks, 1)
 	b.setRaftNode(node)
 	// This will act like a barrier.
 	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
@@ -831,7 +831,8 @@ func (b *bee) replicate() error {
 		Tx:   stx,
 		Msgs: b.msgBufL1,
 	}
-	ctx, ccl := context.WithTimeout(context.Background(), 5*defaultRaftTick)
+	ctx, ccl := context.WithTimeout(context.Background(),
+		b.hive.config.RaftElectTimeout())
 	defer ccl()
 	if _, err := b.raftNode().Process(ctx, commitTx(tx)); err != nil {
 		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
@@ -962,7 +963,7 @@ func (b *bee) handoff(to uint64) error {
 		ch <- err
 	}()
 
-	time.Sleep(10 * defaultRaftTick)
+	time.Sleep(b.hive.config.RaftElectTimeout())
 	if err := b.startNode(); err != nil {
 		glog.Fatalf("%v cannot restart node: %v", b, err)
 	}

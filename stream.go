@@ -251,7 +251,7 @@ func newBatcher(h *hive, to uint64) (*batcher, error) {
 	}
 	b := &batcher{
 		h:         h,
-		batchTick: defaultRaftTick / 3,
+		batchTick: h.config.RaftTick / 3,
 		weights:   [4]int{1, 5, 10, 10},
 		msgs:      make(chan msg, h.config.DataChBufSize),
 		cmds:      make(chan cmdAndChannel, h.config.CmdChBufSize),
