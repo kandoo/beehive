@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhgob "github.com/kandoo/beehive/gob"
 	"github.com/kandoo/beehive/raft"
 )

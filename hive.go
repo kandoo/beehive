@@ -389,11 +389,6 @@ func (h *hive) startRaftNode() {
 	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
 		h.config.StatePath, h.registry, 1024, h.ticker.C, h.config.RaftElectTicks,
 		1)
-	// This will act like a barrier.
-	if err := h.raftBarrier(); err != nil {
-		glog.Fatalf("error when joining the cluster: %v", err)
-	}
-	glog.V(2).Infof("%v is in sync with the cluster", h)
 }
 
 func (h *hive) delBeeFromRegistry(id uint64) error {
@@ -439,12 +434,16 @@ func (h *hive) ProcessStatusChange(sch interface{}) {
 func (h *hive) Start() error {
 	h.status = hiveStarted
 	h.registerSignals()
+	h.startRaftNode()
 	if err := h.listen(); err != nil {
 		glog.Errorf("%v cannot start listener: %v", h, err)
 		h.Stop()
 		return err
 	}
-	h.startRaftNode()
+	if err := h.raftBarrier(); err != nil {
+		glog.Fatalf("error when joining the cluster: %v", err)
+	}
+	glog.V(2).Infof("%v is in sync with the cluster", h)
 	h.startQees()
 	h.reloadState()
 
