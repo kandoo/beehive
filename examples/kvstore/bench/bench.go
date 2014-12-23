@@ -36,7 +36,7 @@ func newTarget(method, url string, body []byte) target {
 	}
 }
 
-func (t *target) Do() (d time.Duration, in int64, out int64, err error) {
+func (t *target) do() (d time.Duration, in int64, out int64, err error) {
 	req, err := http.NewRequest(t.method, t.url, bytes.NewBuffer(t.body))
 	if err != nil {
 		return 0, 0, 0, err
@@ -124,7 +124,7 @@ func run(id int, targets []target, rounds int) []result {
 				Method: t.method,
 				URL:    t.url,
 			}
-			res.Dur, res.In, res.Out, err = t.Do()
+			res.Dur, res.In, res.Out, err = t.do()
 			if err != nil {
 				res.Err = err.Error()
 			}
