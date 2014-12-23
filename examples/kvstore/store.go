@@ -6,6 +6,8 @@ import (
 	"errors"
 	"flag"
 	"io/ioutil"
+	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"runtime/pprof"
@@ -138,11 +140,17 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var (
 	replFactor = flag.Int("kv.rf", 3, "replication factor")
 	buckets    = flag.Int("kv.b", 1024, "number of buckets")
-	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	cpuprofile = flag.String("kv.cpuprofile", "", "write cpu profile to file")
+	quiet      = flag.Bool("kv.quiet", false, "no raft log")
+	random     = flag.Bool("kv.rand", false, "whether to use random placement")
 )
 
 func main() {
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
+	if *quiet {
+		log.SetOutput(ioutil.Discard)
+	}
 
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -153,8 +161,14 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	a := bh.NewApp("kvstore", bh.AppPersistent(*replFactor))
-	//bh.AppWithPlacement(bh.RandomPlacement{Rand: rand.New(rand.NewSource(99))}))
+	opts := []bh.AppOption{bh.AppPersistent(*replFactor)}
+	if *random {
+		rp := bh.RandomPlacement{
+			Rand: rand.New(rand.NewSource(time.Now().UnixNano())),
+		}
+		opts = append(opts, bh.AppWithPlacement(rp))
+	}
+	a := bh.NewApp("kvstore", opts...)
 	s := bh.NewSync(a)
 	kv := &kvStore{
 		Sync:    s,
