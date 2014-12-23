@@ -367,7 +367,6 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 		b.callRcv(mh)
 
 		if usetx {
-
 			var err error
 			if b.stateL2 == nil {
 				err = b.CommitTx()
