@@ -8,15 +8,15 @@ type CellKey struct {
 	Key  string
 }
 
-// appCellKey represents a key in a dictionary of a specific app.
-type appCellKey struct {
+// AppCellKey represents a key in a dictionary of a specific app.
+type AppCellKey struct {
 	App  string
 	Dict string
 	Key  string
 }
 
 // Cell returns the CellKey of this AppCellKey.
-func (ack appCellKey) Cell() CellKey {
+func (ack AppCellKey) Cell() CellKey {
 	return CellKey{
 		Dict: ack.Dict,
 		Key:  ack.Key,
@@ -24,7 +24,7 @@ func (ack appCellKey) Cell() CellKey {
 }
 
 // IsNil returns whether the AppCellKey represents no cells.
-func (ack appCellKey) IsNil() bool {
+func (ack AppCellKey) IsNil() bool {
 	return ack.App == ""
 }
 
