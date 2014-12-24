@@ -228,17 +228,15 @@ const (
 type batcher struct {
 	h *hive
 
-	batchTick  time.Duration
-	scoreboard [4]int
-	weights    [4]int
+	batchTick time.Duration
+	weights   [4]int
 
 	msgs   chan msg
 	cmds   chan cmdAndChannel
 	rafts  chan raftpb.Message
 	bRafts chan raftpb.Message
 
-	flush chan struct{}
-	done  chan struct{}
+	done chan struct{}
 
 	prx *proxy
 }
@@ -251,13 +249,12 @@ func newBatcher(h *hive, to uint64) (*batcher, error) {
 	}
 	b := &batcher{
 		h:         h,
-		batchTick: h.config.RaftTick / 3,
+		batchTick: h.config.BatcherTimeout,
 		weights:   [4]int{1, 5, 10, 10},
 		msgs:      make(chan msg, h.config.DataChBufSize),
 		cmds:      make(chan cmdAndChannel, h.config.CmdChBufSize),
 		rafts:     make(chan raftpb.Message, h.config.DataChBufSize),
 		bRafts:    make(chan raftpb.Message, h.config.DataChBufSize),
-		flush:     make(chan struct{}, 1),
 		done:      make(chan struct{}),
 		prx:       prx,
 	}
@@ -265,52 +262,157 @@ func newBatcher(h *hive, to uint64) (*batcher, error) {
 	return b, nil
 }
 
-func (b *batcher) start() {
+func (b *batcher) batchRaft(wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	var raftBuf bytes.Buffer
 	raftEnc := raft.NewEncoder(&raftBuf)
-	rch := b.rafts
-	resetrch := make(chan struct{})
+
+	raftd := b.batchTick * time.Duration(b.weights[batcherRaftIndex])
+	var tch <-chan time.Time
+
+	for {
+		reset := false
+		select {
+		case r := <-b.rafts:
+			if err := raftEnc.Encode(r); err != nil {
+				glog.Errorf("cannot encode raft message: %v", err)
+				reset = true
+			}
+			if tch == nil {
+				tch = time.After(raftd)
+			}
+
+		case <-tch:
+			if raftBuf.Len() == 0 {
+				tch = nil
+				continue
+			}
+
+			err := b.prx.sendRaftNew(&raftBuf)
+			if err != nil {
+				glog.Errorf("error in sending raft to %v: %v", b.prx.to, err)
+			}
+			reset = true
+
+		case <-b.done:
+			return
+		}
+
+		if reset {
+			tch = nil
+			raftBuf.Reset()
+			raftEnc = raft.NewEncoder(&raftBuf)
+		}
+	}
+}
+
+func (b *batcher) batchBeeRaft(wg *sync.WaitGroup) {
+	defer wg.Done()
 
 	var bRaftBuf bytes.Buffer
 	bRaftEnc := raft.NewEncoder(&bRaftBuf)
-	brch := b.bRafts
-	resetbrch := make(chan struct{})
+
+	braftd := b.batchTick * time.Duration(b.weights[batcherBeeRaftIndex])
+	var tch <-chan time.Time
+
+	for {
+		reset := false
+		select {
+		case r := <-b.bRafts:
+			if err := bRaftEnc.Encode(r); err != nil {
+				glog.Errorf("cannot encode raft message: %v", err)
+				reset = true
+			}
+
+			if tch == nil {
+				tch = time.After(braftd)
+			}
+
+		case <-tch:
+			if bRaftBuf.Len() == 0 {
+				tch = nil
+				continue
+			}
+
+			err := b.prx.sendBeeRaftNew(&bRaftBuf)
+			if err != nil {
+				glog.Errorf("error in sending bee raft to %v: %v", b.prx.to, err)
+			}
+			reset = true
+
+		case <-b.done:
+			return
+		}
+
+		if reset {
+			tch = nil
+			bRaftBuf.Reset()
+			bRaftEnc = raft.NewEncoder(&bRaftBuf)
+		}
+	}
+}
+
+func (b *batcher) batchMsg(wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var msgBuf bytes.Buffer
+	msgEnc := gob.NewEncoder(&msgBuf)
+
+	msgd := b.batchTick * time.Duration(b.weights[batcherMsgIndex])
+	var tch <-chan time.Time
+
+	for {
+		reset := false
+		select {
+		case m := <-b.msgs:
+			if err := msgEnc.Encode(m); err != nil {
+				glog.Errorf("cannot encode message: %v", err)
+				reset = true
+			}
+
+			if tch == nil {
+				tch = time.After(msgd)
+			}
+
+		case <-tch:
+			if msgBuf.Len() == 0 {
+				tch = nil
+				continue
+			}
+
+			err := b.prx.sendMsgNew(&msgBuf)
+			if err != nil {
+				glog.Errorf("error in sending messages %v: %v", b.prx.to, err)
+			}
+			reset = true
+
+		case <-b.done:
+			return
+		}
+
+		if reset {
+			tch = nil
+			msgBuf.Reset()
+			msgEnc = gob.NewEncoder(&msgBuf)
+		}
+	}
+}
+
+func (b *batcher) batchCmd(wg *sync.WaitGroup) {
+	defer wg.Done()
 
 	var cmds []cmdAndChannel
 	var cmdBuf bytes.Buffer
 	cmdEnc := gob.NewEncoder(&cmdBuf)
-	cch := b.cmds
-	resetcch := make(chan struct{})
 
-	var msgBuf bytes.Buffer
-	msgEnc := gob.NewEncoder(&msgBuf)
-	mch := b.msgs
-	resetmch := make(chan struct{})
-
-	ticker := time.NewTicker(b.batchTick)
+	cmdd := b.batchTick * time.Duration(b.weights[batcherCmdIndex])
+	var tch <-chan time.Time
 
 	for {
+		reset := false
 		select {
-		case <-resetrch:
-			rch = b.rafts
-
-		case <-resetbrch:
-			brch = b.bRafts
-
-		case <-resetcch:
-			cch = b.cmds
-
-		case <-resetmch:
-			mch = b.msgs
-
-		case m := <-mch:
-			if err := msgEnc.Encode(m); err != nil {
-				glog.Errorf("cannot encode message: %v", err)
-				msgBuf.Reset()
-				msgEnc = gob.NewEncoder(&msgBuf)
-			}
-
-		case c := <-cch:
+		case c := <-b.cmds:
 			cmds = append(cmds, c)
 			if err := cmdEnc.Encode(c.cmd); err != nil {
 				glog.Errorf("cannot encode command: %v", err)
@@ -320,109 +422,70 @@ func (b *batcher) start() {
 					cc.ch <- cmdResult{Err: err}
 				}
 				cmds = cmds[:0]
+				reset = true
 			}
 
-		case r := <-rch:
-			if err := raftEnc.Encode(r); err != nil {
-				glog.Errorf("cannot encode raft message: %v", err)
-				raftBuf.Reset()
-				raftEnc = raft.NewEncoder(&raftBuf)
+			if tch == nil {
+				tch = time.After(cmdd)
 			}
 
-		case r := <-brch:
-			if err := bRaftEnc.Encode(r); err != nil {
-				glog.Errorf("cannot encode raft message: %v", err)
-				bRaftBuf.Reset()
-				bRaftEnc = raft.NewEncoder(&bRaftBuf)
+		case <-tch:
+			if cmdBuf.Len() == 0 {
+				tch = nil
+				continue
 			}
 
-		case <-ticker.C:
-			b.flush <- struct{}{}
-
-		case <-b.flush:
-			if rch != nil && raftBuf.Len() > 0 {
-				rch = nil
-				go func() {
-					err := b.prx.sendRaftNew(&raftBuf)
-					if err != nil {
-						glog.Errorf("error in sending raft to %v: %v", b.prx.to, err)
+			res, err := b.prx.sendCmdNew(&cmdBuf)
+			if err != nil {
+				glog.Errorf("error in sending cmd to %v: %v", b.prx.to, err)
+			} else {
+				dec := gob.NewDecoder(res.Body)
+				var i int
+				for i = range cmds {
+					var cr cmdResult
+					if err := dec.Decode(&cr); err != nil {
+						glog.Errorf("error in decoding results from %v: %v", b.prx.to, err)
+						break
 					}
-					raftBuf.Reset()
-					raftEnc = raft.NewEncoder(&raftBuf)
-					resetrch <- struct{}{}
-				}()
-			}
-
-			if brch != nil && bRaftBuf.Len() > 0 {
-				brch = nil
-				go func() {
-					err := b.prx.sendBeeRaftNew(&bRaftBuf)
-					if err != nil {
-						glog.Errorf("error in sending bee raft to %v: %v", b.prx.to, err)
+					if cmds[i].ch == nil {
+						continue
 					}
-					bRaftBuf.Reset()
-					bRaftEnc = raft.NewEncoder(&bRaftBuf)
-					resetbrch <- struct{}{}
-				}()
-			}
-
-			if cch != nil && cmdBuf.Len() > 0 {
-				cch = nil
-				go func() {
-					res, err := b.prx.sendCmdNew(&cmdBuf)
-					if err != nil {
-						glog.Errorf("error in sending cmd to %v: %v", b.prx.to, err)
-					} else {
-						dec := gob.NewDecoder(res.Body)
-						var i int
-						for i = range cmds {
-							var cr cmdResult
-							if err := dec.Decode(&cr); err != nil {
-								glog.Errorf("error in decoding results from %v: %v", b.prx.to, err)
-								break
-							}
-							if cmds[i].ch == nil {
-								continue
-							}
-							cmds[i].ch <- cr
-						}
-						for ; i < len(cmds); i++ {
-							if cmds[i].ch == nil {
-								continue
-							}
-							cmds[i].ch <- cmdResult{Err: errStreamerCancelled}
-						}
+					cmds[i].ch <- cr
+				}
+				for ; i < len(cmds); i++ {
+					if cmds[i].ch == nil {
+						continue
 					}
-					maybeCloseResponse(res)
-					cmdBuf.Reset()
-					cmdEnc = gob.NewEncoder(&cmdBuf)
-					cmds = cmds[:0]
-					resetcch <- struct{}{}
-				}()
+					cmds[i].ch <- cmdResult{Err: errStreamerCancelled}
+				}
 			}
-
-			if mch != nil && msgBuf.Len() > 0 {
-				mch = nil
-				go func() {
-					err := b.prx.sendMsgNew(&msgBuf)
-					if err != nil {
-						glog.Errorf("error in sending messages %v: %v", b.prx.to, err)
-					}
-					msgBuf.Reset()
-					msgEnc = gob.NewEncoder(&msgBuf)
-					resetmch <- struct{}{}
-				}()
-			}
+			maybeCloseResponse(res)
+			reset = true
 
 		case <-b.done:
-			ticker.Stop()
 			return
+		}
+
+		if reset {
+			tch = nil
+			cmdBuf.Reset()
+			cmdEnc = gob.NewEncoder(&cmdBuf)
+			cmds = cmds[:0]
 		}
 	}
 }
 
-func (b *batcher) flushbuffers() {
-	b.flush <- struct{}{}
+func (b *batcher) start() {
+
+	var wg sync.WaitGroup
+	wg.Add(4)
+
+	go b.batchRaft(&wg)
+	go b.batchBeeRaft(&wg)
+	go b.batchMsg(&wg)
+	go b.batchCmd(&wg)
+
+	wg.Wait()
 }
 
 func (b *batcher) sendMsg(ms []msg) error {

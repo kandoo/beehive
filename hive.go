@@ -74,6 +74,8 @@ type HiveConfig struct {
 
 	MaxConnPerHost int           // max parallel data connections to a host.
 	ConnTimeout    time.Duration // timeout for connections between hives.
+	BatcherPerHost int           // number of parallel batchers per host.
+	BatcherTimeout time.Duration // timeout used in the batchers.
 }
 
 // RaftElectTimeout returns the raft election timeout as
@@ -103,7 +105,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
-	h.streamer = newLoadBalancer(h, 4)
+	h.streamer = newLoadBalancer(h, cfg.BatcherPerHost)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
 	h.server = newServer(h, cfg.Addr)
@@ -158,6 +160,10 @@ func init() {
 		"maximum number of parallel data connectons to a remote host")
 	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
 		"timeout for trying to connect to other hives")
+	flag.IntVar(&DefaultCfg.BatcherPerHost, "batchers", 1,
+		"number of parallel batchers per host")
+	flag.DurationVar(&DefaultCfg.BatcherTimeout, "batchertimeout",
+		1*time.Millisecond, "timeout used for batching")
 }
 
 type qeeAndHandler struct {
