@@ -875,33 +875,48 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 		blacklist = append(blacklist, fb.Hive)
 	}
 	for r != 1 {
-		// TODO(soheil): We can try to select multiple hives at once.
-		hives := b.hive.replStrategy.selectHives(blacklist, 1)
+		hives := b.hive.replStrategy.selectHives(blacklist, r-1)
 		if len(hives) == 0 {
 			glog.Warningf("can only find %v hives to create followers for %v",
 				len(b.colony().Followers), b)
 			break
 		}
 
-		blacklist = append(blacklist, hives[0])
-		glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
-			hives[0])
-		cmd := cmd{
-			App:  b.app.Name(),
-			Data: cmdCreateBee{},
+		fch := make(chan uint64)
+
+		tries := r - 1
+		for i := 0; i < tries; i++ {
+			blacklist = append(blacklist, hives[i])
+			go func(i int) {
+				glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
+					hives[0])
+				cmd := cmd{
+					App:  b.app.Name(),
+					Data: cmdCreateBee{},
+				}
+				res, err := b.hive.streamer.sendCmd(cmd, hives[i])
+				if err != nil {
+					glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
+					fch <- 0
+					return
+				}
+				fch <- res.(uint64)
+			}(i)
 		}
-		res, err := b.hive.streamer.sendCmd(cmd, hives[0])
-		if err != nil {
-			glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
-			continue
+
+		for i := 0; i < tries; i++ {
+			fid := <-fch
+			if fid == 0 {
+				continue
+			}
+
+			if err := b.addFollower(fid, hives[i]); err != nil {
+				glog.Errorf("%v cannot add %v as a follower: %v", b, fid, err)
+				continue
+			}
+			recruited++
+			r--
 		}
-		fid := res.(uint64)
-		if err = b.addFollower(fid, hives[0]); err != nil {
-			glog.Errorf("%v cannot add %v as a follower: %v", b, fid, err)
-			continue
-		}
-		recruited++
-		r--
 	}
 
 	glog.V(2).Infof("%v recruited %d followers", b, recruited)
