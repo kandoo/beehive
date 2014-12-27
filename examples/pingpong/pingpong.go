@@ -113,10 +113,10 @@ func main() {
 	shouldPing := flag.Bool("ping", false, "Whether to ping.")
 	shouldPong := flag.Bool("pong", false, "Whether to pong.")
 
-	pingApp := bh.NewApp("Ping", bh.AppPersistent(2))
+	pingApp := bh.NewApp("Ping", bh.Persistent(2))
 	pingApp.Handle(pong{}, &pinger{})
 
-	pongApp := bh.NewApp("Pong", bh.AppPersistent(2))
+	pongApp := bh.NewApp("Pong", bh.Persistent(2))
 	pongApp.Handle(ping{}, &ponger{})
 
 	if *shouldPing {

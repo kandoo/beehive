@@ -14,7 +14,7 @@ func mapf(...) {...}
 func rcvf(...) {...}
 func main() {
 	// Create a new application.
-	app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
+	app := bh.NewApp("HelloWorld", bh.Persistent(1))
 	// This application handles string messages.
 	// Its map function is mapf and its receive function
 	// is rcvf.
@@ -104,10 +104,10 @@ Yes, the count are preserved! why? Because the application was a persistent
 application, remember?
 
 ```go
-app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
+app := bh.NewApp("HelloWorld", bh.Persistent(1))
 ```
 
-`bh.AppPersistent(1)` is an application option that makes this
+`bh.Persistent(1)` is an application option that makes this
 application persistent with a replication factor of `1`. We will talk
 about replication in [fault-tolrance](fault-tolerance.md).
 
@@ -115,7 +115,7 @@ Let's emit two different names in our `main` function:
 
 ```go
 func main() {
-	app := bh.NewApp("HelloWorld", bh.AppPersistent(1))
+	app := bh.NewApp("HelloWorld", bh.Persistent(1))
 	app.HandleFunc(string(""), mapf, rcvf)
 	name1 := "1st name"
 	name2 := "2nd name"
@@ -145,7 +145,7 @@ Note that "1st name" and "2nd name" are handled by different bees.
 
 In our example, we made the application persisent and transactional:
 ```go
-bh.NewApp(..., bh.AppPersistent(1))
+bh.NewApp(..., bh.Persistent(1))
 ```
 
 If you re-run the program (you can exit with `ctrl+c`),

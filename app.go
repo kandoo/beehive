@@ -55,27 +55,27 @@ type App interface {
 // AppOption represents an option for applications.
 type AppOption func(a *app)
 
-// AppPersistent is an application option that makes the application's state
+// Persistent is an application option that makes the application's state
 // persistent. The app state will be replciated on "replicationFactor" hives.
 // This option also makes the application transactional.
-func AppPersistent(replicationFactor int) AppOption {
+func Persistent(replicationFactor int) AppOption {
 	return func(a *app) {
 		a.flags = a.flags | appFlagPersistent | appFlagTransactional
 		a.replFactor = replicationFactor
 	}
 }
 
-// AppTransactional is an application option that makes the application
+// Transactional is an application option that makes the application
 // transactional. Transactions embody both application messages and its state.
-func AppTransactional() AppOption {
+func Transactional() AppOption {
 	return func(a *app) {
 		a.flags |= appFlagTransactional
 	}
 }
 
-// AppSticky is an application option that makes the application sticky. Bees of
+// Sticky is an application option that makes the application sticky. Bees of
 // sticky apps are not migrated by the optimizer.
-func AppSticky() AppOption {
+func Sticky() AppOption {
 	return func(a *app) {
 		a.flags |= appFlagSticky
 	}
@@ -172,7 +172,7 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 }
 
 var (
-	defaultAppOptions = []AppOption{AppTransactional()}
+	defaultAppOptions = []AppOption{Transactional()}
 )
 
 type appFlag uint64

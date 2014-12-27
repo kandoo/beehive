@@ -161,7 +161,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	opts := []bh.AppOption{bh.AppPersistent(*replFactor)}
+	opts := []bh.AppOption{bh.Persistent(*replFactor)}
 	if *random {
 		rp := bh.RandomPlacement{
 			Rand: rand.New(rand.NewSource(time.Now().UnixNano())),
