@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"reflect"
+	"runtime"
 )
 
 // Message is a generic interface for messages emitted in the system. Messages
@@ -124,6 +125,7 @@ func (q *msgChannel) pipe() {
 		if dequed {
 			chout = q.chout
 		} else {
+			q.maybeFastPipe()
 			chout = nil
 		}
 		select {
@@ -136,6 +138,29 @@ func (q *msgChannel) pipe() {
 		case chout <- first:
 			q.maybeWriteMore()
 			first, dequed = q.deque()
+		}
+	}
+}
+
+func (q *msgChannel) maybeFastPipe() {
+	cw := cap(q.chout)
+	cr := cap(q.chin)
+	for {
+		// calling cap and len is expensive. cache the values here and update later
+		// if needed.
+		w := cw - len(q.chout)
+		if w == 0 {
+			if len(q.chin) != cr {
+				// give it another chance.
+				runtime.Gosched()
+				continue
+			}
+			return
+		}
+
+		for i := 0; i < w; i++ {
+			mh := <-q.chin
+			q.chout <- mh
 		}
 	}
 }
