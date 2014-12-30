@@ -70,6 +70,7 @@ type HiveConfig struct {
 
 	RegLockTimeout time.Duration // when to retry to lock an entry in a registry.
 	RaftTick       time.Duration // the raft tick interval.
+	RaftHBTicks    int           // number of raft ticks that fires a heartbeat.
 	RaftElectTicks int           // number of raft ticks that fires election.
 
 	MaxConnPerHost int           // max parallel data connections to a host.
@@ -156,6 +157,8 @@ func init() {
 		"raft tick period")
 	flag.IntVar(&DefaultCfg.RaftElectTicks, "raftelectionticks", 5,
 		"number of raft ticks to start an election (ie, election timeout)")
+	flag.IntVar(&DefaultCfg.RaftHBTicks, "rafthbticks", 1,
+		"number of raft ticks to fire a heartbeat (ie, heartbeat timeout)")
 	flag.IntVar(&DefaultCfg.MaxConnPerHost, "maxconn", 32,
 		"maximum number of parallel data connectons to a remote host")
 	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
@@ -394,7 +397,7 @@ func (h *hive) startRaftNode() {
 	}
 	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
 		h.config.StatePath, h.registry, 1024, h.ticker.C, h.config.RaftElectTicks,
-		1)
+		h.config.RaftHBTicks)
 }
 
 func (h *hive) delBeeFromRegistry(id uint64) error {
