@@ -36,15 +36,15 @@ func newTarget(method, url string, body []byte) target {
 	}
 }
 
-func (t *target) do() (d time.Duration, in int64, out int64, err error) {
+func (t *target) do() (start, end, in, out int64, err error) {
 	req, err := http.NewRequest(t.method, t.url, bytes.NewBuffer(t.body))
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	in = req.ContentLength
-	start := time.Now()
+	start = time.Now().UnixNano()
 	res, err := client.Do(req)
-	d = time.Since(start)
+	end = time.Now().UnixNano()
 	if err != nil {
 		return
 	}
@@ -65,6 +65,8 @@ type result struct {
 	URL    string        `json:"url"`
 	In     int64         `json:"in"`
 	Out    int64         `json:"out"`
+	Start  int64         `json:"start"`
+	End    int64         `json:"end"`
 	Dur    time.Duration `json:"dur"`
 	Err    string        `json:"err"`
 }
@@ -93,38 +95,39 @@ func generateTargets(addr string, writes, localReads,
 	rand.Seed(time.Now().UTC().UnixNano())
 	var targets []target
 	var keys []string
-	for i := 0; i < writes; i++ {
+	for w := 0; w < writes; w++ {
 		k := randString(keyLen)
 		keys = append(keys, k)
 		bl := randRange(minBodyLen, maxBodyLen)
 		t := newTarget("PUT", "http://"+addr+"/apps/kvstore/"+k,
 			[]byte(randString(bl)))
 		targets = append(targets, t)
+		for r := 0; r < localReads/writes+1; r++ {
+			t := newTarget("GET", "http://"+addr+"/apps/kvstore/"+k, []byte{})
+			targets = append(targets, t)
+		}
 	}
-	for i := 0; i < localReads; i++ {
-		t := newTarget("GET",
-			"http://"+addr+"/apps/kvstore/"+keys[rand.Intn(len(keys))], []byte{})
-		targets = append(targets, t)
-	}
-	for i := 0; i < randReads; i++ {
+
+	for r := 0; r < randReads; r++ {
 		t := newTarget("GET",
 			"http://"+addr+"/apps/kvstore/"+randString(keyLen), []byte{})
 		targets = append(targets, t)
 	}
+
 	return targets
 }
 
 func run(id int, targets []target, rounds int) []result {
 	results := make([]result, 0, len(targets)*rounds)
 	for i := 0; i < rounds; i++ {
-		for j, t := range targets {
-			fmt.Printf("%v-%v/%v-%s ", id, i, j, t.method)
+		for _, t := range targets {
 			var err error
 			res := result{
 				Method: t.method,
 				URL:    t.url,
 			}
-			res.Dur, res.In, res.Out, err = t.do()
+			res.Start, res.End, res.In, res.Out, err = t.do()
+			res.Dur = time.Duration(res.End - res.Start)
 			if err != nil {
 				res.Err = err.Error()
 			}
@@ -164,11 +167,15 @@ func main() {
 
 	client = &http.Client{Timeout: *timeout}
 
+	targets := generateTargets(*addr, *writes, *localr, *randr)
+	fmt.Print("\nwarming up workers\n")
+	run(0, targets, 1)
+
+	fmt.Printf("starting...\n")
 	ch := make(chan []result)
 	for w := 0; w < *workers; w++ {
 		go func(w int) {
-			t := generateTargets(*addr, *writes, *localr, *randr)
-			ch <- run(w, t, *rounds)
+			ch <- run(w, targets, *rounds)
 		}(w)
 	}
 
