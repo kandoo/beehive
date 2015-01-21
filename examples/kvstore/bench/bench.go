@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -11,6 +12,8 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -71,6 +74,35 @@ type result struct {
 	Err    string        `json:"err"`
 }
 
+func (r result) csv() []string {
+	return []string{
+		r.Method,
+		r.URL,
+		strconv.FormatInt(r.In, 10),
+		strconv.FormatInt(r.Out, 10),
+		strconv.FormatInt(r.Start, 10),
+		strconv.FormatInt(r.End, 10),
+		strconv.FormatInt(r.Dur.Nanoseconds(), 10),
+		r.Err,
+	}
+}
+
+var (
+	csvHeader = []string{
+		"method", "url", "in", "out", "start", "end", "dur", "err",
+	}
+)
+
+func writeCSVLine(w *bufio.Writer, fields []string) {
+	for i, f := range fields {
+		w.WriteString(f)
+		if i != len(fields)-1 {
+			w.WriteString(",")
+		}
+	}
+	w.WriteString("\n")
+}
+
 func randRange(from, to int) int {
 	return rand.Intn(to-from) + from
 }
@@ -117,9 +149,9 @@ func generateTargets(addr string, writes, localReads,
 	return targets
 }
 
-func run(id int, targets []target, rounds int) []result {
-	results := make([]result, 0, len(targets)*rounds)
+func run(id int, targets []target, rounds int, ch chan<- []result) {
 	for i := 0; i < rounds; i++ {
+		results := make([]result, 0, len(targets))
 		for _, t := range targets {
 			var err error
 			res := result{
@@ -133,8 +165,11 @@ func run(id int, targets []target, rounds int) []result {
 			}
 			results = append(results, res)
 		}
+
+		if ch != nil {
+			ch <- results
+		}
 	}
-	return results
 }
 
 func mustSave(results []result, w io.Writer) {
@@ -165,23 +200,40 @@ func main() {
 	}
 	defer f.Close()
 
+	w := bufio.NewWriter(f)
+
 	client = &http.Client{Timeout: *timeout}
 
 	targets := generateTargets(*addr, *writes, *localr, *randr)
 	fmt.Print("\nwarming up workers\n")
-	run(0, targets, 1)
+	writeCSVLine(w, csvHeader)
+	run(0, targets, 1, nil)
 
 	fmt.Printf("starting...\n")
-	ch := make(chan []result)
-	for w := 0; w < *workers; w++ {
-		go func(w int) {
-			ch <- run(w, targets, *rounds)
-		}(w)
+	var wg sync.WaitGroup
+	wg.Add(*workers)
+	ch := make(chan []result, *workers)
+	for i := 0; i < *workers; i++ {
+		go func(i int) {
+			run(i, targets, *rounds, ch)
+			wg.Done()
+		}(i)
 	}
 
-	var res []result
-	for i := 0; i < *workers; i++ {
-		res = append(res, <-ch...)
-	}
-	mustSave(res, f)
+	writeDone := make(chan struct{})
+	go func() {
+		for results := range ch {
+			for _, r := range results {
+				writeCSVLine(w, r.csv())
+			}
+		}
+		writeDone <- struct{}{}
+	}()
+
+	wg.Wait()
+	close(ch)
+	<-writeDone
+
+	w.Flush()
+	f.Close()
 }
