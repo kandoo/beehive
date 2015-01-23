@@ -149,10 +149,23 @@ func generateTargets(addr string, writes, localReads,
 	return targets
 }
 
-func run(id int, targets []target, rounds int, ch chan<- []result) {
+func run(id int, targets []target, rounds int, use_perm bool,
+	ch chan<- []result) {
+
+	var perm []int
+	if use_perm {
+		perm = rand.Perm(len(targets))
+	} else {
+		perm = make([]int, len(targets))
+		for i := 0; i < len(targets); i++ {
+			perm[i] = i
+		}
+	}
+
 	for i := 0; i < rounds; i++ {
 		results := make([]result, 0, len(targets))
-		for _, t := range targets {
+		for _, j := range perm {
+			t := targets[j]
 			var err error
 			res := result{
 				Method: t.method,
@@ -207,7 +220,7 @@ func main() {
 	targets := generateTargets(*addr, *writes, *localr, *randr)
 	fmt.Print("\nwarming up workers\n")
 	writeCSVLine(w, csvHeader)
-	run(0, targets, 1, nil)
+	run(0, targets, 1, false, nil)
 
 	fmt.Printf("starting...\n")
 	var wg sync.WaitGroup
@@ -215,7 +228,7 @@ func main() {
 	ch := make(chan []result, *workers)
 	for i := 0; i < *workers; i++ {
 		go func(i int) {
-			run(i, targets, *rounds, ch)
+			run(i, targets, *rounds, false, ch)
 			wg.Done()
 		}(i)
 	}
