@@ -1,28 +1,22 @@
-package main
+package store
 
 import (
 	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"flag"
 	"io/ioutil"
-	"log"
-	"math/rand"
 	"net/http"
-	"os"
-	"runtime/pprof"
 	"strconv"
 	"time"
 
 	"github.com/OneOfOne/xxhash"
 	bh "github.com/kandoo/beehive"
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 const (
-	dict = "store"
+	dict = "S"
 )
 
 var (
@@ -31,61 +25,61 @@ var (
 	errInvalid     = errors.New("kvstore: invalid parameter")
 )
 
-type put struct {
+type Put struct {
 	Key string
 	Val []byte
 }
 
-type get string
-type result struct {
+type Get string
+type Result struct {
 	Key string `json:"key"`
 	Val string `json:"value"`
 }
 
-type del string
+type Del string
 
-type kvStore struct {
+type KVStore struct {
 	*bh.Sync
-	buckets uint64
+	Buckets uint64
 }
 
-func (s *kvStore) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
+func (s *KVStore) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	switch data := msg.Data().(type) {
-	case put:
+	case Put:
 		return ctx.Dict(dict).Put(data.Key, data.Val)
-	case get:
+	case Get:
 		v, err := ctx.Dict(dict).Get(string(data))
 		if err != nil {
 			return errKeyNotFound
 		}
-		ctx.ReplyTo(msg, result{Key: string(data), Val: string(v)})
+		ctx.ReplyTo(msg, Result{Key: string(data), Val: string(v)})
 		return nil
-	case del:
+	case Del:
 		return ctx.Dict(dict).Del(string(data))
 	}
 	return errInvalid
 }
 
-func (s *kvStore) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
+func (s *KVStore) Map(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	var k string
 	switch data := msg.Data().(type) {
-	case put:
+	case Put:
 		k = string(data.Key)
-	case get:
+	case Get:
 		k = string(data)
-	case del:
+	case Del:
 		k = string(data)
 	}
 	cells := bh.MappedCells{
 		{
 			Dict: dict,
-			Key:  strconv.FormatUint(xxhash.Checksum64([]byte(k))%s.buckets, 16),
+			Key:  strconv.FormatUint(xxhash.Checksum64([]byte(k))%s.Buckets, 16),
 		},
 	}
 	return cells
 }
 
-func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *KVStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	k, ok := mux.Vars(r)["key"]
 	if !ok {
 		http.Error(w, "no key in the url", http.StatusBadRequest)
@@ -97,16 +91,16 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.Method {
 	case "GET":
-		res, err = s.Process(ctx, get(k))
+		res, err = s.Process(ctx, Get(k))
 	case "PUT":
 		var v []byte
 		v, err = ioutil.ReadAll(r.Body)
 		if err != nil {
 			break
 		}
-		res, err = s.Process(ctx, put{Key: k, Val: v})
+		res, err = s.Process(ctx, Put{Key: k, Val: v})
 	case "DELETE":
-		res, err = s.Process(ctx, del(k))
+		res, err = s.Process(ctx, Del(k))
 	}
 	cnl()
 
@@ -137,51 +131,6 @@ func (s *kvStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-var (
-	replFactor = flag.Int("kv.rf", 3, "replication factor")
-	buckets    = flag.Int("kv.b", 1024, "number of buckets")
-	cpuprofile = flag.String("kv.cpuprofile", "", "write cpu profile to file")
-	quiet      = flag.Bool("kv.quiet", false, "no raft log")
-	random     = flag.Bool("kv.rand", false, "whether to use random placement")
-)
-
-func main() {
-	flag.Parse()
-	rand.Seed(time.Now().UnixNano())
-	if *quiet {
-		log.SetOutput(ioutil.Discard)
-	}
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			glog.Fatal(err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
-
-	opts := []bh.AppOption{bh.Persistent(*replFactor)}
-	if *random {
-		rp := bh.RandomPlacement{
-			Rand: rand.New(rand.NewSource(time.Now().UnixNano())),
-		}
-		opts = append(opts, bh.AppWithPlacement(rp))
-	}
-	a := bh.NewApp("kvstore", opts...)
-	s := bh.NewSync(a)
-	kv := &kvStore{
-		Sync:    s,
-		buckets: uint64(*buckets),
-	}
-	s.Handle(put{}, kv)
-	s.Handle(get(""), kv)
-	s.Handle(del(""), kv)
-	a.HandleHTTP("/{key}", kv)
-
-	bh.Start()
-}
-
 func init() {
-	gob.Register(result{})
+	gob.Register(Result{})
 }
