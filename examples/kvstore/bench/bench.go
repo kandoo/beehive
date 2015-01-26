@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -25,6 +26,7 @@ var (
 	cpuprofile = flag.String("kv.cpuprofile", "", "write cpu profile to file")
 	quiet      = flag.Bool("kv.quiet", false, "no raft log")
 	random     = flag.Bool("kv.rand", false, "whether to use random placement")
+	output     = flag.String("kv.output", "bench.out", "the output file")
 )
 
 func main() {
@@ -58,7 +60,7 @@ func main() {
 	sync.Handle(store.Get(""), kvs)
 	go hive.Start()
 
-	time.Sleep(1 * time.Minute)
+	time.Sleep(4 * time.Minute)
 
 	keys := make([]string, *numkeys)
 	reqs := make([]interface{}, *numkeys)
@@ -93,7 +95,15 @@ func main() {
 
 	hive.Stop()
 
-	for _, t := range ts {
-		fmt.Println(uint64(t))
+	f, err := os.Create(*output)
+	if err != nil {
+		panic(err)
 	}
+	defer f.Close()
+
+	w := bufio.NewWriter(f)
+	for _, t := range ts {
+		fmt.Fprintf(w, "%v\n", uint64(t))
+	}
+	w.Flush()
 }
