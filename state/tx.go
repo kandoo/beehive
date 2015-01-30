@@ -3,6 +3,8 @@ package state
 import (
 	"errors"
 	"fmt"
+
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
 // TxStatus represents the status of a transaction.
@@ -162,7 +164,7 @@ func (t *Transactional) Apply(ops []Op) error {
 
 func (t *Transactional) Save() ([]byte, error) {
 	if t.status == TxOpen {
-		return nil, ErrTxOpen
+		glog.Warningf("transactional has an open tx when the snapshot is taken")
 	}
 
 	return t.State.Save()

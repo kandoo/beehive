@@ -3,12 +3,7 @@ package state
 import (
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"fmt"
-)
-
-var (
-	ErrTxOpen = errors.New("State has an open transaction")
 )
 
 // InMem is a simple dictionary that uses in memory maps.
