@@ -191,6 +191,14 @@ func (ctx *syncRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
 	return ctx.RcvContext.ReplyTo(msg, r)
 }
 
+func (ctx *syncRcvContext) DeferReply(msg Msg) Repliable {
+	ctx.replied = true
+	return Repliable{
+		From:   msg.From(),
+		SyncID: ctx.id,
+	}
+}
+
 type syncHandler struct {
 	handler Handler
 }

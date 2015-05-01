@@ -9,6 +9,59 @@ import (
 	"github.com/kandoo/beehive/state"
 )
 
+func TestDeferReply(t *testing.T) {
+	type ping struct{}
+	type pong struct{}
+	type send struct{}
+
+	ch := make(chan struct{})
+	pingf := func(msg Msg, ctx RcvContext) error {
+		ctx.Emit(ping{})
+		if msg.IsUnicast() {
+			close(ch)
+		}
+		return nil
+	}
+
+	pongf := func(msg Msg, ctx RcvContext) error {
+		switch msg.Data().(type) {
+		case ping:
+			ctx.Emit(send{})
+			r := ctx.DeferReply(msg)
+			return ctx.Dict("reply").PutGob("def", &r)
+
+		case send:
+			var r Repliable
+			if err := ctx.Dict("reply").GetGob("def", &r); err != nil {
+				return err
+			}
+			r.Reply(ctx, pong{})
+		}
+		return nil
+	}
+
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return ctx.LocalMappedCells()
+	}
+
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-bee"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
+	go h.Start()
+	defer h.Stop()
+
+	app := h.NewApp("defer")
+	app.HandleFunc(ping{}, mapf, pongf)
+	app.HandleFunc(send{}, mapf, pongf)
+	app.HandleFunc(pong{}, mapf, pingf)
+
+	h.Emit(pong{})
+	<-ch
+}
+
 type benchBeeHandler struct {
 	data []byte
 }

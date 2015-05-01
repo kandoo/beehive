@@ -703,6 +703,10 @@ func (b *bee) ReplyTo(msg Msg, reply interface{}) error {
 	return nil
 }
 
+func (b *bee) DeferReply(msg Msg) Repliable {
+	return Repliable{From: msg.From()}
+}
+
 func (b *bee) LockCells(keys []CellKey) error {
 	panic("error FIXME bee.LOCK")
 }

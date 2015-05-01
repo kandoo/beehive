@@ -57,6 +57,67 @@ func TestSyncCancel(t *testing.T) {
 	}
 }
 
+func TestSyncDeferReply(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-sync"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
+	app := h.NewApp("syncDeferReply")
+	type query string
+	type reply string
+	type deferred struct {
+		Repliable
+		Q query
+	}
+	deferredCh := make(chan struct{})
+
+	deferf := func(msg Msg, ctx RcvContext) error {
+		deferredCh <- struct{}{}
+		r := ctx.DeferReply(msg)
+		return ctx.Dict("sync").PutGob("reply", deferred{
+			Repliable: r,
+			Q:         msg.Data().(query),
+		})
+	}
+
+	replyf := func(msg Msg, ctx RcvContext) error {
+		var d deferred
+		if err := ctx.Dict("sync").GetGob("reply", &d); err != nil {
+			t.Fatalf("cannot decode reply: %v", err)
+		}
+		d.Reply(ctx, d.Q)
+		return nil
+	}
+
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return ctx.LocalMappedCells()
+	}
+
+	sync := NewSync(app)
+	sync.HandleFunc(query(""), mapf, deferf)
+
+	app.HandleFunc(reply(""), mapf, replyf)
+
+	go h.Start()
+	defer h.Stop()
+
+	go func() {
+		<-deferredCh
+		h.Emit(reply(""))
+	}()
+
+	req := query("test")
+	res, err := sync.Process(context.Background(), req)
+	if err != nil {
+		t.Fatalf("error in process: %v", err)
+	}
+	if res != req {
+		t.Errorf("sync.Process(%v) = %v; want=%v", req, res, req)
+	}
+}
+
 type benchSyncHandler struct{}
 
 func (h benchSyncHandler) Rcv(msg Msg, ctx RcvContext) error {

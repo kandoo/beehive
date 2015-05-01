@@ -79,6 +79,10 @@ func (m MockRcvContext) SendToCell(msgData interface{}, app string,
 	cell CellKey) {
 }
 
+func (m MockRcvContext) DeferReply(msg Msg) Repliable {
+	return Repliable{From: msg.From()}
+}
+
 func (m *MockRcvContext) SendToBee(msgData interface{}, to uint64) {
 	msg := MockMsg{
 		MsgData: msgData,

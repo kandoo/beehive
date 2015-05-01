@@ -1,11 +1,14 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"time"
 
 	"github.com/kandoo/beehive/state"
 )
 
+// Context is the interface shared between MapContext and RcvContext. It wraps
+// Hive(), App() and Dict().
 type Context interface {
 	// Hive returns the Hive of this context.
 	Hive() Hive
@@ -23,6 +26,27 @@ type MapContext interface {
 	// LocalMappedCells returns a mapped cell unique to the hive of this map
 	// context.
 	LocalMappedCells() MappedCells
+}
+
+// Repliable is a serializable structure that can be used to reply to a message
+// at any time. Repliable is always created using RcvContext.DeferReply().
+//
+// Note: The fields in the Repliable are public for serialization. It is not
+// advisable to modify these fields.
+type Repliable struct {
+	From   uint64 // The ID of the bee that originally sent the message.
+	SyncID uint64 // The sync message ID if the message was sync, otherwise 0.
+}
+
+// Reply replies to the Repliable using replyData.
+func (r *Repliable) Reply(ctx RcvContext, replyData interface{}) {
+	if r.SyncID != 0 {
+		replyData = response{
+			ID:   r.SyncID,
+			Data: replyData,
+		}
+	}
+	ctx.SendToBee(replyData, r.From)
 }
 
 // RcvContext is passed to the rcv functions of message handlers. It provides
@@ -43,6 +67,9 @@ type RcvContext interface {
 	// ReplyTo replies to a message: Sends a message from the current bee to the
 	// bee that emitted msg.
 	ReplyTo(msg Msg, replyData interface{}) error
+	// DeferReply returns a Repliable that can be used to reply to a
+	// message (either a sync or a async message) later.
+	DeferReply(msg Msg) Repliable
 
 	// StartDetached spawns a detached handler.
 	StartDetached(h DetachedHandler) uint64
@@ -76,4 +103,8 @@ type RcvContext interface {
 	CommitTx() error
 	// Aborts the transaction.
 	AbortTx() error
+}
+
+func init() {
+	gob.Register(Repliable{})
 }
