@@ -85,7 +85,10 @@ func BenchmarkBeePersistence(b *testing.B) {
 		},
 		hive: &hive{
 			config: HiveConfig{
-				StatePath: "/tmp/bhtest_bench_bee",
+				StatePath:      "/tmp/bhtest_bench_bee",
+				RaftTick:       100 * time.Millisecond,
+				RaftHBTicks:    1,
+				RaftElectTicks: 5,
 			},
 			collector: &noOpStatCollector{},
 		},
@@ -97,19 +100,20 @@ func BenchmarkBeePersistence(b *testing.B) {
 		dataCh:    newMsgChannel(b.N),
 		batchSize: 1024,
 	}
+	removeState(bee.hive.config)
 	bee.startNode()
 	bee.becomeLeader()
 	b.StartTimer()
 
 	h := benchBeeHandler{data: []byte{1, 1, 1, 1}}
-	for i := 0; i < b.N; i += bee.batchSize {
-		mhs := make([]msgAndHandler, 0, bee.batchSize)
-		for j := 0; j < bee.batchSize; j++ {
-			mhs = append(mhs, msgAndHandler{
-				msg:     &msg{},
-				handler: h,
-			})
+	mhs := make([]msgAndHandler, bee.batchSize)
+	for j := 0; j < bee.batchSize; j++ {
+		mhs[j] = msgAndHandler{
+			msg:     &msg{},
+			handler: h,
 		}
+	}
+	for i := 0; i < b.N; i += bee.batchSize {
 		bee.handleMsg(mhs)
 	}
 
