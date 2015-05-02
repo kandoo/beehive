@@ -17,8 +17,8 @@ const (
 )
 
 var (
-	ErrOpenTx error = errors.New("transaction is already open")
-	ErrNoTx   error = errors.New("no open transaction")
+	ErrOpenTx error = errors.New("tx: transaction is already open")
+	ErrNoTx   error = errors.New("tx: no open transaction")
 )
 
 // Tx represents the side effects of an operation: messages emitted during the

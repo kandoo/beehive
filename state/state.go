@@ -1,5 +1,11 @@
 package state
 
+import "errors"
+
+var (
+	ErrNoSuchKey error = errors.New("state: no such key")
+)
+
 // State is a collection of dictionaries.
 type State interface {
 	// Returns a dictionary for this state. Creates one if it does not exist.

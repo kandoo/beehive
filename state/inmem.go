@@ -3,7 +3,6 @@ package state
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 )
 
 // InMem is a simple dictionary that uses in memory maps.
@@ -58,7 +57,7 @@ func (d inMemDict) Name() string {
 func (d *inMemDict) Get(k string) ([]byte, error) {
 	v, ok := d.Dict[k]
 	if !ok {
-		return v, fmt.Errorf("%v does not exist", k)
+		return v, ErrNoSuchKey
 	}
 	return v, nil
 }

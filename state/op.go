@@ -6,8 +6,8 @@ type OpType int
 // Valid values for OpType.
 const (
 	Unknown OpType = iota
-	Put            = iota
-	Del            = iota
+	Put
+	Del
 )
 
 // Op is a state operation in a transaction.
