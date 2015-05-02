@@ -9,7 +9,7 @@ func testInMemTx(t *testing.T, abort bool) {
 	state := NewTransactional(NewInMem())
 
 	if err := state.BeginTx(); err != nil {
-		t.Errorf("Error in tx begin: %v", err)
+		t.Errorf("error in tx begin: %v", err)
 	}
 
 	n1 := "TestDict1"
@@ -24,26 +24,26 @@ func testInMemTx(t *testing.T, abort bool) {
 		}
 		_, ok := state.State.(*InMem).Dicts[n1].Dict[keys[i]]
 		if ok {
-			t.Errorf("Key is inserted before commit: %s", keys[i])
+			t.Errorf("key is inserted before commit: %s", keys[i])
 		}
 
 		v, err := state.Dict(n1).Get(keys[i])
 		if err != nil {
-			t.Errorf("Key cannot be read in the transaction: %s", keys[i])
+			t.Errorf("key cannot be read in the transaction: %s", keys[i])
 		}
 
 		if bytes.Compare(v, vals[i]) != 0 {
-			t.Errorf("Invalid value for key %s: %s != %s", keys[i], v, vals[i])
+			t.Errorf("invalid value for key %s: %s != %s", keys[i], v, vals[i])
 		}
 	}
 
 	if abort {
 		if err := state.AbortTx(); err != nil {
-			t.Errorf("Cannot abort the transaction")
+			t.Errorf("cannot abort the transaction")
 		}
 	} else {
 		if err := state.CommitTx(); err != nil {
-			t.Errorf("Cannot commit the transaction")
+			t.Errorf("cannot commit the transaction")
 		}
 	}
 
@@ -51,21 +51,21 @@ func testInMemTx(t *testing.T, abort bool) {
 		v, err := state.State.(*InMem).Dicts[n1].Get(keys[i])
 		if abort {
 			if err == nil {
-				t.Errorf("Key is inserted despite aborting the tx: %s", keys[i])
+				t.Errorf("key is inserted despite aborting the tx: %s", keys[i])
 			}
 			continue
 		}
 
 		if err != nil {
-			t.Errorf("Key is not inserted after commit: %s", keys[i])
+			t.Errorf("key is not inserted after commit: %s", keys[i])
 		}
 		if bytes.Compare(v, vals[i]) != 0 {
-			t.Errorf("Invalid value for key %s: %s != %s", keys[i], v, vals[i])
+			t.Errorf("invalid value for key %s: %s != %s", keys[i], v, vals[i])
 		}
 	}
 
 	if err := state.BeginTx(); err != nil {
-		t.Errorf("Transaction is not correctly closed")
+		t.Errorf("transaction is not correctly closed")
 	}
 }
 
@@ -80,32 +80,39 @@ func TestAbort(t *testing.T) {
 func TestTxStatus(t *testing.T) {
 	state := NewTransactional(NewInMem())
 	if state.BeginTx(); state.TxStatus() != TxOpen {
-		t.Error("Tx status should be open")
+		t.Error("tx status should be open")
 	}
 
 	if state.CommitTx(); state.TxStatus() != TxNone {
-		t.Error("Tx status should be none")
+		t.Error("tx status should be none")
 	}
 
 	if state.BeginTx(); state.TxStatus() != TxOpen {
-		t.Error("Tx status should be open")
+		t.Error("tx status should be open")
 	}
 
 	if state.AbortTx(); state.TxStatus() != TxNone {
-		t.Error("Tx status should be none")
+		t.Error("tx status should be none")
 	}
 }
 
 func TestSave(t *testing.T) {
 	state := NewTransactional(NewInMem())
-	state.BeginTx()
-	if _, err := state.Save(); err == nil {
-		t.Error("Should not save state when there is an open transaction")
+
+	if err := state.BeginTx(); err != nil {
+		t.Fatalf("cannot begin transaction: %v", err)
 	}
 
-	state.CommitTx()
 	if _, err := state.Save(); err != nil {
-		t.Error("Cannot save state")
+		t.Error("should save state when there is an open transaction")
+	}
+
+	if err := state.CommitTx(); err != nil {
+		t.Fatalf("cannot commit transaction: %v", err)
+	}
+
+	if _, err := state.Save(); err != nil {
+		t.Error("cannot save state")
 	}
 }
 
@@ -131,14 +138,14 @@ func TestSaveRestore(t *testing.T) {
 	size := 0
 	dst.Dict(d).ForEach(func(k string, v []byte) { size++ })
 	if size > 1 {
-		t.Errorf("Dictionary has more than one entry: %v -> %v", k, v)
+		t.Errorf("dictionary has more than one entry: %v -> %v", k, v)
 	}
 	v2, err := dst.Dict(d).Get(k)
 	if err != nil {
-		t.Error("No such key in the dictionary")
+		t.Error("no such key in the dictionary")
 	}
 	if string(v2) != string(v) {
-		t.Error("Invalid value in the dictionary")
+		t.Error("invalid value in the dictionary")
 	}
 }
 
