@@ -363,7 +363,7 @@ func (n *Node) Start() {
 	appliedi := snap.Metadata.Index
 	confState := snap.Metadata.ConfState
 
-	var prevss *etcdraft.SoftState
+	var oldLead uint64
 	var shouldStop bool
 
 	defer func() {
@@ -389,13 +389,14 @@ func (n *Node) Start() {
 			ready = nil
 			go func(rd etcdraft.Ready) {
 				if rd.SoftState != nil {
-					if prevss != nil && prevss.Lead != rd.SoftState.Lead {
+					newLead := rd.SoftState.Lead
+					if oldLead != newLead {
 						n.listener.ProcessStatusChange(LeaderChanged{
-							Old: prevss.Lead,
-							New: rd.SoftState.Lead,
+							Old: oldLead,
+							New: newLead,
 						})
+						oldLead = newLead
 					}
-					prevss = rd.SoftState
 				}
 
 				empty := etcdraft.IsEmptySnap(rd.Snapshot)
