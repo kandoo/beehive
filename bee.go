@@ -163,10 +163,12 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 		}
 
 		oldc := b.colony()
-		if oldc.IsNil() || oldc.Leader == ev.New {
+		if oldc.Leader == ev.New {
 			glog.V(2).Infof("%v has no need to change %v", b, oldc)
 			return
 		}
+
+		isPrevLeader := oldc.Leader == b.ID()
 
 		newc := oldc.DeepCopy()
 		if oldc.Leader != Nil {
@@ -179,7 +181,7 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 
 		go b.processCmd(cmdRefreshRole{})
 
-		if ev.New == b.ID() {
+		if !isPrevLeader {
 			return
 		}
 
@@ -316,7 +318,7 @@ func (b *bee) recoverFromError(mh msgAndHandler, err interface{},
 		return
 	}
 
-	glog.Errorf("Error in %s: %v", b.app.Name(), err)
+	glog.Errorf("error in %s for %s: %v", b.app.Name(), mh.msg.Type(), err)
 	if stack {
 		glog.Errorf("%s", debug.Stack())
 	}
@@ -987,10 +989,15 @@ func (b *bee) handoff(to uint64) error {
 		glog.Fatalf("%v cannot restart node: %v", b, err)
 	}
 
+	if _, err := b.hive.node.Process(context.TODO(), noOp{}); err != nil {
+		glog.Errorf("%v cannot sync raft: %v", err)
+	}
+
 	if b.colony().IsFollower(b.ID()) {
 		glog.V(2).Infof("%v successfully handed off leadership to %v", b, to)
 		b.becomeFollower()
 	}
+
 	return <-ch
 }
 
@@ -1077,9 +1084,7 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 	return nil, ErrUnsupportedRequest
 }
 
-func (b *bee) ApplyConfChange(cc raftpb.ConfChange,
-	n raft.NodeInfo) error {
-
+func (b *bee) ApplyConfChange(cc raftpb.ConfChange, n raft.NodeInfo) error {
 	b.Lock()
 	defer b.Unlock()
 
