@@ -168,8 +168,6 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			return
 		}
 
-		isPrevLeader := oldc.Leader == b.ID()
-
 		newc := oldc.DeepCopy()
 		if oldc.Leader != Nil {
 			newc.Leader = Nil
@@ -181,7 +179,7 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 
 		go b.processCmd(cmdRefreshRole{})
 
-		if !isPrevLeader {
+		if ev.New != b.ID() {
 			return
 		}
 
@@ -1056,16 +1054,19 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 	case commitTx:
 		glog.V(2).Infof("%v commits %v", b, r)
 		leader := b.isLeader()
+
 		if b.stateL2 != nil {
 			b.stateL2 = nil
 			glog.Errorf("%v has an L2 transaction", b)
 		}
+
 		if b.stateL1.TxStatus() == state.TxOpen {
 			if !leader {
 				glog.Errorf("%v is a follower and has an open transaction", b)
 			}
 			b.resetTx(b.stateL1, &b.msgBufL1)
 		}
+
 		if err := b.stateL1.Apply(r.Ops); err != nil {
 			return nil, err
 		}
