@@ -9,6 +9,8 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
+type query string
+
 func TestSync(t *testing.T) {
 	cfg := DefaultCfg
 	cfg.StatePath = "/tmp/bhtest-sync"
@@ -17,7 +19,6 @@ func TestSync(t *testing.T) {
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("sync")
-	type query string
 	rcvf := func(msg Msg, ctx RcvContext) error {
 		ctx.ReplyTo(msg, msg.Data().(query))
 		return nil
@@ -42,7 +43,6 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncCancel(t *testing.T) {
-	type query string
 	sync := &Sync{
 		reqch: make(chan requestAndChan, 2048),
 		done:  make(chan chan struct{}),
@@ -65,7 +65,6 @@ func TestSyncDeferReply(t *testing.T) {
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("syncDeferReply")
-	type query string
 	type reply string
 	type deferred struct {
 		Repliable
@@ -139,7 +138,6 @@ func BenchmarkSync(b *testing.B) {
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("sync")
-	type query string
 	sync := NewSync(app)
 	sync.Handle(0, benchSyncHandler{})
 
@@ -155,7 +153,6 @@ func BenchmarkSync(b *testing.B) {
 }
 
 func ExampleSyncInstall() {
-	type query string
 	rcvf := func(msg Msg, ctx RcvContext) error {
 		ctx.ReplyTo(msg, "hello "+msg.Data().(query))
 		return nil
