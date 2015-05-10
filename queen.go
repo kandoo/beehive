@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -581,6 +582,22 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 }
 
 func (q *qee) defaultLocalBee(id uint64) *bee {
+	var inb *bucket.Bucket
+	if q.app.rate.inRate == 0 {
+		inb = bucket.New(bucket.Unlimited, 0, bucket.DefaultResolution)
+	} else {
+		inb = bucket.New(q.app.rate.inRate, q.app.rate.inMaxTokens,
+			bucket.DefaultResolution)
+	}
+
+	var outb *bucket.Bucket
+	if q.app.rate.outRate == 0 {
+		outb = bucket.New(bucket.Unlimited, 0, bucket.DefaultResolution)
+	} else {
+		outb = bucket.New(q.app.rate.outRate, q.app.rate.outMaxTokens,
+			bucket.DefaultResolution)
+	}
+
 	return &bee{
 		qee:       q,
 		beeID:     id,
@@ -590,6 +607,8 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 		app:       q.app,
 		peers:     make(map[uint64]*proxy),
 		batchSize: q.hive.config.BatchSize,
+		inBucket:  inb,
+		outBucket: outb,
 	}
 }
 

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhgob "github.com/kandoo/beehive/gob"
 	"github.com/kandoo/beehive/state"
 )
@@ -38,7 +38,7 @@ type collectorApp struct {
 
 func newAppStatCollector(h *hive) collector {
 	c := &collectorApp{hive: h}
-	a := h.NewApp(appCollector, AppNonTransactional())
+	a := h.NewApp(appCollector, NonTransactional())
 	a.Handle(beeRecord{}, localCollector{})
 	a.Handle(cmdMigrate{}, localCollector{})
 	a.Handle(pollLocalStat{}, localStatPoller{

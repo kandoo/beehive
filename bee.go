@@ -14,6 +14,7 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/raft"
 	"github.com/kandoo/beehive/state"
 )
@@ -45,6 +46,9 @@ type bee struct {
 	handleMsg func(mhs []msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
 	batchSize int
+
+	inBucket  *bucket.Bucket
+	outBucket *bucket.Bucket
 
 	node       *raft.Node
 	ticker     *time.Ticker
@@ -281,10 +285,18 @@ func (b *bee) start() {
 			return
 		}
 	}
+
 	b.status = beeStatusStarted
 	glog.V(2).Infof("%v started", b)
+
 	dataCh := b.dataCh.out()
 	batch := make([]msgAndHandler, 0, b.batchSize)
+
+	inT := b.inBucket.Ticker()
+	defer inT.Stop()
+	outT := b.outBucket.Ticker()
+	defer outT.Stop()
+
 	for b.status == beeStatusStarted {
 		select {
 		case d := <-dataCh:
@@ -298,11 +310,29 @@ func (b *bee) start() {
 					break loop
 				}
 			}
+
+			if !b.inBucket.Get(uint64(len(batch))) {
+				dataCh = nil
+				break
+			}
+
 			b.handleMsg(batch)
 			batch = batch[0:0]
 
 		case c := <-b.ctrlCh:
 			b.handleCmd(c)
+
+		case <-outT.C:
+			b.outBucket.Tick()
+
+		case <-inT.C:
+			b.inBucket.Tick()
+
+			if dataCh == nil && b.inBucket.Get(uint64(len(batch))) {
+				b.handleMsg(batch)
+				batch = batch[0:0]
+				dataCh = b.dataCh.out()
+			}
 		}
 	}
 }
@@ -374,9 +404,7 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 			} else if len(b.msgBufL1) == 0 && b.stateL2.HasEmptyTx() {
 				// If there is no pending L1 message and there is no state change,
 				// emit the buffered messages in L2 as a shortcut.
-				for m := range b.msgBufL2 {
-					b.doEmit(b.msgBufL2[m])
-				}
+				b.doEmit(b.msgBufL2)
 				b.resetTx(b.stateL2, &b.msgBufL2)
 			} else {
 				err = b.commitTxL2()
@@ -665,19 +693,32 @@ func (b *bee) Emit(msgData interface{}) {
 	b.bufferOrEmit(newMsgFromData(msgData, b.ID(), 0))
 }
 
-func (b *bee) doEmit(msg *msg) {
-	b.hive.enqueMsg(msg)
+func (b *bee) doEmit(msgs []*msg) {
+	if !b.outBucket.Get(uint64(len(msgs))) {
+		t := b.outBucket.Ticker()
+		for {
+			<-t.C
+			b.outBucket.Tick()
+			if b.outBucket.Get(uint64(len(msgs))) {
+				break
+			}
+		}
+	}
+
+	for i := range msgs {
+		b.hive.enqueMsg(msgs[i])
+	}
 }
 
-func (b *bee) bufferOrEmit(msg *msg) {
+func (b *bee) bufferOrEmit(m *msg) {
 	dicts, msgs := b.currentState()
 	if dicts.TxStatus() != state.TxOpen {
-		b.doEmit(msg)
+		b.doEmit([]*msg{m})
 		return
 	}
 
-	glog.V(2).Infof("buffers msg %+v in tx", msg)
-	*msgs = append(*msgs, msg)
+	glog.V(2).Infof("buffers msg %+v in tx", m)
+	*msgs = append(*msgs, m)
 }
 
 func (b *bee) SendToCell(msgData interface{}, app string, cell CellKey) {
@@ -755,16 +796,14 @@ func (b *bee) commitTxBothLayers() (err error) {
 			goto reset
 		}
 	}
+
 	if err = b.stateL1.CommitTx(); err != nil {
 		goto reset
 	}
-	for i := range b.msgBufL1 {
-		b.doEmit(b.msgBufL1[i])
-	}
+
+	b.doEmit(b.msgBufL1)
 	if hasL2 {
-		for i := range b.msgBufL2 {
-			b.doEmit(b.msgBufL2[i])
-		}
+		b.doEmit(b.msgBufL2)
 	}
 
 reset:
@@ -782,9 +821,7 @@ func (b *bee) commitTxL1() (err error) {
 	}
 
 	if err = b.stateL1.CommitTx(); err == nil {
-		for i := range b.msgBufL1 {
-			b.doEmit(b.msgBufL1[i])
-		}
+		b.doEmit(b.msgBufL1)
 	}
 	b.resetTx(b.stateL1, &b.msgBufL1)
 	return
@@ -1075,10 +1112,11 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 			for _, msg := range r.Msgs {
 				msg.MsgFrom = b.beeID
 				glog.V(2).Infof("%v emits %#v", b, msg)
-				b.doEmit(msg)
 			}
+			b.doEmit(r.Msgs)
 		}
 		return nil, nil
+
 	case noOp:
 		return nil, nil
 	}

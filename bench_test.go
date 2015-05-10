@@ -71,16 +71,16 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 
 func BenchmarkEndToEndTransientNoOp(b *testing.B) {
 	benchmarkEndToEnd(b, "tx-noop", 1, 0, benchNoOpHandler{},
-		AppNonTransactional())
+		NonTransactional())
 }
 
 func BenchmarkEndToEndTransientBytes(b *testing.B) {
 	benchmarkEndToEnd(b, "tx-bytes", 1, 0, benchBytesHandler{},
-		AppNonTransactional())
+		NonTransactional())
 }
 
 func BenchmarkEndToEndTransientGob(b *testing.B) {
-	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, AppNonTransactional())
+	benchmarkEndToEnd(b, "tx-gob", 1, 0, benchGobHandler{}, NonTransactional())
 }
 
 func BenchmarkEndToEndTransactionalNoOp(b *testing.B) {

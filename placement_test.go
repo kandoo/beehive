@@ -21,8 +21,8 @@ func (m nonLocalPlacementMethod) Place(cells MappedCells, thisHive Hive,
 }
 
 func registerPlacementApp(h Hive, ch chan uint64) App {
-	a := h.NewApp("placementapp", AppNonTransactional(),
-		AppWithPlacement(nonLocalPlacementMethod{}))
+	a := h.NewApp("placementapp", NonTransactional(),
+		WithPlacement(nonLocalPlacementMethod{}))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"D", "Centralized"}}
 	}

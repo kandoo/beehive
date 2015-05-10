@@ -7,6 +7,7 @@ import (
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
+	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -81,19 +82,39 @@ func Sticky() AppOption {
 	}
 }
 
-// AppNonTransactional is an application option that makes the application
+// NonTransactional is an application option that makes the application
 // non-transactional.
-func AppNonTransactional() AppOption {
+func NonTransactional() AppOption {
 	return func(a *app) {
 		a.flags &= ^appFlagTransactional
 	}
 }
 
-// AppWithPlacement is an application option that customizes the default
+// WithPlacement is an application option that customizes the default
 // placement strategy for the application.
-func AppWithPlacement(p PlacementMethod) AppOption {
+func WithPlacement(m PlacementMethod) AppOption {
 	return func(a *app) {
-		a.placement = p
+		a.placement = m
+	}
+}
+
+// LimitInRate is an application option that limits the rate of incoming
+// messages of each bee of an application using a token bucket with the given
+// rate and the given maximum.
+func LimitInRate(rate bucket.Rate, max uint64) AppOption {
+	return func(a *app) {
+		a.rate.inRate = rate
+		a.rate.inMaxTokens = max
+	}
+}
+
+// LimitOutRate is an application option that limits the rate of outgoing
+// messages of each bee of an application using a token bucket with the given
+// rate and the given maximum.
+func LimitOutRate(rate bucket.Rate, max uint64) AppOption {
+	return func(a *app) {
+		a.rate.outRate = rate
+		a.rate.outMaxTokens = max
 	}
 }
 
@@ -183,6 +204,13 @@ const (
 	appFlagTransactional
 )
 
+type appRate struct {
+	inRate       bucket.Rate
+	inMaxTokens  uint64
+	outRate      bucket.Rate
+	outMaxTokens uint64
+}
+
 type app struct {
 	name       string
 	hive       *hive
@@ -192,6 +220,7 @@ type app struct {
 	replFactor int
 	placement  PlacementMethod
 	router     *mux.Router
+	rate       appRate
 }
 
 func (a *app) String() string {
