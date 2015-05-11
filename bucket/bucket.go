@@ -74,6 +74,14 @@ func (b *Bucket) Unlimited() bool {
 	return b == nil
 }
 
+// Max returns the maximum number of tokens that this bucket can store.
+func (b *Bucket) Max() uint64 {
+	if b.Unlimited() {
+		return ^uint64(0)
+	}
+	return b.max
+}
+
 // Has returns whether the bucket has at least t tocken.
 func (b *Bucket) Has(t uint64) bool {
 	if b.Unlimited() {
