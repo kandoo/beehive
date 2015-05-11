@@ -598,6 +598,13 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 			bucket.DefaultResolution)
 	}
 
+	var batch int
+	if int(q.app.rate.inMaxTokens) < q.hive.config.BatchSize {
+		batch = int(q.app.rate.inMaxTokens)
+	} else {
+		batch = q.hive.config.BatchSize
+	}
+
 	return &bee{
 		qee:       q,
 		beeID:     id,
@@ -606,7 +613,7 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 		hive:      q.hive,
 		app:       q.app,
 		peers:     make(map[uint64]*proxy),
-		batchSize: q.hive.config.BatchSize,
+		batchSize: batch,
 		inBucket:  inb,
 		outBucket: outb,
 	}

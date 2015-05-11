@@ -694,19 +694,35 @@ func (b *bee) Emit(msgData interface{}) {
 }
 
 func (b *bee) doEmit(msgs []*msg) {
-	if !b.outBucket.Get(uint64(len(msgs))) {
-		t := b.outBucket.Ticker()
-		for {
-			<-t.C
-			b.outBucket.Tick()
-			if b.outBucket.Get(uint64(len(msgs))) {
-				break
+	len := uint64(len(msgs))
+	max := b.outBucket.Max()
+
+	if len <= max {
+		if !b.outBucket.Get(len) {
+			t := b.outBucket.Ticker()
+			for {
+				<-t.C
+				b.outBucket.Tick()
+				if b.outBucket.Get(len) {
+					break
+				}
 			}
 		}
+
+		for i := range msgs {
+			b.hive.enqueMsg(msgs[i])
+		}
+
+		return
 	}
 
-	for i := range msgs {
-		b.hive.enqueMsg(msgs[i])
+	// If the number of messages is larger than the maximum bucket capacity.
+	for i := uint64(0); i < len; i += max {
+		if i+max <= len {
+			b.doEmit(msgs[i : i+max])
+		} else {
+			b.doEmit(msgs[i:len])
+		}
 	}
 }
 
