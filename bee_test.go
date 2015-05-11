@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -50,16 +51,102 @@ func TestDeferReply(t *testing.T) {
 	removeState(cfg)
 	h := NewHiveWithConfig(cfg)
 
-	go h.Start()
-	defer h.Stop()
-
 	app := h.NewApp("defer")
 	app.HandleFunc(ping{}, mapf, pongf)
 	app.HandleFunc(send{}, mapf, pongf)
 	app.HandleFunc(pong{}, mapf, pingf)
 
+	go h.Start()
+	defer h.Stop()
+
 	h.Emit(pong{})
 	<-ch
+}
+
+func TestInRate(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-bee-rate"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
+	type rateTestMsg struct{}
+	ch := make(chan time.Time)
+	rcvf := func(msg Msg, ctx RcvContext) error {
+		ch <- time.Now()
+		return nil
+	}
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return ctx.LocalMappedCells()
+	}
+
+	app := h.NewApp("rate", LimitInRate(1*bucket.TPS, 1))
+	app.HandleFunc(rateTestMsg{}, mapf, rcvf)
+
+	go h.Start()
+	defer h.Stop()
+
+	h.Emit(rateTestMsg{})
+	h.Emit(rateTestMsg{})
+
+	t1 := <-ch
+	t2 := <-ch
+	if t2.Sub(t1) < 999*time.Millisecond {
+		t.Errorf("the incoming message rate is higher than 1 tps: t1=%v t2=%v", t1,
+			t2)
+	}
+}
+
+func TestOutRate(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-bee-rate"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
+	type outRateTestMsg struct{}
+	type outRateTestStart struct{}
+
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return ctx.LocalMappedCells()
+	}
+
+	echof := func(msg Msg, ctx RcvContext) error {
+		for i := 0; i < 2; i++ {
+			ctx.ReplyTo(msg, msg.Data())
+		}
+		return nil
+	}
+
+	ch := make(chan time.Time)
+	sinkf := func(msg Msg, ctx RcvContext) error {
+		switch msg.Data().(type) {
+		case outRateTestMsg:
+			ch <- time.Now()
+		case outRateTestStart:
+			ctx.Emit(outRateTestMsg{})
+		}
+		return nil
+	}
+
+	eapp := h.NewApp("echo", LimitOutRate(1*bucket.TPS, 1))
+	eapp.HandleFunc(outRateTestMsg{}, mapf, echof)
+
+	sapp := h.NewApp("sink")
+	sapp.HandleFunc(outRateTestMsg{}, mapf, sinkf)
+	sapp.HandleFunc(outRateTestStart{}, mapf, sinkf)
+
+	go h.Start()
+	defer h.Stop()
+
+	h.Emit(outRateTestStart{})
+
+	t1 := <-ch
+	t2 := <-ch
+
+	if t2.Sub(t1) < 999*time.Millisecond {
+		t.Errorf("output rate is higher than 1 tps: t1=%v t2=%v", t1, t2)
+	}
 }
 
 type benchBeeHandler struct {
