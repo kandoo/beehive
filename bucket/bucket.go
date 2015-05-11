@@ -100,6 +100,10 @@ func (b *Bucket) Get(t uint64) bool {
 		return true
 	}
 
+	if b.max < t {
+		panic("bucket: request is more than max tokens")
+	}
+
 	for {
 		oldt := atomic.LoadUint64(&b.tokens)
 		if oldt < t {
