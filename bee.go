@@ -45,7 +45,7 @@ type bee struct {
 	ctrlCh    chan cmdAndChannel
 	handleMsg func(mhs []msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
-	batchSize int
+	batchSize uint
 
 	inBucket  *bucket.Bucket
 	outBucket *bucket.Bucket
@@ -302,7 +302,7 @@ func (b *bee) start() {
 		case d := <-dataCh:
 			batch = append(batch, d)
 		loop:
-			for len(batch) < b.batchSize {
+			for uint(len(batch)) < b.batchSize {
 				select {
 				case d = <-dataCh:
 					batch = append(batch, d)

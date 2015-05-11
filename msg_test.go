@@ -33,14 +33,14 @@ func TestMsgChannelQueue(t *testing.T) {
 }
 
 func TestMsgChannel(t *testing.T) {
-	sent := 1024 * 10
+	sent := uint(1024 * 10)
 	ch := newMsgChannel(sent / 10)
 	in := ch.in()
-	for i := 0; i < sent; i++ {
+	for i := uint(0); i < sent; i++ {
 		in <- msgAndHandler{msg: &msg{MsgData: i}}
 	}
 	out := ch.out()
-	for i := 0; i < sent; i++ {
+	for i := uint(0); i < sent; i++ {
 		mh := <-out
 		if mh.msg.MsgData != i {
 			t.Errorf("invalid message: actual=%v want=%v", mh.msg.Data, i)
@@ -49,14 +49,14 @@ func TestMsgChannel(t *testing.T) {
 }
 
 func TestMsgChannelParallel(t *testing.T) {
-	sent := 1024 * 10
+	sent := uint(1024 * 10)
 	ch := newMsgChannel(sent / 10)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
 		in := ch.in()
-		for i := 0; i < sent; i++ {
+		for i := uint(0); i < sent; i++ {
 			in <- msgAndHandler{msg: &msg{MsgData: i}}
 		}
 		wg.Done()
@@ -64,7 +64,7 @@ func TestMsgChannelParallel(t *testing.T) {
 
 	go func() {
 		out := ch.out()
-		for i := 0; i < sent; i++ {
+		for i := uint(0); i < sent; i++ {
 			mh := <-out
 			if mh.msg.MsgData != i {
 				t.Errorf("invalid message: actual=%v want=%v", mh.msg.Data, i)
@@ -79,15 +79,15 @@ func TestMsgChannelParallel(t *testing.T) {
 func BenchmarkMsgChannel(b *testing.B) {
 	b.StopTimer()
 
-	sent := b.N
-	ch := newMsgChannel(sent / b.N)
+	sent := uint(b.N)
+	ch := newMsgChannel(1)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 
 	b.StartTimer()
 	go func() {
 		in := ch.in()
-		for i := 0; i < sent; i++ {
+		for i := uint(0); i < sent; i++ {
 			in <- msgAndHandler{}
 		}
 		wg.Done()
@@ -95,7 +95,7 @@ func BenchmarkMsgChannel(b *testing.B) {
 
 	go func() {
 		out := ch.out()
-		for i := 0; i < sent; i++ {
+		for i := uint(0); i < sent; i++ {
 			<-out
 		}
 		wg.Done()

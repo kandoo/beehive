@@ -184,7 +184,7 @@ func BenchmarkBeePersistence(b *testing.B) {
 			flags: appFlagTransactional | appFlagPersistent,
 		},
 		stateL1:   state.NewTransactional(state.NewInMem()),
-		dataCh:    newMsgChannel(b.N),
+		dataCh:    newMsgChannel(uint(b.N)),
 		batchSize: 1024,
 	}
 	removeState(bee.hive.config)
@@ -194,13 +194,13 @@ func BenchmarkBeePersistence(b *testing.B) {
 
 	h := benchBeeHandler{data: []byte{1, 1, 1, 1}}
 	mhs := make([]msgAndHandler, bee.batchSize)
-	for j := 0; j < bee.batchSize; j++ {
+	for j := uint(0); j < bee.batchSize; j++ {
 		mhs[j] = msgAndHandler{
 			msg:     &msg{},
 			handler: h,
 		}
 	}
-	for i := 0; i < b.N; i += bee.batchSize {
+	for i := uint(0); i < uint(b.N); i += bee.batchSize {
 		bee.handleMsg(mhs)
 	}
 

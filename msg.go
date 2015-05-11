@@ -107,7 +107,7 @@ type msgChannel struct {
 	end   int
 }
 
-func newMsgChannel(bufSize int) *msgChannel {
+func newMsgChannel(bufSize uint) *msgChannel {
 	q := &msgChannel{
 		chin:  make(chan msgAndHandler, bufSize),
 		chout: make(chan msgAndHandler, bufSize),
