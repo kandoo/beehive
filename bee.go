@@ -943,6 +943,10 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 		fch := make(chan uint64)
 
 		tries := r - 1
+		if len(hives) < tries {
+			tries = len(hives)
+		}
+
 		for i := 0; i < tries; i++ {
 			blacklist = append(blacklist, hives[i])
 			go func(i int) {
@@ -1025,8 +1029,6 @@ func (b *bee) handoff(to uint64) error {
 	if _, err := b.qee.sendCmdToBee(to, cmdSync{}); err != nil {
 		return err
 	}
-	// TODO(soheil): do we really need to stop the node here?
-	b.stopNode()
 
 	ch := make(chan error)
 	go func() {
@@ -1036,9 +1038,6 @@ func (b *bee) handoff(to uint64) error {
 	}()
 
 	time.Sleep(b.hive.config.RaftElectTimeout())
-	if err := b.startNode(); err != nil {
-		glog.Fatalf("%v cannot restart node: %v", b, err)
-	}
 
 	if _, err := b.hive.node.Process(context.TODO(), noOp{}); err != nil {
 		glog.Errorf("%v cannot sync raft: %v", err)
