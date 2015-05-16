@@ -257,10 +257,10 @@ func (n *Node) ProcessConfChange(ctx context.Context, cc raftpb.ConfChange,
 }
 
 func (n *Node) applyEntry(e raftpb.Entry) {
-	glog.V(2).Infof("%v applies normal entry %v: %#v", n, e.Index, e)
+	glog.V(3).Infof("%v applies normal entry %v: %#v", n, e.Index, e)
 
 	if len(e.Data) == 0 {
-		glog.V(2).Infof("raft entry %v has no data", e.Index)
+		glog.V(3).Infof("raft entry %v has no data", e.Index)
 		return
 	}
 

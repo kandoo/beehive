@@ -129,11 +129,11 @@ func (h *v1Handler) handleCmd(w http.ResponseWriter, r *http.Request) {
 func (h *v1Handler) processCommand(c cmd) cmdResult {
 	var ctrlCh chan cmdAndChannel
 	if c.App == "" {
-		glog.V(2).Infof("%v handles command to hive: %v", h.srv.hive, c)
+		glog.V(3).Infof("%v handles command to hive: %v", h.srv.hive, c)
 		ctrlCh = h.srv.hive.ctrlCh
 	} else {
 		a, ok := h.srv.hive.app(c.App)
-		glog.V(2).Infof("%v handles command to app %v: %v", h.srv.hive, a, c)
+		glog.V(3).Infof("%v handles command to app %v: %v", h.srv.hive, a, c)
 		if !ok {
 			return cmdResult{
 				Err: bhgob.Errorf("%v cannot find app %v", h.srv.hive, c.App),
@@ -160,7 +160,7 @@ func (h *v1Handler) processCommand(c cmd) cmdResult {
 	for {
 		select {
 		case res := <-ch:
-			glog.V(2).Infof("server %v returned result %#v for command %v",
+			glog.V(3).Infof("server %v returned result %#v for command %v",
 				h.srv.hive.ID(), res, c)
 			return res
 
@@ -187,7 +187,7 @@ func (h *v1Handler) handleRaft(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		glog.V(2).Infof("%v handles a raft message", h.srv.hive, msg.To)
+		glog.V(3).Infof("%v handles a raft message to %v", h.srv.hive, msg.To)
 
 		if err = h.srv.hive.stepRaft(context.TODO(), msg); err != nil {
 			glog.Errorf("%v cannot step: %v", h.srv.hive, err)
@@ -205,7 +205,7 @@ func (h *v1Handler) handleBeeRaft(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		glog.V(2).Infof("%v handles a bee raft message for %v", h.srv.hive, msg.To)
+		glog.V(3).Infof("%v handles a bee raft message for %v", h.srv.hive, msg.To)
 
 		bi, err := h.srv.hive.bee(msg.To)
 		if err != nil {
