@@ -68,7 +68,7 @@ type lockMappedCell struct {
 	Cells  MappedCells
 }
 
-// transferLocks transfers cells of a colony to another colony.
+// transferCells transfers cells of a colony to another colony.
 type transferCells struct {
 	From Colony
 	To   Colony
@@ -81,6 +81,11 @@ type transferCells struct {
 // applied.
 type batchReq struct {
 	Reqs []interface{}
+}
+
+// addReq adds a request to the batched request.
+func (r *batchReq) addReq(req interface{}) {
+	r.Reqs = append(r.Reqs, req)
 }
 
 // batchRes is the response to a batch request.
@@ -149,7 +154,7 @@ func (r *registry) doApply(req interface{}) (interface{}, error) {
 	case updateColony:
 		return nil, r.updateColony(tr)
 	case lockMappedCell:
-		return r.lock(tr)
+		return r.lockCell(tr)
 	case transferCells:
 		return nil, r.transfer(tr)
 	case batchReq:
@@ -328,7 +333,7 @@ func (r *registry) mustFindBee(id uint64) BeeInfo {
 	return info
 }
 
-func (r *registry) lock(l lockMappedCell) (Colony, error) {
+func (r *registry) lockCell(l lockMappedCell) (Colony, error) {
 	if l.Colony.Leader == 0 {
 		return Colony{}, ErrInvalidParam
 	}
