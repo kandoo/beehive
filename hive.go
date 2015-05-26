@@ -365,6 +365,7 @@ func (h *hive) handleMsg(m *msg) {
 		i, err := h.bee(m.MsgTo)
 		if err != nil {
 			glog.Errorf("no such bee %v", m.MsgTo)
+			return
 		}
 		a, ok := h.app(i.App)
 		if !ok {
