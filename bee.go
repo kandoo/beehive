@@ -889,7 +889,7 @@ func (b *bee) replicate() error {
 		Msgs: b.msgBufL1,
 	}
 	ctx, ccl := context.WithTimeout(context.Background(),
-		b.hive.config.RaftElectTimeout())
+		10*b.hive.config.RaftElectTimeout())
 	defer ccl()
 	if _, err := b.raftNode().Process(ctx, commitTx(tx)); err != nil {
 		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
