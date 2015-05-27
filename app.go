@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
@@ -192,6 +193,103 @@ func (h *funcDetached) Rcv(m Msg, c RcvContext) error {
 	return h.rcvFunc(m, c)
 }
 
+type runtimeRcvContext struct {
+	*qee
+	state *state.Transactional
+}
+
+func (c runtimeRcvContext) ID() uint64 {
+	return 0
+}
+
+func (c runtimeRcvContext) Emit(msgData interface{}) {}
+
+func (c runtimeRcvContext) SendToCell(msgData interface{}, app string,
+	cell CellKey) {
+}
+
+func (c runtimeRcvContext) SendToBee(msgData interface{}, to uint64) {}
+
+func (c runtimeRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+	return nil
+}
+
+func (c runtimeRcvContext) DeferReply(msg Msg) Repliable {
+	return Repliable{}
+}
+
+func (c runtimeRcvContext) StartDetached(h DetachedHandler) uint64 {
+	return 0
+}
+
+func (c runtimeRcvContext) StartDetachedFunc(start StartFunc, stop StopFunc,
+	rcv RcvFunc) uint64 {
+
+	return 0
+}
+
+func (c runtimeRcvContext) LockCells(keys []CellKey) error {
+	return nil
+}
+
+func (c runtimeRcvContext) Snooze(d time.Duration) {}
+
+func (c runtimeRcvContext) BeeLocal() interface{} {
+	return nil
+}
+
+func (c runtimeRcvContext) SetBeeLocal(d interface{}) {}
+
+func (c runtimeRcvContext) Dict(name string) state.Dict {
+	return c.state.Dict(name)
+}
+
+func (c runtimeRcvContext) BeginTx() error {
+	return c.state.BeginTx()
+}
+
+func (c runtimeRcvContext) AbortTx() error {
+	return c.state.AbortTx()
+}
+
+func (c runtimeRcvContext) CommitTx() error {
+	return c.state.CommitTx()
+}
+
+// RuntimeMap generates an automatic runtime map function based on the given
+// rcv function.
+//
+// If there was an error in the rcv function, it will return "nil" and the
+// message will be dropped.
+func RuntimeMap(rcv RcvFunc) MapFunc {
+	return func(msg Msg, ctx MapContext) (cells MappedCells) {
+		defer func() {
+			if r := recover(); r != nil {
+				glog.Errorf("runtime map cannot find the mapped cells")
+				cells = nil
+			}
+		}()
+
+		q := ctx.(*qee)
+		rCtx := runtimeRcvContext{
+			qee:   q,
+			state: state.NewTransactional(q.app.newState()),
+		}
+
+		if err := rcv(msg, rCtx); err != nil {
+			return nil
+		}
+
+		for _, d := range rCtx.state.Dicts() {
+			d.ForEach(func(k string, v []byte) {
+				cells = append(cells, CellKey{Dict: d.Name(), Key: k})
+			})
+		}
+
+		return
+	}
+}
+
 var (
 	defaultAppOptions = []AppOption{Transactional()}
 )
@@ -301,6 +399,7 @@ func (a *app) initQee() {
 		hive:   a.hive,
 		app:    a,
 		bees:   make(map[uint64]*bee),
+		state:  state.NewTransactional(a.newState()),
 	}
 }
 

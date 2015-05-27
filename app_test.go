@@ -386,3 +386,38 @@ func TestAppHTTP(t *testing.T) {
 		t.Errorf("reponse status: actual=%v want=200 Ok", resp.Status)
 	}
 }
+
+func TestRuntimeMap(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest1"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+	a := h.NewApp("RuntimeMap")
+
+	go h.Start()
+	defer h.Stop()
+	waitTilStareted(h)
+
+	cells := MappedCells{{"1", "11"}, {"1", "12"}, {"2", "21"}}
+	rcv := func(msg Msg, ctx RcvContext) error {
+		for _, c := range cells {
+			ctx.Dict(c.Dict).Put(c.Key, []byte{})
+		}
+		return nil
+	}
+	mapped := RuntimeMap(rcv)(nil, a.(*app).qee)
+
+	for _, rc := range cells {
+		found := false
+		for _, mc := range mapped {
+			if rc == mc {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("invalid mapped cells in runtime mapper: actual=%v want=%v",
+				mapped, cells)
+		}
+	}
+}

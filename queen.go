@@ -25,7 +25,7 @@ type qee struct {
 	ctrlCh  chan cmdAndChannel
 	stopped bool
 
-	state State
+	state *state.Transactional
 
 	bees map[uint64]*bee
 }
