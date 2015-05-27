@@ -22,7 +22,7 @@ func testInMemTx(t *testing.T, abort bool) {
 		if err := d1.Put(keys[i], vals[i]); err != nil {
 			t.Error(err)
 		}
-		_, ok := state.State.(*InMem).Dicts[n1].Dict[keys[i]]
+		_, ok := state.State.(*InMem).InMemDicts[n1].Dict[keys[i]]
 		if ok {
 			t.Errorf("key is inserted before commit: %s", keys[i])
 		}
@@ -48,7 +48,7 @@ func testInMemTx(t *testing.T, abort bool) {
 	}
 
 	for i := range keys {
-		v, err := state.State.(*InMem).Dicts[n1].Get(keys[i])
+		v, err := state.State.(*InMem).InMemDicts[n1].Get(keys[i])
 		if abort {
 			if err == nil {
 				t.Errorf("key is inserted despite aborting the tx: %s", keys[i])

@@ -7,13 +7,13 @@ import (
 
 // InMem is a simple dictionary that uses in memory maps.
 type InMem struct {
-	Dicts map[string]*inMemDict
+	InMemDicts map[string]*inMemDict
 }
 
 // NewInMem creates a new InMem state.
 func NewInMem() *InMem {
 	return &InMem{
-		Dicts: make(map[string]*inMemDict),
+		InMemDicts: make(map[string]*inMemDict),
 	}
 }
 
@@ -36,11 +36,22 @@ func (s *InMem) Dict(name string) Dict {
 	return s.inMemDict(name)
 }
 
+func (s *InMem) Dicts() []Dict {
+	var dicts []Dict
+	for _, d := range s.InMemDicts {
+		dicts = append(dicts, d)
+	}
+	return dicts
+}
+
 func (s *InMem) inMemDict(name string) *inMemDict {
-	d, ok := s.Dicts[name]
+	d, ok := s.InMemDicts[name]
 	if !ok {
-		d = &inMemDict{name, make(map[string][]byte)}
-		s.Dicts[name] = d
+		d = &inMemDict{
+			DictName: name,
+			Dict:     make(map[string][]byte),
+		}
+		s.InMemDicts[name] = d
 	}
 	return d
 }

@@ -62,7 +62,7 @@ func NewTransactional(s State) *Transactional {
 
 // Transactional wraps any state dictionary and makes it transactional.
 type Transactional struct {
-	State  State
+	State
 	stage  map[string]*TxDict
 	status TxStatus
 }
