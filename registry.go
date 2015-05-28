@@ -55,7 +55,7 @@ type moveBee struct {
 	ToHive   uint64
 }
 
-// Colony is a registery request to update a colony.
+// updateColony is a registery request to update a colony.
 type updateColony struct {
 	Old Colony
 	New Colony
@@ -68,10 +68,25 @@ type lockMappedCell struct {
 	Cells  MappedCells
 }
 
-// TransferLocks transfers cells of a colony to another colony.
+// transferLocks transfers cells of a colony to another colony.
 type transferCells struct {
 	From Colony
 	To   Colony
+}
+
+// batchReq is a batch of registery requests that should be processed in a
+// seqeunce. The response to batch requests is batchRes.
+//
+// batchReq are not transactions. Each one of the requests is independently
+// applied.
+type batchReq struct {
+	Reqs []interface{}
+}
+
+// batchRes is the response to a batch request.
+type batchRes []struct {
+	Res interface{}
+	Err bhgob.Error
 }
 
 type registry struct {
@@ -114,6 +129,10 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
+	return r.doApply(req)
+}
+
+func (r *registry) doApply(req interface{}) (interface{}, error) {
 	switch tr := req.(type) {
 	case noOp:
 		return nil, nil
@@ -133,6 +152,8 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 		return r.lock(tr)
 	case transferCells:
 		return nil, r.transfer(tr)
+	case batchReq:
+		return r.handleBatch(tr), nil
 	}
 
 	glog.Errorf("%v cannot handle %v", r, req)
@@ -467,17 +488,34 @@ func (r *registry) beeForCells(app string, cells MappedCells) (info BeeInfo,
 	return info, hasAll, nil
 }
 
+func (r *registry) handleBatch(bReq batchReq) batchRes {
+	bRes := make(batchRes, 0, len(bReq.Reqs))
+	for _, req := range bReq.Reqs {
+		res, err := r.doApply(req)
+		bRes = append(bRes, struct {
+			Res interface{}
+			Err bhgob.Error
+		}{
+			Res: res,
+			Err: bhgob.NewError(err),
+		})
+	}
+	return bRes
+}
+
 func init() {
-	gob.Register(noOp{})
-	gob.Register(newBeeID{})
-	gob.Register(newHiveID{})
+	gob.Register(BeeInfo{})
 	gob.Register(HiveInfo{})
 	gob.Register([]HiveInfo{})
-	gob.Register(BeeInfo{})
 	gob.Register(addBee{})
-	gob.Register(delBee(0))
-	gob.Register(updateColony{})
-	gob.Register(lockMappedCell{})
-	gob.Register(transferCells{})
+	gob.Register(batchReq{})
+	gob.Register(batchRes{})
 	gob.Register(cellStore{})
+	gob.Register(delBee(0))
+	gob.Register(lockMappedCell{})
+	gob.Register(newBeeID{})
+	gob.Register(newHiveID{})
+	gob.Register(noOp{})
+	gob.Register(transferCells{})
+	gob.Register(updateColony{})
 }
