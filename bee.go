@@ -187,16 +187,32 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			return
 		}
 
+		// FIXME(): add raft term to make sure it's versioned.
 		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
 		up := updateColony{
 			Old: oldc,
 			New: newc,
 		}
-		if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+
+		t := b.hive.config.RaftTick
+		// TODO(soheil): should we have a max retry?
+		// TODO(soheil): maybe do this in a go-routine.
+		for {
+			ctx, cnl := context.WithTimeout(context.Background(), t)
+			defer cnl()
+			_, err := b.hive.node.Process(ctx, up)
+			if err == nil {
+				return
+			}
+
+			if err == context.DeadlineExceeded {
+				continue
+			}
+
 			glog.Errorf("%v cannot update its colony: %v", b, err)
 			return
 		}
-		// FIXME(soheil): Add health checks here and recruite if needed.
+		// FIXME(soheil): add health checks here and recruite if needed.
 	}
 }
 
