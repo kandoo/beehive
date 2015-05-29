@@ -37,8 +37,10 @@ func (d *testDetachedHandler) Rcv(msg Msg, ctx RcvContext) error {
 
 func TestDetached(t *testing.T) {
 	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/beehive-detached-test"
 	cfg.Addr = newHiveAddrForTest()
-	h := NewHive()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
 	app := h.NewApp("TestDetached")
 
 	nDetached := 10
