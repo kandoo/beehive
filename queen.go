@@ -28,6 +28,9 @@ type qee struct {
 	state *state.Transactional
 
 	bees map[uint64]*bee
+
+	maxID  uint64
+	nextID uint64
 }
 
 func (q *qee) start() {
@@ -88,22 +91,38 @@ func (q *qee) addBee(b *bee) {
 	q.Unlock()
 }
 
-func (q *qee) allocateNewBeeID() (BeeInfo, error) {
-	res, err := q.hive.node.Process(context.TODO(), newBeeID{})
+func (q *qee) allocateBeeID() error {
+	res, err := q.hive.node.Process(context.TODO(), allocateBeeIDs{
+		Len: q.hive.config.BatchSize,
+	})
 	if err != nil {
-		return BeeInfo{}, err
+		return err
 	}
-	id := res.(uint64)
+
+	a := res.(allocateBeeIDResult)
+	q.nextID = a.From
+	q.maxID = a.To
+	return nil
+}
+
+func (q *qee) newBeeID() (BeeInfo, error) {
+	if q.maxID == 0 || q.nextID == q.maxID {
+		if err := q.allocateBeeID(); err != nil {
+			return BeeInfo{}, err
+		}
+	}
+
 	info := BeeInfo{
-		ID:   id,
+		ID:   q.nextID,
 		Hive: q.hive.ID(),
 		App:  q.app.Name(),
 	}
+	q.nextID++
 	return info, nil
 }
 
 func (q *qee) newLocalBee(withInitColony bool) (*bee, error) {
-	info, err := q.allocateNewBeeID()
+	info, err := q.newBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}
@@ -148,7 +167,7 @@ func (q *qee) newProxyBee(info BeeInfo) (*bee, error) {
 }
 
 func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
-	info, err := q.allocateNewBeeID()
+	info, err := q.newBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}

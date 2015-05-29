@@ -30,8 +30,18 @@ type newHiveID struct {
 	Addr string
 }
 
-// newBeeID is the registry request to create a unique 64-bit bee ID.
-type newBeeID struct{}
+// allocateBeeIDs is a registery request to allocate a range of bee IDs.
+type allocateBeeIDs struct {
+	Len uint // Length of the range requested. Should not be zero.
+}
+
+// allocateBeeIDResult is the result of the allocateBeeIDs request.
+//
+// The allocated ID range is [From, To).
+type allocateBeeIDResult struct {
+	From uint64
+	To   uint64
+}
 
 // BeeInfo stores the metadata about a bee.
 type BeeInfo struct {
@@ -42,13 +52,13 @@ type BeeInfo struct {
 	Detached bool   `json:"detached"`
 }
 
-// addBee is the registery request to add a new bee.
+// addBee is a registery request to add a new bee.
 type addBee BeeInfo
 
-// delBee is the registery request to delete a bee.
+// delBee is a registery request to delete a bee.
 type delBee uint64
 
-// moveBee is the registery request to move a bee from a hive to another hive.
+// moveBee is a registery request to move a bee from a hive to another hive.
 type moveBee struct {
 	ID       uint64
 	FromHive uint64
@@ -109,7 +119,7 @@ func newRegistry(name string) *registry {
 	return &registry{
 		name:   name,
 		HiveID: 1, // We need to start from one to preserve the first hive's ID.
-		BeeID:  0,
+		BeeID:  1,
 		Hives:  make(map[uint64]HiveInfo),
 		Bees:   make(map[uint64]BeeInfo),
 		Store:  newCellStore(),
@@ -138,13 +148,15 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 }
 
 func (r *registry) doApply(req interface{}) (interface{}, error) {
+	glog.Infof("%v applies: %#v", r, req)
+
 	switch tr := req.(type) {
 	case noOp:
 		return nil, nil
 	case newHiveID:
 		return r.newHiveID(tr.Addr), nil
-	case newBeeID:
-		return r.newBeeID(), nil
+	case allocateBeeIDs:
+		return r.allocBeeIDs(tr)
 	case addBee:
 		return nil, r.addBee(BeeInfo(tr))
 	case delBee:
@@ -199,10 +211,19 @@ func (r *registry) newHiveID(addr string) uint64 {
 	return r.HiveID
 }
 
-func (r *registry) newBeeID() uint64 {
-	r.BeeID++
-	glog.V(2).Infof("%v allocates new bee ID %v", r, r.BeeID)
-	return r.BeeID
+func (r *registry) allocBeeIDs(a allocateBeeIDs) (allocateBeeIDResult, error) {
+	if a.Len == 0 {
+		return allocateBeeIDResult{}, ErrInvalidParam
+	}
+
+	var res allocateBeeIDResult
+	res.From = r.BeeID
+	r.BeeID += uint64(a.Len)
+	res.To = r.BeeID
+
+	glog.V(2).Infof("%v allocates new bee IDs up to %v", r, r.BeeID)
+
+	return res, nil
 }
 
 func (r *registry) delHive(id uint64) error {
@@ -513,12 +534,13 @@ func init() {
 	gob.Register(HiveInfo{})
 	gob.Register([]HiveInfo{})
 	gob.Register(addBee{})
+	gob.Register(allocateBeeIDResult{})
+	gob.Register(allocateBeeIDs{})
 	gob.Register(batchReq{})
 	gob.Register(batchRes{})
 	gob.Register(cellStore{})
 	gob.Register(delBee(0))
 	gob.Register(lockMappedCell{})
-	gob.Register(newBeeID{})
 	gob.Register(newHiveID{})
 	gob.Register(noOp{})
 	gob.Register(transferCells{})
