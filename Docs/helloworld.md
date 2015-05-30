@@ -7,6 +7,7 @@ each name in a dictionary.
 
 This is the simplest way to create an application in beehive:
 ```go
+package main
 
 import bh "github.com/kandoo/beehive"
 
@@ -21,11 +22,11 @@ func main() {
 	app.HandleFunc(string(""), mapf, rcvf)
 	// Emit simply emits a message, here a
 	// string of your name.
-    go bh.Emit("your name")
-    // We emit another message with the same name
-    // to test the counting feature.
-    go bh.Emit("your name")
-    // Start starts the default hive.
+	go bh.Emit("your name")
+	// We emit another message with the same name
+	// to test the counting feature.
+	go bh.Emit("your name")
+	// Start starts the default hive.
 	bh.Start()
 }
 ```
@@ -36,26 +37,26 @@ Let's first implement the `rcvf`:
 func rcvf(msg bh.Msg, ctx bh.RcvContext) error {
 	// The name is stored in the message data.
 	name := msg.Data().(string)
-	// Using cx.Dict you can get (or create) a dictionary.
+	// Using ctx.Dict you can get (or create) a dictionary.
 	dict := ctx.Dict("hello_dict")
-	// Using Get(), you can get the value for a key in the 
-	// dictionary. Keys are always string and values
-	// are always []byte.
+	// Using Get(), you can get the value associated with
+	// a key in the dictionary. Keys are always string
+	// and values are generic interface{}'s.
 	v, err := dict.Get(name)
 	// If there is an error, the entry is not in the 
-	// dictionary. So, we initialize v to 0.
-	if err != nil {
-		v = []byte{0}
+	// dictionary. Otherwise, we sent cnt based on
+	// the value we have got.
+	var cnt int
+	if err == nil {
+		cnt = v.(int)
 	}
-	// Now we increment the count. Well, this would
-	// overflow at 255 but that's fine for the purpose
-	// of this tutorial.
-	cnt := v[0] + 1
+	// Now we increment the count.
+	cnt++
 	// And then we print the hello message. ctx.ID() returns
 	// the ID of the bee that is running this handler.
 	fmt.Printf("%v> hello %s (%d)!\n", ctx.ID(), name, cnt)
 	// Finally we update the count stored in the dictionary.
-	dict.Put(name, []byte{cnt})
+	dict.Put(name, cnt)
 	return nil
 }
 ```
@@ -65,9 +66,9 @@ lookup the name in `hello_dict` and find out how many times
 we have said hello for this name. Then we say hello accordingly!
 
 To ensure that `rcvf` behaves well when distributed, we need to
-make sure each name in `hello_dict` is updated in the same hive.
-This is very simple to do in Beehive. We just need to implement a 
-map function that maps the message to `("hello_dict", name)`:
+make sure that each name in `hello_dict` is updated in the same
+go-routine. This is very simple to do in Beehive. We just need to
+implement a map function that maps the message to `("hello_dict", name)`:
 ```go
 func mapf(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	// rcvf accesses hello_dict using the name
@@ -81,13 +82,12 @@ func mapf(msg bh.Msg, ctx bh.MapContext) bh.MappedCells {
 }
 ```
 
-This ensures that all messages containing the same name will be
+This ensures that all messages with the same name will be
 processed by the same bee (or in the same go-routine).
 
 When you run this application, you will see the following output:
 ```
 # go run helloworld.go
-
 1> hello your name (1)!
 1> hello your name (2)!
 ```
@@ -95,7 +95,6 @@ When you run this application, you will see the following output:
 If you kill and restart the program, you will see the following output:
 ```
 # go run helloworld.go
-
 1> hello your name (3)!
 1> hello your name (4)!
 ```
@@ -127,8 +126,7 @@ func main() {
 }
 ```
 
-The output of this application should be as follows (with a slightly different
-order and with an occasional raft logs ;) ):
+The output of this application should be as follows:
 
 ```
 # go run helloworld.go
@@ -141,7 +139,8 @@ order and with an occasional raft logs ;) ):
 1> hello 1st name (3)!
 ```
 
-Note that "1st name" and "2nd name" are handled by different bees.
+Note that "1st name" and "2nd name" are handled by different bees,
+and each bee maintains its own isolated counter in its dictionary.
 
 In our example, we made the application persisent and transactional:
 ```go
@@ -149,7 +148,7 @@ bh.NewApp(..., bh.Persistent(1))
 ```
 
 If you re-run the program (you can exit with `ctrl+c`),
-you see that the counts are preserved for each name:
+you'll see that the counts are preserved for each name:
 ```
 # go run helloworld.go
 
