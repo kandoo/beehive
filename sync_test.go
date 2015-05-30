@@ -75,17 +75,18 @@ func TestSyncDeferReply(t *testing.T) {
 	deferf := func(msg Msg, ctx RcvContext) error {
 		deferredCh <- struct{}{}
 		r := ctx.DeferReply(msg)
-		return ctx.Dict("sync").PutGob("reply", deferred{
+		return ctx.Dict("sync").Put("reply", deferred{
 			Repliable: r,
 			Q:         msg.Data().(query),
 		})
 	}
 
 	replyf := func(msg Msg, ctx RcvContext) error {
-		var d deferred
-		if err := ctx.Dict("sync").GetGob("reply", &d); err != nil {
+		v, err := ctx.Dict("sync").Get("reply")
+		if err != nil {
 			t.Fatalf("cannot decode reply: %v", err)
 		}
+		d := v.(deferred)
 		d.Reply(ctx, d.Q)
 		return nil
 	}

@@ -29,13 +29,14 @@ func TestDeferReply(t *testing.T) {
 		case ping:
 			ctx.Emit(send{})
 			r := ctx.DeferReply(msg)
-			return ctx.Dict("reply").PutGob("def", &r)
+			return ctx.Dict("reply").Put("def", r)
 
 		case send:
-			var r Repliable
-			if err := ctx.Dict("reply").GetGob("def", &r); err != nil {
+			v, err := ctx.Dict("reply").Get("def")
+			if err != nil {
 				return err
 			}
+			r := v.(Repliable)
 			r.Reply(ctx, pong{})
 		}
 		return nil

@@ -1,8 +1,6 @@
 package routing
 
 import (
-	"bytes"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"sort"
@@ -64,23 +62,6 @@ func (r Route) Contains(path Path) bool {
 
 // Routing table represents the route for each destination node.
 type RoutingTable map[Node]Route
-
-// Encode encodes routes into bytes using GOB.
-func (r RoutingTable) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(r); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// Decode decodes routes from bytes using GOB.
-func (r *RoutingTable) Decode(b []byte) error {
-	buf := bytes.NewBuffer(b)
-	dec := gob.NewDecoder(buf)
-	return dec.Decode(r)
-}
 
 // PathByLen is used to sort a []Path based on the length of paths. It
 // implements sort.Interface for []Path.
@@ -203,11 +184,8 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 		ctx.SetBeeLocal(false)
 
-		ctx.Dict(routeDict).ForEach(func(k string, v []byte) {
-			var tbl RoutingTable
-			if err := tbl.Decode(v); err != nil {
-				return
-			}
+		ctx.Dict(routeDict).ForEach(func(k string, v interface{}) {
+			tbl := v.(RoutingTable)
 
 			from := Node{
 				ID: string(k),
@@ -235,9 +213,7 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 				tbl[to] = route
 			}
 
-			if v, err := tbl.Encode(); err == nil {
-				ctx.Dict(routeDict).Put(k, v)
-			}
+			ctx.Dict(routeDict).Put(k, tbl)
 		})
 	}
 
@@ -266,7 +242,7 @@ func (r Router) neighbors(node Node, ctx bh.RcvContext) Edges {
 	dict := ctx.Dict(neighDict)
 	var neighs Edges
 	if v, err := dict.Get(node.Key()); err == nil {
-		neighs.Decode(v)
+		neighs = v.(Edges)
 	}
 	return neighs
 }
@@ -277,11 +253,7 @@ func (r Router) appendNieghbor(edge Edge, ctx bh.RcvContext) error {
 		return fmt.Errorf("%v is already a neighbor", edge)
 	}
 	neighs = append(neighs, edge)
-	b, err := neighs.Encode()
-	if err != nil {
-		return err
-	}
-	ctx.Dict(neighDict).Put(edge.To.Key(), b)
+	ctx.Dict(neighDict).Put(edge.To.Key(), neighs)
 	return nil
 }
 
@@ -289,7 +261,7 @@ func (r Router) routingTable(from Node, ctx bh.RcvContext) RoutingTable {
 	dict := ctx.Dict(routeDict)
 	var tbl RoutingTable
 	if v, err := dict.Get(from.Key()); err == nil {
-		tbl.Decode(v)
+		tbl = v.(RoutingTable)
 	} else {
 		tbl = make(RoutingTable)
 	}
@@ -332,11 +304,6 @@ func (r Router) appendToRoutingTable(path Path, ctx bh.RcvContext) (Route,
 	}
 
 	tbl[to] = route
-	b, err := tbl.Encode()
-	if err != nil {
-		return route, err
-	}
-
-	ctx.Dict(routeDict).Put(from.Key(), b)
+	ctx.Dict(routeDict).Put(from.Key(), tbl)
 	return route, nil
 }

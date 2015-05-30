@@ -6,7 +6,7 @@ func testTx(t *testing.T, parent State, tx *Transactional, open bool) {
 	d := "d"
 	k1 := "testkey1"
 	k2 := "testkey2"
-	v := []byte("testvalue")
+	v := "testvalue"
 	if !open {
 		if err := tx.BeginTx(); err != nil {
 			t.Errorf("error in begin tx: %v", err)
@@ -59,7 +59,7 @@ func BenchmarkTransactions(b *testing.B) {
 	tx := NewTransactional(inm)
 	d := "d"
 	k := "k"
-	v := []byte("v")
+	v := "v"
 	for i := 0; i < b.N; i++ {
 		tx.BeginTx()
 		tx.Dict(d).Put(k, v)

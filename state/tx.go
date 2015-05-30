@@ -206,7 +206,7 @@ func (d *TxDict) Name() string {
 	return d.Dict.Name()
 }
 
-func (d *TxDict) Put(k string, v []byte) error {
+func (d *TxDict) Put(k string, v interface{}) error {
 	d.Ops[k] = Op{
 		T: Put,
 		D: d.Dict.Name(),
@@ -216,7 +216,7 @@ func (d *TxDict) Put(k string, v []byte) error {
 	return nil
 }
 
-func (d *TxDict) Get(k string) ([]byte, error) {
+func (d *TxDict) Get(k string) (interface{}, error) {
 	op, ok := d.Ops[k]
 	if ok {
 		switch op.T {
@@ -239,7 +239,7 @@ func (d *TxDict) Del(k string) error {
 }
 
 func (d *TxDict) ForEach(f IterFn) {
-	d.Dict.ForEach(func(k string, v []byte) {
+	d.Dict.ForEach(func(k string, v interface{}) {
 		op, ok := d.Ops[k]
 		if ok {
 			switch op.T {
@@ -253,14 +253,6 @@ func (d *TxDict) ForEach(f IterFn) {
 
 		f(k, v)
 	})
-}
-
-func (d *TxDict) GetGob(k string, v interface{}) error {
-	return GetGob(d, k, v)
-}
-
-func (d *TxDict) PutGob(k string, v interface{}) error {
-	return PutGob(d, k, v)
 }
 
 func (d *TxDict) BeginTx() error {

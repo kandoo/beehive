@@ -49,7 +49,7 @@ func (s *InMem) inMemDict(name string) *inMemDict {
 	if !ok {
 		d = &inMemDict{
 			DictName: name,
-			Dict:     make(map[string][]byte),
+			Dict:     make(map[string]interface{}),
 		}
 		s.InMemDicts[name] = d
 	}
@@ -58,14 +58,14 @@ func (s *InMem) inMemDict(name string) *inMemDict {
 
 type inMemDict struct {
 	DictName string
-	Dict     map[string][]byte
+	Dict     map[string]interface{}
 }
 
 func (d inMemDict) Name() string {
 	return d.DictName
 }
 
-func (d *inMemDict) Get(k string) ([]byte, error) {
+func (d *inMemDict) Get(k string) (interface{}, error) {
 	v, ok := d.Dict[k]
 	if !ok {
 		return v, ErrNoSuchKey
@@ -73,7 +73,7 @@ func (d *inMemDict) Get(k string) ([]byte, error) {
 	return v, nil
 }
 
-func (d *inMemDict) Put(k string, v []byte) error {
+func (d *inMemDict) Put(k string, v interface{}) error {
 	d.Dict[k] = v
 	return nil
 }
@@ -87,12 +87,4 @@ func (d *inMemDict) ForEach(f IterFn) {
 	for k, v := range d.Dict {
 		f(k, v)
 	}
-}
-
-func (d *inMemDict) GetGob(k string, v interface{}) error {
-	return GetGob(d, k, v)
-}
-
-func (d *inMemDict) PutGob(k string, v interface{}) error {
-	return PutGob(d, k, v)
 }

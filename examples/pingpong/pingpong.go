@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"flag"
 	"fmt"
 	"time"
@@ -17,16 +16,6 @@ var centralizedMappedCells = bh.MappedCells{{PingPongDict, "0"}}
 
 type Pxng struct {
 	Seq int
-}
-
-func (p *Pxng) decode(b []byte) {
-	p.Seq = int(binary.LittleEndian.Uint64(b))
-}
-
-func (p *Pxng) encode() []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(p.Seq))
-	return b
 }
 
 type ping struct {
@@ -62,7 +51,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		v, err := dict.Get("ping")
 		var p ping
 		if err == nil {
-			p.decode(v)
+			p = v.(ping)
 		}
 
 		if data != p {
@@ -70,7 +59,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		p.Seq += 1
-		dict.Put("ping", p.encode())
+		dict.Put("ping", p)
 
 		fmt.Printf("Ping stored to %v\n", p.Seq)
 
@@ -88,7 +77,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		v, err := dict.Get("pong")
 		var p pong
 		if err == nil {
-			p.decode(v)
+			p = v.(pong)
 		}
 
 		if data != p {
@@ -96,7 +85,7 @@ func (p *pinger) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 
 		p.Seq += 1
-		dict.Put("pong", p.encode())
+		dict.Put("pong", p)
 		fmt.Printf("Pong stored to %v\n", p.Seq)
 
 		fmt.Printf("Tx Ping %d @ %v\n", data.ping().Seq, ctx.ID())

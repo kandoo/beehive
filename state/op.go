@@ -13,7 +13,7 @@ const (
 // Op is a state operation in a transaction.
 type Op struct {
 	T OpType
-	D string // Dictionary.
-	K string // Key.
-	V []byte // Value.
+	D string      // Dictionary.
+	K string      // Key.
+	V interface{} // Value.
 }

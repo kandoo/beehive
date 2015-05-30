@@ -11,7 +11,6 @@ import (
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
-	bhgob "github.com/kandoo/beehive/gob"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -140,15 +139,17 @@ func (c localCollector) Rcv(msg Msg, ctx RcvContext) error {
 func (c localCollector) updateMatrix(r beeRecord, ctx RcvContext) {
 	d := ctx.Dict(dictLocalStat)
 	k := formatBeeID(r.Bee)
-	var lm localBeeMatrix
-	if err := d.GetGob(k, &lm); err != nil {
+	lm := localBeeMatrix{}
+	if v, err := d.Get(k); err != nil {
 		lm.BeeMatrix.Bee = r.Bee
 		lm.BeeMatrix.Matrix = make(map[uint64]uint64)
 		lm.UpdateTime = time.Now()
+	} else {
+		lm = v.(localBeeMatrix)
 	}
 	lm.BeeMatrix.Matrix[r.In.From()]++
 	lm.UpdateMsgCnt++
-	if err := d.PutGob(k, &lm); err != nil {
+	if err := d.Put(k, lm); err != nil {
 		glog.Fatalf("cannot store matrix: %v", err)
 	}
 }
@@ -160,8 +161,10 @@ func (c localCollector) updateProvenance(r beeRecord, ctx RcvContext) {
 	d := ctx.Dict(dictLocalProv)
 	k := formatBeeID(r.Bee)
 	var mx provMatrix
-	if err := d.GetGob(k, &mx); err != nil {
+	if v, err := d.Get(k); err != nil {
 		mx = make(provMatrix)
+	} else {
+		mx = v.(provMatrix)
 	}
 	stat, ok := mx[intype]
 	if !ok {
@@ -171,7 +174,7 @@ func (c localCollector) updateProvenance(r beeRecord, ctx RcvContext) {
 	for _, msg := range r.Out {
 		stat[msg.Type()]++
 	}
-	if err := d.PutGob(k, &mx); err != nil {
+	if err := d.Put(k, mx); err != nil {
 		glog.Fatalf("cannot store provenance data: %v", err)
 	}
 }
@@ -188,11 +191,8 @@ func (p localStatPoller) Map(msg Msg, ctx MapContext) MappedCells {
 
 func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 	d := ctx.Dict(dictLocalStat)
-	d.ForEach(func(k string, v []byte) {
-		var lm localBeeMatrix
-		if err := bhgob.Decode(&lm, v); err != nil {
-			return
-		}
+	d.ForEach(func(k string, v interface{}) {
+		lm := v.(localBeeMatrix)
 		now := time.Now()
 		dur := uint64(now.Sub(lm.UpdateTime) / time.Second)
 		if dur == 0 {
@@ -205,7 +205,7 @@ func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 		ctx.Emit(beeMatrixUpdate(lm.BeeMatrix))
 		lm.UpdateTime = now
 		lm.UpdateMsgCnt = 0
-		d.PutGob(k, &lm)
+		d.Put(k, lm)
 	})
 	return nil
 }
@@ -223,9 +223,8 @@ type optimizerStat struct {
 type optimizerCollector struct{}
 
 func (c optimizerCollector) isMigrated(b uint64, optDict state.Dict) bool {
-	var os optimizerStat
-	err := optDict.GetGob(formatBeeID(b), &os)
-	return err == nil && os.Migrated
+	v, err := optDict.Get(formatBeeID(b))
+	return err == nil && v.(optimizerStat).Migrated
 }
 
 func (c optimizerCollector) Rcv(msg Msg, ctx RcvContext) error {
@@ -233,12 +232,14 @@ func (c optimizerCollector) Rcv(msg Msg, ctx RcvContext) error {
 	glog.V(3).Infof("optimizer receives stat update: %+v", up)
 	dict := ctx.Dict(dictOptimizer)
 	k := formatBeeID(up.Bee)
-	var os optimizerStat
-	dict.GetGob(k, &os)
+	os := optimizerStat{}
+	if v, err := dict.Get(k); err == nil {
+		os = v.(optimizerStat)
+	}
 	os.Bee = up.Bee
 	os.Collector = msg.From()
 	os.Matrix = up.Matrix
-	return dict.PutGob(k, &os)
+	return dict.Put(k, os)
 }
 
 var optimizerCentrlizedCells = MappedCells{{dictOptimizer, "0"}}
@@ -267,14 +268,9 @@ type optimizer struct {
 
 func getOptimizerStats(dict state.Dict) (stats map[uint64]optimizerStat) {
 	stats = make(map[uint64]optimizerStat)
-	dict.ForEach(func(k string, v []byte) {
+	dict.ForEach(func(k string, v interface{}) {
 		id := parseBeeID(k)
-		var os optimizerStat
-		if err := bhgob.Decode(&os, v); err != nil {
-			glog.Errorf("cannot decode optimizer stat: %v", err)
-			return
-		}
-		stats[id] = os
+		stats[id] = v.(optimizerStat)
 	})
 	return
 }
@@ -364,7 +360,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		os.Score++
 		os.LastMax = max
 		k := formatBeeID(b)
-		dict.PutGob(k, &os)
+		dict.Put(k, os)
 		if os.Score <= o.minScore {
 			continue
 		}
@@ -396,7 +392,7 @@ func (o optimizer) Rcv(msg Msg, ctx RcvContext) error {
 		ctx.SendToBee(cmdMigrate{Bee: bhc.Bee, To: bhc.Hive}, os.Collector)
 		os.Migrated = true
 		k := formatBeeID(bhc.Bee)
-		dict.PutGob(k, &os)
+		dict.Put(k, os)
 	}
 	return nil
 }
@@ -412,11 +408,9 @@ func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
 	res := statResponse{
 		Matrix: make(map[uint64]map[uint64]uint64),
 	}
-	dict.ForEach(func(k string, v []byte) {
-		var os optimizerStat
-		if err := bhgob.Decode(&os, v); err == nil {
-			res.Matrix[os.Bee] = os.Matrix
-		}
+	dict.ForEach(func(k string, v interface{}) {
+		os := v.(optimizerStat)
+		res.Matrix[os.Bee] = os.Matrix
 	})
 	return ctx.ReplyTo(msg, res)
 }

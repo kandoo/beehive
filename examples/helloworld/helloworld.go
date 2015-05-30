@@ -12,14 +12,15 @@ const (
 
 func rcvf(msg bh.Msg, ctx bh.RcvContext) error {
 	name := msg.Data().(string)
-	v, err := ctx.Dict(helloDict).Get(name)
-	if err != nil {
-		v = []byte{0}
+
+	cnt := 0
+	if v, err := ctx.Dict(helloDict).Get(name); err == nil {
+		cnt = v.(int)
 	}
 
-	cnt := v[0] + 1
+	cnt++
 	fmt.Printf("%v> hello %s (%d)!\n", ctx.ID(), name, cnt)
-	ctx.Dict(helloDict).Put(name, []byte{cnt})
+	ctx.Dict(helloDict).Put(name, cnt)
 	return nil
 }
 

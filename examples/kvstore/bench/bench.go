@@ -64,7 +64,7 @@ func main() {
 
 	keys := make([]string, *numkeys)
 	reqs := make([]interface{}, *numkeys)
-	val := []byte("val")
+	val := "val"
 	for i, _ := range keys {
 		keys[i] = fmt.Sprintf("%dkeys%d", i, i)
 		if *get {

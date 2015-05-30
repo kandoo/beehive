@@ -1,7 +1,6 @@
 package beehive
 
 import (
-	"encoding/binary"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -178,12 +177,10 @@ func (h benchBytesHandler) Rcv(msg Msg, ctx RcvContext) error {
 	v, err := dict.Get(k)
 	cnt := uint32(0)
 	if err == nil {
-		cnt = binary.LittleEndian.Uint32(v)
+		cnt = v.(uint32)
 	}
 	cnt++
-	v = make([]byte, 4)
-	binary.LittleEndian.PutUint32(v, cnt)
-	return dict.Put(k, v)
+	return dict.Put(k, cnt)
 }
 
 func (h benchBytesHandler) Map(msg Msg, ctx MapContext) MappedCells {
@@ -196,9 +193,12 @@ func (h benchGobHandler) Rcv(msg Msg, ctx RcvContext) error {
 	dict := ctx.Dict(benchDict)
 	k := keyForTestBenchMsg(msg)
 	cnt := uint32(0)
-	dict.GetGob(k, &cnt)
+	v, err := dict.Get(k)
+	if err == nil {
+		cnt = v.(uint32)
+	}
 	cnt++
-	return dict.PutGob(k, &cnt)
+	return dict.Put(k, cnt)
 }
 
 func (h benchGobHandler) Map(msg Msg, ctx MapContext) MappedCells {

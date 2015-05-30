@@ -1,7 +1,6 @@
 package beehive
 
 import (
-	"encoding/binary"
 	"fmt"
 	"runtime"
 	"strconv"
@@ -25,16 +24,6 @@ func (h *testHiveHandler) Map(m Msg, c MapContext) MappedCells {
 	return MappedCells{{"D", strconv.Itoa(v % handlers)}}
 }
 
-func intToBytes(i int) []byte {
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf, uint64(i))
-	return buf
-}
-
-func bytesToInt(b []byte) int {
-	return int(binary.LittleEndian.Uint64(b))
-}
-
 func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	hash := int(m.Data().(MyMsg)) % handlers
 	d := c.Dict("D")
@@ -42,10 +31,10 @@ func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	v, err := d.Get(k)
 	i := 1
 	if err == nil {
-		i += bytesToInt(v)
+		i += v.(int)
 	}
 
-	if err = d.Put(k, intToBytes(i)); err != nil {
+	if err = d.Put(k, i); err != nil {
 		panic(fmt.Sprintf("cannot change the key: %v", err))
 	}
 

@@ -1,8 +1,6 @@
 package routing
 
 import (
-	"bytes"
-	"encoding/gob"
 	"errors"
 	"fmt"
 )
@@ -30,23 +28,6 @@ type Edge struct {
 
 // Edges is an alias for a slice of edges.
 type Edges []Edge
-
-// Encode encodes an edge into bytes using Gob.
-func (s Edges) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err := enc.Encode(&s); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// Decode decodes an edge from bytes using Gob.
-func (s *Edges) Decode(b []byte) error {
-	buf := bytes.NewBuffer(b)
-	dec := gob.NewDecoder(buf)
-	return dec.Decode(s)
-}
 
 // Contains returns whether the edges contain edge.
 func (s Edges) Contains(edge Edge) bool {

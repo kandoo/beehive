@@ -281,7 +281,7 @@ func RuntimeMap(rcv RcvFunc) MapFunc {
 		}
 
 		for _, d := range rCtx.state.Dicts() {
-			d.ForEach(func(k string, v []byte) {
+			d.ForEach(func(k string, v interface{}) {
 				cells = append(cells, CellKey{Dict: d.Name(), Key: k})
 			})
 		}

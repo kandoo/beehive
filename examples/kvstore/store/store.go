@@ -27,7 +27,7 @@ var (
 
 type Put struct {
 	Key string
-	Val []byte
+	Val string
 }
 
 type Get string
@@ -52,7 +52,7 @@ func (s *KVStore) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		if err != nil {
 			return errKeyNotFound
 		}
-		ctx.ReplyTo(msg, Result{Key: string(data), Val: string(v)})
+		ctx.ReplyTo(msg, Result{Key: string(data), Val: v.(string)})
 		return nil
 	case Del:
 		return ctx.Dict(dict).Del(string(data))
@@ -98,7 +98,7 @@ func (s *KVStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
-		res, err = s.Process(ctx, Put{Key: k, Val: v})
+		res, err = s.Process(ctx, Put{Key: k, Val: string(v)})
 	case "DELETE":
 		res, err = s.Process(ctx, Del(k))
 	}

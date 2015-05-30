@@ -1,9 +1,6 @@
 package state
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func testInMemTx(t *testing.T, abort bool) {
 	state := NewTransactional(NewInMem())
@@ -16,7 +13,7 @@ func testInMemTx(t *testing.T, abort bool) {
 	d1 := state.Dict(n1)
 
 	keys := []string{"k1", "k2"}
-	vals := [][]byte{[]byte("v1"), []byte("v2")}
+	vals := []interface{}{"v1", "v2"}
 
 	for i := range keys {
 		if err := d1.Put(keys[i], vals[i]); err != nil {
@@ -32,7 +29,7 @@ func testInMemTx(t *testing.T, abort bool) {
 			t.Errorf("key cannot be read in the transaction: %s", keys[i])
 		}
 
-		if bytes.Compare(v, vals[i]) != 0 {
+		if v.(string) != vals[i].(string) {
 			t.Errorf("invalid value for key %s: %s != %s", keys[i], v, vals[i])
 		}
 	}
@@ -59,7 +56,7 @@ func testInMemTx(t *testing.T, abort bool) {
 		if err != nil {
 			t.Errorf("key is not inserted after commit: %s", keys[i])
 		}
-		if bytes.Compare(v, vals[i]) != 0 {
+		if v.(string) != vals[i].(string) {
 			t.Errorf("invalid value for key %s: %s != %s", keys[i], v, vals[i])
 		}
 	}
@@ -121,7 +118,7 @@ func TestSaveRestore(t *testing.T) {
 	src.BeginTx()
 	d := "d"
 	k := "k"
-	v := []byte("v")
+	v := "v"
 	src.Dict(d).Put(k, v)
 	src.CommitTx()
 
@@ -136,7 +133,7 @@ func TestSaveRestore(t *testing.T) {
 	}
 
 	size := 0
-	dst.Dict(d).ForEach(func(k string, v []byte) { size++ })
+	dst.Dict(d).ForEach(func(k string, v interface{}) { size++ })
 	if size > 1 {
 		t.Errorf("dictionary has more than one entry: %v -> %v", k, v)
 	}
@@ -144,7 +141,7 @@ func TestSaveRestore(t *testing.T) {
 	if err != nil {
 		t.Error("no such key in the dictionary")
 	}
-	if string(v2) != string(v) {
+	if v2.(string) != v {
 		t.Error("invalid value in the dictionary")
 	}
 }
@@ -152,7 +149,7 @@ func TestSaveRestore(t *testing.T) {
 func TestInMemNoTx(t *testing.T) {
 	d := "d"
 	k := "k"
-	v := []byte("v")
+	var v interface{} = "v"
 	inm := NewInMem()
 	if err := inm.Dict(d).Put(k, v); err != nil {
 		t.Errorf("error in put: %v", err)
@@ -161,7 +158,7 @@ func TestInMemNoTx(t *testing.T) {
 	if err != nil {
 		t.Errorf("error in get: %v", err)
 	}
-	if string(v) != "v" {
+	if v.(string) != "v" {
 		t.Errorf("invalid value: actual=%v want=v", v)
 	}
 	if err := inm.Dict(d).Del(k); err != nil {
