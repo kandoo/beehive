@@ -22,9 +22,9 @@ func main() {
 	app.HandleFunc(string(""), mapf, rcvf)
 	// Emit simply emits a message, here a
 	// string of your name.
-  go bh.Emit("your name")
-  // We emit another message with the same name
-  // to test the counting feature.
+	go bh.Emit("your name")
+	// We emit another message with the same name
+	// to test the counting feature.
 	go bh.Emit("your name")
 	// Start starts the default hive.
 	bh.Start()
