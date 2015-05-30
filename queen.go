@@ -28,15 +28,28 @@ type qee struct {
 	state *state.Transactional
 
 	bees map[uint64]*bee
+
+	maxID  uint64
+	nextID uint64
 }
 
 func (q *qee) start() {
+	batch := make([]msgAndHandler, 0, q.hive.config.BatchSize)
 	q.stopped = false
 	dataCh := q.dataCh.out()
 	for !q.stopped {
 		select {
 		case d := <-dataCh:
-			q.handleMsg(d)
+			batch = append(batch, d)
+			l := len(dataCh)
+			if cap(batch)-1 < l {
+				l = cap(batch)
+			}
+			for i := 0; i < l; i++ {
+				batch = append(batch, <-dataCh)
+			}
+			q.handleMsgs(batch)
+			batch = batch[0:0]
 
 		case c := <-q.ctrlCh:
 			q.handleCmd(c)
@@ -78,42 +91,74 @@ func (q *qee) addBee(b *bee) {
 	q.Unlock()
 }
 
-func (q *qee) allocateNewBeeID() (BeeInfo, error) {
-	res, err := q.hive.node.Process(context.TODO(), newBeeID{})
+func (q *qee) allocateBeeID() error {
+	res, err := q.hive.node.Process(context.TODO(), allocateBeeIDs{
+		Len: q.hive.config.BatchSize,
+	})
 	if err != nil {
-		return BeeInfo{}, err
+		return err
 	}
-	id := res.(uint64)
-	info := BeeInfo{
-		ID:   id,
-		Hive: q.hive.ID(),
-		App:  q.app.Name(),
-	}
-	return info, nil
+
+	a := res.(allocateBeeIDResult)
+	q.nextID = a.From
+	q.maxID = a.To
+	return nil
 }
 
-func (q *qee) newLocalBee(withInitColony bool) (*bee, error) {
-	info, err := q.allocateNewBeeID()
+func (q *qee) newBeeID() (bid uint64, err error) {
+	if q.maxID == 0 || q.nextID == q.maxID {
+		if err := q.allocateBeeID(); err != nil {
+			return 0, err
+		}
+	}
+
+	bid = q.nextID
+	q.nextID++
+	return
+}
+
+func (q *qee) newLocalBee(withColony bool) (*bee, error) {
+	id, err := q.newBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}
 
-	if _, ok := q.beeByID(info.ID); ok {
-		return nil, fmt.Errorf("bee %v already exists", info.ID)
+	if _, ok := q.beeByID(id); ok {
+		return nil, fmt.Errorf("bee %v already exists", id)
 	}
 
-	b := q.defaultLocalBee(info.ID)
+	info := q.defaultBeeInfo(id, false, withColony)
+	if err := q.registerBee(info); err != nil {
+		return nil, err
+	}
+
+	return q.newLocalBeeWithID(id, withColony)
+}
+
+func (q *qee) defaultBeeInfo(id uint64, detached bool, initColony bool) (
+	info BeeInfo) {
+
+	info.ID = id
+	info.App = q.App()
+	info.Hive = q.hive.ID()
+	if initColony {
+		info.Colony = Colony{
+			Leader: id,
+		}
+	}
+	info.Detached = detached
+	return
+}
+
+func (q *qee) newLocalBeeWithID(id uint64, withColony bool) (*bee, error) {
+	b := q.defaultLocalBee(id)
 	b.setState(q.app.newState())
-	if withInitColony {
-		c := Colony{Leader: info.ID}
-		info.Colony = c
-		b.beeColony = c
+
+	if withColony {
+		b.beeColony = Colony{Leader: id}
 		b.becomeLeader()
 	} else {
 		b.becomeZombie()
-	}
-	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
-		return nil, err
 	}
 
 	q.addBee(b)
@@ -138,20 +183,27 @@ func (q *qee) newProxyBee(info BeeInfo) (*bee, error) {
 }
 
 func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
-	info, err := q.allocateNewBeeID()
+	id, err := q.newBeeID()
 	if err != nil {
 		return nil, fmt.Errorf("%v cannot allocate a new bee ID: %v", q, err)
 	}
-	info.Detached = true
-	b := q.defaultLocalBee(info.ID)
+	b := q.defaultLocalBee(id)
 	b.setState(q.app.newState())
 	b.becomeDetached(h)
-	if _, err := q.hive.node.Process(context.TODO(), addBee(info)); err != nil {
+
+	if err := q.registerBee(q.defaultBeeInfo(id, true, false)); err != nil {
 		return nil, err
 	}
+
 	q.addBee(b)
+
 	go b.startDetached(h)
 	return b, nil
+}
+
+func (q *qee) registerBee(info BeeInfo) error {
+	_, err := q.hive.node.Process(context.TODO(), addBee(info))
+	return err
 }
 
 func (q *qee) processCmd(data interface{}) (interface{}, error) {
@@ -321,109 +373,227 @@ func (q *qee) isDetached(id uint64) bool {
 	return err == nil && b.Detached
 }
 
-func (q *qee) handleMsg(mh msgAndHandler) {
-	if mh.msg.IsUnicast() {
-		glog.V(2).Infof("unicast msg: %v", mh.msg)
-		b, ok := q.beeByID(mh.msg.To())
-		if !ok {
-			info, err := q.hive.registry.bee(mh.msg.To())
+func (q *qee) handleUnicastMsg(mh msgAndHandler) {
+	glog.V(2).Infof("unicast msg: %v", mh.msg)
+	b, ok := q.beeByID(mh.msg.To())
+	if !ok {
+		info, err := q.hive.registry.bee(mh.msg.To())
+		if err != nil {
+			glog.Errorf("cannot find bee %v", mh.msg.To())
+		}
+
+		if q.isLocalBee(info) {
+			glog.Fatalf("%v cannot find local bee %v", q, mh.msg.To())
+		}
+
+		if b, ok = q.beeByID(info.ID); !ok {
+			if b, err = q.newProxyBee(info); err != nil {
+				glog.Errorf("%v cannnot find remote bee %v", q, mh.msg.To())
+				return
+			}
+		}
+	}
+
+	if mh.handler == nil && !b.detached && !b.proxy {
+		glog.Fatalf("handler is nil for message %v", mh.msg)
+	}
+
+	b.enqueMsg(mh)
+}
+
+func (q *qee) handleLocalBcast(mh msgAndHandler) {
+	glog.V(2).Infof("%v sends a message to all local bees: %v", q, mh.msg)
+
+	q.RLock()
+	for id, b := range q.bees {
+		if b.detached || b.proxy {
+			continue
+		}
+		if b.colony().Leader != id {
+			continue
+		}
+		b.enqueMsg(mh)
+	}
+	q.RUnlock()
+}
+
+type beeCells struct {
+	cells   map[CellKey]struct{}
+	bee     *bee
+	beeID   uint64
+	visited bool
+}
+
+func (bc beeCells) MappedCells() (mapped MappedCells) {
+	for c := range bc.cells {
+		mapped = append(mapped, c)
+	}
+	return
+}
+
+type msgCells struct {
+	msg   msgAndHandler
+	cells MappedCells
+}
+
+func (q *qee) handleMsgs(mhs []msgAndHandler) {
+	pendingM := make([]msgCells, 0, len(mhs))
+	pendingC := make(map[CellKey]*beeCells)
+
+	for i := range mhs {
+		mh := mhs[i]
+		if mh.msg.IsUnicast() {
+			q.handleUnicastMsg(mh)
+			continue
+		}
+
+		glog.V(2).Infof("%v broadcasts message %v", q, mh.msg)
+
+		cells := q.invokeMap(mh)
+		if cells == nil {
+			glog.V(2).Infof("%v drops message %v", q, mh.msg)
+			continue
+		}
+
+		if cells.LocalBroadcast() {
+			q.handleLocalBcast(mh)
+			continue
+		}
+
+		b, err := q.beeByCells(cells)
+		if err == nil {
+			b.enqueMsg(mh)
+			continue
+		}
+
+		pendingM = append(pendingM, msgCells{
+			msg:   mhs[i],
+			cells: cells,
+		})
+	}
+
+	if len(pendingM) == 0 {
+		return
+	}
+
+	for _, m := range pendingM {
+		cells := m.cells
+		var bc *beeCells
+		for _, c := range cells {
+			pbc, ok := pendingC[c]
+			if !ok {
+				if bc == nil {
+					bc = &beeCells{
+						cells: make(map[CellKey]struct{}),
+					}
+				}
+
+				bc.cells[c] = struct{}{}
+				pendingC[c] = bc
+				continue
+			}
+
+			if bc == nil {
+				bc = pbc
+				continue
+			}
+
+			for k := range pbc.cells {
+				bc.cells[k] = struct{}{}
+			}
+			for k := range pbc.cells {
+				pendingC[k] = bc
+			}
+			pendingC[c] = bc
+		}
+	}
+
+	var lockBatch batchReq
+	for _, bc := range pendingC {
+		if bc.visited {
+			continue
+		}
+
+		// TODO(soheil): we should do this in parallel.
+		mapped := bc.MappedCells()
+		hive := q.placeBee(mapped)
+
+		var err error
+		if hive == q.hive.ID() {
+			bc.beeID, err = q.newBeeID()
 			if err != nil {
-				glog.Errorf("cannot find bee %v", mh.msg.To())
+				// TODO(soheil): this shouldn't be fatal.
+				glog.Fatalf("%v cannot allocate a bee ID %v", q, err)
 			}
-
-			if q.isLocalBee(info) {
-				glog.Fatalf("%v cannot find local bee %v", q, mh.msg.To())
+			lockBatch.addReq(addBee(q.defaultBeeInfo(bc.beeID, false, true)))
+		} else {
+			if bc.bee, err = q.newRemoteBee(hive); err != nil {
+				glog.Fatalf("%v cannot place a new bee %v", q, err)
 			}
+			bc.beeID = bc.bee.ID()
+		}
 
-			if b, ok = q.beeByID(info.ID); !ok {
-				if b, err = q.newProxyBee(info); err != nil {
-					glog.Errorf("%v cannnot find remote bee %v", q, mh.msg.To())
-					return
+		lockBatch.addReq(lockMappedCell{
+			Colony: Colony{Leader: bc.beeID},
+			App:    q.app.Name(),
+			Cells:  mapped,
+		})
+
+		bc.visited = true
+	}
+
+	lockRes, err := q.hive.node.Process(context.TODO(), lockBatch)
+	if err != nil {
+		glog.Fatalf("error in lock cells: %v", err)
+	}
+
+	for i, r := range lockRes.(batchRes) {
+		if !r.Err.IsNil() {
+			glog.Fatalf("cannot lock the cells TODO: %v", r.Err)
+		}
+
+		lock, ok := lockBatch.Reqs[i].(lockMappedCell)
+		if !ok {
+			// We can simply ignore add bee requests in the batch.
+			continue
+		}
+
+		res := r.Res
+		cells := lock.Cells
+		bc := pendingC[cells[0]]
+
+		if res.(Colony).Leader == lock.Colony.Leader {
+			if bc.bee == nil {
+				var err error
+				if bc.bee, err = q.newLocalBeeWithID(bc.beeID, true); err != nil {
+					glog.Fatalf("%v cannot create local bee %v", err)
 				}
 			}
-		}
-
-		if mh.handler == nil && !b.detached && !b.proxy {
-			glog.Fatalf("handler is nil for message %v", mh.msg)
-		}
-
-		b.enqueMsg(mh)
-		return
-	}
-
-	glog.V(2).Infof("%v broadcasts message %v", q, mh.msg)
-
-	cells := q.invokeMap(mh)
-	if cells == nil {
-		glog.V(2).Infof("%v drops message %v", q, mh.msg)
-		return
-	}
-
-	if cells.LocalBroadcast() {
-		q.RLock()
-		defer q.RUnlock()
-		glog.V(2).Infof("%v sends a message to all local bees: %v", q, mh.msg)
-		for id, b := range q.bees {
-			if b.detached || b.proxy {
-				continue
-			}
-			if b.colony().Leader != id {
-				continue
-			}
-			b.enqueMsg(mh)
-		}
-		return
-	}
-
-	b, err := q.beeByCells(cells)
-	if err != nil {
-		if b, err = q.placeBee(cells); err != nil {
-			glog.Fatalf("%v cannot place a new bee %v", q, err)
-		}
-
-		info := BeeInfo{
-			Hive:   q.hive.ID(),
-			App:    q.app.Name(),
-			ID:     b.ID(),
-			Colony: Colony{Leader: b.ID()},
-		}
-
-		if info, err = q.lock(info, cells); err != nil {
-			glog.Fatalf("error in locking the cells: %v", err)
-		}
-
-		if info.ID == b.ID() {
-			b.processCmd(cmdAddMappedCells{Cells: cells})
+			bc.bee.processCmd(cmdAddMappedCells{Cells: cells})
 		} else {
-			b, err = q.beeByCells(cells)
-			if err != nil {
+			// TODO(soheil): maybe, we can find by id.
+			var err error
+			if bc.bee, err = q.beeByCells(cells); err != nil {
 				glog.Fatalf("neither can lock a cell nor can find its bee")
 			}
 		}
 	}
 
-	glog.V(2).Infof("message sent to bee %v: %v", b, mh.msg)
-	b.enqueMsg(mh)
+	for _, mh := range pendingM {
+		b := pendingC[mh.cells[0]].bee
+		glog.V(2).Infof("message sent to bee %v: %v", b, mh.msg)
+		b.enqueMsg(mh.msg)
+	}
 }
 
-func (q *qee) placeBee(cells MappedCells) (*bee, error) {
-	if q.app.placement == nil || q.app.placement == PlacementMethod(nil) {
-		return q.newLocalBee(true)
-	}
-
-	h := q.app.placement.Place(cells, q.hive, q.hive.registry.hives())
-	if h.ID == q.hive.ID() {
-		return q.newLocalBee(true)
-	}
-
+func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	var col Colony
 	var bi BeeInfo
-	var b *bee
 	cmd := cmd{
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	res, err := q.hive.streamer.sendCmd(cmd, h.ID)
+	res, err := q.hive.streamer.sendCmd(cmd, hive)
 	if err != nil {
 		goto fallback
 	}
@@ -433,13 +603,13 @@ func (q *qee) placeBee(cells MappedCells) (*bee, error) {
 	cmd.Data = cmdJoinColony{
 		Colony: col,
 	}
-	if _, err = q.hive.streamer.sendCmd(cmd, h.ID); err != nil {
+	if _, err = q.hive.streamer.sendCmd(cmd, hive); err != nil {
 		goto fallback
 	}
 
 	bi = BeeInfo{
 		ID:     col.Leader,
-		Hive:   h.ID,
+		Hive:   hive,
 		App:    q.app.Name(),
 		Colony: col,
 	}
@@ -452,31 +622,23 @@ func (q *qee) placeBee(cells MappedCells) (*bee, error) {
 
 fallback:
 	glog.Errorf("%v cannot create a new bee on %v. will place locally: %v", q,
-		h.ID, err)
+		hive, err)
 	return q.newLocalBee(true)
 }
 
-func (q *qee) lock(b BeeInfo, cells MappedCells) (BeeInfo, error) {
-	res, err := q.hive.node.Process(context.TODO(), lockMappedCell{
-		Colony: b.Colony,
-		App:    b.App,
-		Cells:  cells,
-	})
-	if err != nil {
-		return b, err
+func (q *qee) placeBee(cells MappedCells) (hiveID uint64) {
+	if q.app.placement == nil || q.app.placement == PlacementMethod(nil) {
+		return q.hive.ID()
 	}
 
-	col := res.(Colony)
-	if col.Leader == b.ID {
-		return b, nil
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			hiveID = q.hive.ID()
+		}
+	}()
 
-	info, err := q.hive.registry.bee(col.Leader)
-	if err != nil {
-		// TODO(soheil): Should we be graceful here?
-		glog.Fatalf("cannot find bee %v: %v", col.Leader, err)
-	}
-	return info, nil
+	h := q.app.placement.Place(cells, q.hive, q.hive.registry.hives())
+	return h.ID
 }
 
 func (q *qee) beeByCells(cells MappedCells) (*bee, error) {
@@ -486,11 +648,16 @@ func (q *qee) beeByCells(cells MappedCells) (*bee, error) {
 	}
 
 	if !all {
-		info, err = q.lock(info, cells)
-		if err != nil {
+		// TODO(soheil): should we check incosistencies?
+		lock := lockMappedCell{
+			Colony: info.Colony,
+			App:    q.app.Name(),
+			Cells:  cells,
+		}
+		if _, err := q.hive.node.Process(context.TODO(), lock); err != nil {
 			return nil, err
 		}
-		// TODO(soheil): Should we check incosistencies?
+		// TODO(soheil): maybe check whether the leader has changed?
 	}
 
 	b, ok := q.beeByID(info.ID)

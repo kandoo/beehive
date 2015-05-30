@@ -204,8 +204,13 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	id0 := <-ch
 
+	b3 := findBee(app1.Name(), h3)
+	if b3 == 0 {
+		t.Fatalf("cannot find the bee on %v", h3)
+	}
+
 	_, err := app1.(*app).qee.sendCmdToBee(id0, cmdHandoff{
-		To: 3,
+		To: b3,
 	})
 	if err != nil {
 		t.Errorf("cannot handoff bee: %v", err)
@@ -214,7 +219,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	id1 := <-ch
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
-	if id1 != 3 {
+	if id1 != b3 {
 		t.Errorf("different bees want=3 given=%v", id1)
 	}
 	if id1 != id2 {
@@ -229,13 +234,14 @@ func TestReplicatedAppHandoff(t *testing.T) {
 
 func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	ch := make(chan uint64)
+	apps := make([]App, 3)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
 	cfg1.Addr = newHiveAddrForTest()
 	removeState(cfg1)
 	h1 := NewHiveWithConfig(cfg1)
-	app1 := registerPersistentApp(h1, ch)
+	apps[0] = registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
@@ -245,7 +251,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	cfg2.PeerAddrs = []string{cfg1.Addr}
 	removeState(cfg2)
 	h2 := NewHiveWithConfig(cfg2)
-	registerPersistentApp(h2, ch)
+	apps[1] = registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
@@ -255,18 +261,22 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	cfg3.PeerAddrs = []string{cfg1.Addr}
 	removeState(cfg3)
 	h3 := NewHiveWithConfig(cfg3)
-	registerPersistentApp(h3, ch)
+	apps[2] = registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
 
 	h1.Emit(AppTestMsg(0))
 	<-ch
 	h1.Emit(AppTestMsg(0))
-	id0 := <-ch
+	owner := <-ch
 
-	owner := id0
+	b3 := findBee(apps[0].Name(), h3)
+	if b3 == 0 {
+		t.Fatalf("cannot find the persistent bee on hive %v", h3)
+	}
+
 	for try := 0; try < 3; try++ {
-		_, err := app1.(*app).qee.processCmd(cmdMigrate{
+		_, err := apps[owner-1].(*app).qee.processCmd(cmdMigrate{
 			Bee: owner,
 			To:  h3.ID(),
 		})
@@ -275,13 +285,13 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 		}
 		h2.Emit(AppTestMsg(0))
 		owner = <-ch
-		if owner == 3 {
+		if owner == b3 {
 			break
 		}
 	}
 
-	if owner != 3 {
-		t.Fatalf("different bees want=3 given=%v", owner)
+	if owner != b3 {
+		t.Fatalf("different bees want=%v given=%v", b3, owner)
 	}
 
 	h3.Emit(AppTestMsg(0))
@@ -354,8 +364,14 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	id1 := <-ch
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
-	if id1 != 4 {
-		t.Errorf("different bees want=4 given=%v", id1)
+
+	b4 := findBee(app1.Name(), h4)
+	if b4 == 0 {
+		t.Fatalf("cannot find the bee on %v", h4)
+	}
+
+	if id1 != b4 {
+		t.Errorf("different bees want=%v given=%v", b4, id1)
 	}
 	if id1 != id2 {
 		t.Errorf("different bees want=%v given=%v", id1, id2)
@@ -420,4 +436,13 @@ func TestRuntimeMap(t *testing.T) {
 				mapped, cells)
 		}
 	}
+}
+
+func findBee(a string, h Hive) uint64 {
+	for _, b := range h.(*hive).registry.bees() {
+		if b.App == a && b.Hive == h.ID() {
+			return b.ID
+		}
+	}
+	return 0
 }
