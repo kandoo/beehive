@@ -148,7 +148,7 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 }
 
 func (r *registry) doApply(req interface{}) (interface{}, error) {
-	glog.Infof("%v applies: %#v", r, req)
+	glog.V(2).Infof("%v applies: %#v", r, req)
 
 	switch tr := req.(type) {
 	case noOp:
