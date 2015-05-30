@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +91,10 @@ func (c HiveConfig) RaftElectTimeout() time.Duration {
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	if !flag.Parsed() {
 		flag.Parse()
+	}
+
+	if !glog.V(1) {
+		log.SetOutput(ioutil.Discard)
 	}
 
 	os.MkdirAll(cfg.StatePath, 0700)
