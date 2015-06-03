@@ -43,7 +43,7 @@ func (q *qee) start() {
 			batch = append(batch, d)
 			l := len(dataCh)
 			if cap(batch)-1 < l {
-				l = cap(batch)
+				l = cap(batch) - 1
 			}
 			for i := 0; i < l; i++ {
 				batch = append(batch, <-dataCh)

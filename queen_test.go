@@ -26,6 +26,11 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 
 	done := make(chan struct{})
 
+	handler := qeeBenchHandler{
+		last: strconv.Itoa(b.N - 1),
+		done: done,
+	}
+
 	var hives []Hive
 	for i := 0; i < hiveN; i++ {
 		cfg := DefaultCfg
@@ -38,10 +43,7 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 		h := NewHiveWithConfig(cfg)
 
 		a := h.NewApp("qeeBenchApp")
-		a.Handle("", qeeBenchHandler{
-			last: strconv.Itoa(b.N - 1),
-			done: done,
-		})
+		a.Handle("", handler)
 
 		go h.Start()
 		waitTilStareted(h)
@@ -50,20 +52,32 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 		hives = append(hives, h)
 	}
 
-	msgs := make([]string, 0, b.N)
+	msgs := make([]msgAndHandler, 0, b.N)
 	for i := 0; i < b.N; i++ {
-		msgs = append(msgs, strconv.Itoa(i))
+		msgs = append(msgs, msgAndHandler{
+			msg:     &msg{MsgData: strconv.Itoa(i)},
+			handler: handler,
+		})
 	}
+
+	a, _ := hives[0].(*hive).app("qeeBenchApp")
+	qee := a.qee
 
 	b.StartTimer()
 
-	for i := range msgs {
-		hives[0].Emit(msgs[i])
+	batch := int(DefaultCfg.BatchSize)
+	for i := 0; i < b.N/batch; i++ {
+		from := i * batch
+		to := from + batch
+		if b.N < to {
+			to = b.N
+		}
+		qee.handleMsgs(msgs[from:to])
 	}
 
-	<-done
-
 	b.StopTimer()
+
+	<-done
 }
 
 func BenchmarkQueenBeeCreationSingle(b *testing.B) {
