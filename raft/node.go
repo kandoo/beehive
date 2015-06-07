@@ -392,8 +392,9 @@ func (n *Node) Start() {
 					newLead := rd.SoftState.Lead
 					if oldLead != newLead {
 						n.listener.ProcessStatusChange(LeaderChanged{
-							Old: oldLead,
-							New: newLead,
+							Old:  oldLead,
+							New:  newLead,
+							Term: rd.HardState.Term,
 						})
 						oldLead = newLead
 					}
