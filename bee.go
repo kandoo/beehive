@@ -8,6 +8,7 @@ import (
 	"path"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
@@ -25,6 +26,10 @@ const (
 	beeStatusStopped beeStatus = iota
 	beeStatusJoining
 	beeStatusStarted
+)
+
+var (
+	ErrOldTx = errors.New("transaction has an old term")
 )
 
 type bee struct {
@@ -54,6 +59,8 @@ type bee struct {
 	ticker     *time.Ticker
 	peers      map[uint64]*proxy
 	emitInRaft bool
+	raftTerm   uint64
+	txTerm     uint64
 
 	stateL1  *state.Transactional
 	stateL2  *state.Transactional
@@ -98,6 +105,15 @@ func (b *bee) setRaftNode(n *raft.Node) {
 	defer b.Unlock()
 
 	b.node = n
+}
+
+func (b *bee) term() uint64 {
+	return atomic.LoadUint64(&b.raftTerm)
+}
+
+func (b *bee) setTerm(term uint64) {
+	// TODO(soheil): Maybe check whether there the term is valid.
+	atomic.StoreUint64(&b.raftTerm, term)
 }
 
 func (b *bee) raftNode() *raft.Node {
@@ -186,6 +202,8 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 		if ev.New != b.ID() {
 			return
 		}
+
+		b.setTerm(ev.Term)
 
 		// FIXME(): add raft term to make sure it's versioned.
 		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
@@ -907,7 +925,11 @@ func (b *bee) replicate() error {
 	ctx, ccl := context.WithTimeout(context.Background(),
 		10*b.hive.config.RaftElectTimeout())
 	defer ccl()
-	if _, err := b.raftNode().Process(ctx, commitTx(tx)); err != nil {
+	commit := commitTx{
+		Tx:   tx,
+		Term: b.term(),
+	}
+	if _, err := b.raftNode().Process(ctx, commit); err != nil {
 		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
 		return err
 	}
@@ -1120,6 +1142,12 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 
 	switch r := req.(type) {
 	case commitTx:
+		if b.txTerm < r.Term {
+			b.txTerm = r.Term
+		} else if r.Term < b.txTerm {
+			return nil, ErrOldTx
+		}
+
 		glog.V(2).Infof("%v commits %v", b, r)
 		leader := b.isLeader()
 
@@ -1135,16 +1163,16 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 			b.resetTx(b.stateL1, &b.msgBufL1)
 		}
 
-		if err := b.stateL1.Apply(r.Ops); err != nil {
+		if err := b.stateL1.Apply(r.Tx.Ops); err != nil {
 			return nil, err
 		}
 
 		if leader && b.emitInRaft {
-			for _, msg := range r.Msgs {
+			for _, msg := range r.Tx.Msgs {
 				msg.MsgFrom = b.beeID
 				glog.V(2).Infof("%v emits %#v", b, msg)
 			}
-			b.doEmit(r.Msgs)
+			b.doEmit(r.Tx.Msgs)
 		}
 		return nil, nil
 
@@ -1184,8 +1212,12 @@ func (b *bee) ApplyConfChange(cc raftpb.ConfChange, n raft.NodeInfo) error {
 	return nil
 }
 
-// bee raft commands
-type commitTx tx
+// commitTx is a bee raft command that is applied when a transaction is
+// commited.
+type commitTx struct {
+	Tx   tx
+	Term uint64
+}
 
 func init() {
 	gob.Register(commitTx{})

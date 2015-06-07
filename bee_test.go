@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+
 	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/state"
 )
@@ -147,6 +149,59 @@ func TestOutRate(t *testing.T) {
 
 	if t2.Sub(t1) < 999*time.Millisecond {
 		t.Errorf("output rate is higher than 1 tps: t1=%v t2=%v", t1, t2)
+	}
+}
+
+func TestBeeTxTerm(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-bee-tx-term"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
+	ch := make(chan bool)
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return MappedCells{{"D", "0"}}
+	}
+	rcvf := func(msg Msg, ctx RcvContext) error {
+		ch <- true
+		return nil
+	}
+
+	a := h.NewApp("BeeTxTermTest", Persistent(1))
+	a.HandleFunc("", mapf, rcvf)
+
+	go h.Start()
+	defer h.Stop()
+
+	h.Emit("")
+	<-ch
+
+	var b *bee
+	for _, b = range a.(*app).qee.bees {
+		break
+	}
+
+	commit := commitTx{
+		Term: b.term(),
+	}
+	if _, err := b.raftNode().Process(context.TODO(), commit); err != nil {
+		t.Errorf("did not expect an error in commit: %v", err)
+	}
+
+	commit.Term++
+	if _, err := b.raftNode().Process(context.TODO(), commit); err != nil {
+		t.Errorf("did not expect an error in commit: %v", err)
+	}
+
+	commit.Term--
+	_, err := b.raftNode().Process(context.TODO(), commit)
+	if err == nil {
+		t.Error("old commit should not be committed")
+	}
+
+	if err != ErrOldTx {
+		t.Errorf("invalid error on old commit: %v", err)
 	}
 }
 
