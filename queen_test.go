@@ -1,9 +1,48 @@
 package beehive
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 )
+
+func TestQueenMultipleKeys(t *testing.T) {
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-queen-multiple"
+	removeState(cfg)
+	cfg.Addr = newHiveAddrForTest()
+	h := NewHiveWithConfig(cfg)
+
+	ch := make(chan uint64)
+	mapf := func(msg Msg, ctx MapContext) MappedCells {
+		return MappedCells{{"D", msg.Data().(string)}, {"D", "K"}}
+	}
+
+	rcvf := func(msg Msg, ctx RcvContext) error {
+		ch <- ctx.ID()
+		return nil
+	}
+
+	a := h.NewApp("multikey")
+	a.HandleFunc("", mapf, rcvf)
+
+	l := 10
+	for i := 0; i < l; i++ {
+		h.Emit(fmt.Sprintf("test%d", i))
+	}
+
+	go h.Start()
+	defer h.Stop()
+
+	first := <-ch
+	for i := 0; i < l-1; i++ {
+		bee := <-ch
+		if bee != first {
+			t.Errorf("invalid bee receives the %d'th message: get=%d want=%d", i,
+				bee, first)
+		}
+	}
+}
 
 type qeeBenchHandler struct {
 	last string
