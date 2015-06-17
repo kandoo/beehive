@@ -37,7 +37,7 @@ func (c mockContext) ID() uint64 {
 
 func (c mockContext) Emit(msgData interface{})                 {}
 func (c mockContext) SendToBee(msgData interface{}, to uint64) {}
-func (c mockContext) SendToCellKey(msgData interface{}, to string,
+func (c mockContext) SendToCell(msgData interface{}, to string,
 	dk bh.CellKey) {
 }
 func (c mockContext) ReplyTo(msg bh.Msg, replyData interface{}) error {
@@ -62,4 +62,8 @@ func (c mockContext) CommitTx() error {
 func (c mockContext) AbortTx() error {
 	c.txAborted = true
 	return c.Transactional.AbortTx()
+}
+
+func (c mockContext) DeferReply(msg bh.Msg) bh.Repliable {
+	return bh.Repliable{}
 }
