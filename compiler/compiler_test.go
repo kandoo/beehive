@@ -10,7 +10,11 @@ func TestCompiler(t *testing.T) {
 	fset := token.NewFileSet()
 	handlers, err := HandlersInDir(fset, "../examples/te")
 	if err != nil {
-		t.Errorf("Error in finding receivers: %v", err)
+		t.Errorf("error in finding receivers: %v", err)
+	}
+
+	if len(handlers) == 0 {
+		t.Fatalf("no hanlders found for TE")
 	}
 
 	for _, h := range handlers {
@@ -19,7 +23,7 @@ func TestCompiler(t *testing.T) {
 
 	err = GenerateMap(os.Stdout, handlers)
 	if err != nil {
-		t.Errorf("Error in generating receivers: %v", err)
+		t.Errorf("error in generating receivers: %v", err)
 	}
 }
 

@@ -9,11 +9,13 @@ const (
 	recvFunc = "Rcv"
 	mapFunc  = "Map"
 
-	msgType    = "bh.Msg"
-	mapSetType = "bh.MappedCells"
+	beehiveURL = "github.com/kandoo/beehive"
 
-	rcvCtxType = "bh.RcvContext"
-	mapCtxType = "bh.MapContext"
+	msgType    = beehiveURL + ".Msg"
+	mapCtxType = beehiveURL + ".MapContext"
+	mapRetType = beehiveURL + ".MappedCells"
+	rcvCtxType = beehiveURL + ".RcvContext"
+	rcvRetType = "error"
 
 	dictFunc    = "Dict"
 	dictGetFunc = "Get"
@@ -28,11 +30,11 @@ func generateMapFromRcv(h *Handler) *Handler {
 		Name: mapFunc,
 	}
 
-	body, dks := filterBlock(m.Body, make(map[string]bool))
+	body, dks := filterBlock(m.Body, make(map[string]bool), h.Imports)
 
 	retE := &ast.CompositeLit{
 		Type: &ast.Ident{
-			Name: mapSetType,
+			Name: relativeTypeStr(mapRetType),
 		},
 	}
 
@@ -57,18 +59,18 @@ func generateMapFromRcv(h *Handler) *Handler {
 		List: []*ast.Field{
 			&ast.Field{
 				Type: &ast.Ident{
-					Name: mapSetType,
+					Name: relativeTypeStr(mapRetType),
 				},
 			},
 		},
 	}
 
 	m.Type.Params.List[1].Type = &ast.Ident{
-		Name: mapCtxType,
+		Name: relativeTypeStr(mapCtxType),
 	}
 
 	h.Map = m
-	h.Imports = []string{"github.com/kandoo/beehive/bh"}
+	h.Imports = filterImports(body, h.Imports)
 	return h
 }
 
@@ -77,11 +79,46 @@ type dictKey struct {
 	k string
 }
 
-// Keeps the statements that are need to calculate MappedCells.
-func filterBlock(blk *ast.BlockStmt, filterIDs map[string]bool) (*ast.BlockStmt,
-	[]dictKey) {
+type importVisitor struct {
+	imports  map[string]string
+	imported map[string]string
+}
 
-	dicts := dictionaries(blk)
+func (v *importVisitor) Visit(n ast.Node) (w ast.Visitor) {
+	w = v
+	switch selector := n.(type) {
+	case *ast.SelectorExpr:
+		i, ok := selector.X.(*ast.Ident)
+		if !ok {
+			return
+		}
+		if _, imported := v.imports[i.Name]; !imported {
+			return
+		}
+
+		v.imported[i.Name] = v.imports[i.Name]
+	}
+	return
+}
+
+// filterImports returns the imported packages in the block.
+func filterImports(blk *ast.BlockStmt, imports map[string]string) (
+	imported map[string]string) {
+
+	v := importVisitor{
+		imports:  imports,
+		imported: make(map[string]string),
+	}
+	ast.Walk(&v, blk)
+	v.imported["beehive"] = beehiveURL
+	return v.imported
+}
+
+// filterBlocks keeps the statements that are need to calculate MappedCells.
+func filterBlock(blk *ast.BlockStmt, filterIDs map[string]bool,
+	imports map[string]string) (*ast.BlockStmt, []dictKey) {
+
+	dicts := dictionaries(blk, imports)
 
 	usedDks := make(map[dictKey]bool)
 	filtered := make([]ast.Stmt, 0, len(blk.List))
@@ -134,8 +171,9 @@ func filterBlock(blk *ast.BlockStmt, filterIDs map[string]bool) (*ast.BlockStmt,
 }
 
 type dictVisitor struct {
-	dicts map[string]string
-	keys  []dictKey
+	imports map[string]string
+	dicts   map[string]string
+	keys    []dictKey
 }
 
 func (v *dictVisitor) Visit(n ast.Node) (w ast.Visitor) {
@@ -151,28 +189,24 @@ func (v *dictVisitor) Visit(n ast.Node) (w ast.Visitor) {
 			return
 		}
 
-		isDict := false
-
 		var dict string
 		s, err := str(expr.X)
 		if err == nil {
-			dict, isDict = v.dicts[s]
+			if dict, ok = v.dicts[s]; !ok {
+				return
+			}
 		} else {
 			c, ok := expr.X.(*ast.CallExpr)
-			isDict = ok && isDict(c)
+			if !ok || !isDict(c, v.imports) {
+				return
+			}
 
-			dict, err = str(c.Args[0])
-			if err != nil {
+			if dict, err = str(c.Args[0]); err != nil {
 				return
 			}
 		}
 
-		if !isDict {
-			return
-		}
-
-		key, err := str(node.Args[0])
-		if err == nil {
+		if key, err := str(node.Args[0]); err == nil {
 			v.keys = append(v.keys, dictKey{d: dict, k: key})
 		}
 	}
@@ -189,7 +223,7 @@ func accessesDict(s ast.Stmt, dicts map[string]string) ([]dictKey, bool) {
 }
 
 // Returns the IDs of all dictionaries created in the block.
-func dictionaries(block *ast.BlockStmt) map[string]string {
+func dictionaries(block *ast.BlockStmt, imports map[string]string) map[string]string {
 	dicts := make(map[string]string)
 	for _, e := range block.List {
 		switch s := e.(type) {
@@ -204,7 +238,7 @@ func dictionaries(block *ast.BlockStmt) map[string]string {
 					continue
 				}
 
-				if !isDict(c) {
+				if !isDict(c, imports) {
 					continue
 				}
 
@@ -225,7 +259,7 @@ func dictionaries(block *ast.BlockStmt) map[string]string {
 }
 
 // Whether the function call returns a dictionary.
-func isDict(call *ast.CallExpr) bool {
+func isDict(call *ast.CallExpr, imports map[string]string) bool {
 	if call == nil {
 		return false
 	}
@@ -247,7 +281,7 @@ func isDict(call *ast.CallExpr) bool {
 
 	switch d := x.Obj.Decl.(type) {
 	case *ast.Field:
-		t, err := typeStr(d.Type)
+		t, err := qualifiedTypeStr(d.Type, imports)
 		if err != nil {
 			return false
 		}
@@ -260,13 +294,19 @@ func isDict(call *ast.CallExpr) bool {
 	return fn.Sel.Name == dictFunc
 }
 
-func isRcv(fn *ast.FuncDecl) bool {
+func isRcv(fn *ast.FuncDecl, imports map[string]string) bool {
 	if fn.Recv == nil || fn.Name.Name != recvFunc {
 		return false
 	}
 
 	t := fn.Type
-	if t.Results != nil && len(t.Results.List) != 0 {
+	if t.Results == nil || len(t.Results.List) != 1 {
+		return false
+	}
+
+	if n, err := qualifiedTypeStr(t.Results.List[0].Type, imports); err != nil ||
+		n != rcvRetType {
+
 		return false
 	}
 
@@ -274,18 +314,22 @@ func isRcv(fn *ast.FuncDecl) bool {
 		return false
 	}
 
-	if n, err := typeStr(t.Params.List[0].Type); err != nil || n != msgType {
+	if n, err := qualifiedTypeStr(t.Params.List[0].Type, imports); err != nil ||
+		n != msgType {
+
 		return false
 	}
 
-	if n, err := typeStr(t.Params.List[1].Type); err != nil || n != rcvCtxType {
+	if n, err := qualifiedTypeStr(t.Params.List[1].Type, imports); err != nil ||
+		n != rcvCtxType {
+
 		return false
 	}
 
 	return true
 }
 
-func isMap(fn *ast.FuncDecl) bool {
+func isMap(fn *ast.FuncDecl, imports map[string]string) bool {
 	if fn.Recv == nil || fn.Name.Name != mapFunc {
 		return false
 	}
@@ -295,7 +339,9 @@ func isMap(fn *ast.FuncDecl) bool {
 		return false
 	}
 
-	if n, err := typeStr(t.Results.List[0].Type); err != nil || n != mapSetType {
+	if n, err := qualifiedTypeStr(t.Results.List[0].Type, imports); err != nil ||
+		n != mapRetType {
+
 		return false
 	}
 
@@ -303,11 +349,15 @@ func isMap(fn *ast.FuncDecl) bool {
 		return false
 	}
 
-	if n, err := typeStr(t.Params.List[0].Type); err != nil || n != msgType {
+	if n, err := qualifiedTypeStr(t.Params.List[0].Type, imports); err != nil ||
+		n != msgType {
+
 		return false
 	}
 
-	if n, err := typeStr(t.Params.List[1].Type); err != nil || n != mapCtxType {
+	if n, err := qualifiedTypeStr(t.Params.List[1].Type, imports); err != nil ||
+		n != mapCtxType {
+
 		return false
 	}
 

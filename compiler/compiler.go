@@ -14,13 +14,17 @@ import (
 	"path"
 )
 
+var (
+	ErrNoHandler = errors.New("compiler: no handler provided")
+)
+
 // Represents a message handler.
 type Handler struct {
-	Type    ast.Expr      // Type of the handler.
-	Rcv     *ast.FuncDecl // Rcv function of the handler. Cannot be nil.
-	Map     *ast.FuncDecl // Map function of the handler. Can be nil.
-	Imports []string      // Packages that must be imported for the map function.
-	Package string        // Package name of this handler.
+	Type    ast.Expr          // Type of the handler.
+	Rcv     *ast.FuncDecl     // Rcv function of the handler. Cannot be nil.
+	Map     *ast.FuncDecl     // Map function of the handler. Can be nil.
+	Imports map[string]string // Packages that must be imported for mapping.
+	Package string            // Package name of this handler.
 }
 
 func HandlersInDir(fset *token.FileSet, path string) ([]*Handler, error) {
@@ -51,6 +55,7 @@ func HandlersInPackage(pkg *ast.Package) ([]*Handler, error) {
 
 	for name, file := range pkg.Files {
 		fmt.Printf("Processing file %s\n", name)
+		imports := importNames(file.Imports)
 		for _, decl := range file.Decls {
 			switch fn := decl.(type) {
 			case *ast.FuncDecl:
@@ -58,20 +63,24 @@ func HandlersInPackage(pkg *ast.Package) ([]*Handler, error) {
 					continue
 				}
 
-				isR := isRcv(fn)
-				isM := isMap(fn)
+				isR := isRcv(fn, imports)
+				isM := isMap(fn, imports)
 
 				if !isR && !isM {
 					continue
 				}
 
-				rcvr, err := typeStr(fn.Recv.List[0].Type)
+				rcvr, err := qualifiedTypeStr(fn.Recv.List[0].Type, imports)
 				if err != nil {
 					continue
 				}
 				h := handlerMap[rcvr]
 				if h == nil {
-					h = &Handler{Type: fn.Recv.List[0].Type, Package: pkg.Name}
+					h = &Handler{
+						Type:    fn.Recv.List[0].Type,
+						Package: pkg.Name,
+						Imports: imports,
+					}
 					handlerMap[rcvr] = h
 					handlers = append(handlers, h)
 				}
@@ -92,8 +101,11 @@ func HandlersInPackage(pkg *ast.Package) ([]*Handler, error) {
 // Generates map function for the given handlers into the writer. Handlers must
 // be all of the same package.
 func GenerateMap(w io.Writer, handlers []*Handler) error {
-	var fileBuf bytes.Buffer
+	if len(handlers) == 0 {
+		return ErrNoHandler
+	}
 
+	var fileBuf bytes.Buffer
 	var pkg string
 	for i, h := range handlers {
 		if i == 0 {
@@ -123,21 +135,22 @@ func GenerateMap(w io.Writer, handlers []*Handler) error {
 		fmt.Fprintln(&mapBuf)
 	}
 
-	imports := make(map[string]bool)
+	imported := make(map[string]bool)
 	for _, h := range handlers {
 		for _, p := range h.Imports {
-			imports[p] = true
+			imported[p] = true
 		}
 	}
 
-	fmt.Fprint(&fileBuf, "import (\n")
-	for p, _ := range imports {
-		fmt.Fprintf(&fileBuf, "\t\"%s\"\n", p)
+	if len(imported) > 0 {
+		fmt.Fprint(&fileBuf, "import (\n")
+		for p, _ := range imported {
+			fmt.Fprintf(&fileBuf, "\t\"%s\"\n", p)
+		}
+		fmt.Fprint(&fileBuf, ")\n\n")
 	}
-	fmt.Fprint(&fileBuf, ")\n\n")
 
 	fmt.Fprint(&fileBuf, mapBuf.String())
-
 	fmtBuf, err := format.Source(fileBuf.Bytes())
 	if err != nil {
 		return err

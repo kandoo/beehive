@@ -4,22 +4,47 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"path"
 )
 
-func typeStr(exp ast.Expr) (string, error) {
+func importNames(imports []*ast.ImportSpec) (names map[string]string) {
+	names = make(map[string]string)
+	for _, s := range imports {
+		ipath := s.Path.Value[1 : len(s.Path.Value)-1]
+		var name string
+		if s.Name != nil {
+			name = s.Name.Name
+		} else {
+			_, name = path.Split(ipath)
+		}
+		names[name] = ipath
+	}
+	return names
+}
+
+func relativeTypeStr(t string) string {
+	// TODO(soheil): maybe do some better.
+	_, f := path.Split(t)
+	return f
+}
+
+func qualifiedTypeStr(exp ast.Expr, imports map[string]string) (string, error) {
 	switch t := exp.(type) {
 	case *ast.Ident:
+		if ipath, ok := imports[t.Name]; ok {
+			return ipath, nil
+		}
 		return t.Name, nil
 
 	case *ast.StarExpr:
-		name, err := typeStr(t.X)
+		name, err := qualifiedTypeStr(t.X, imports)
 		if err != nil {
 			return "", err
 		}
 		return name, nil
 
 	case *ast.SelectorExpr:
-		pkg, err := typeStr(t.X)
+		pkg, err := qualifiedTypeStr(t.X, imports)
 		if err != nil {
 			return "", err
 		}
