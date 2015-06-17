@@ -39,7 +39,7 @@ func BenchmarkThroughput(b *testing.B) {
 	for i, _ := range keys {
 		keys[i] = fmt.Sprintf("%dkeys%d", i, i)
 	}
-	val := []byte("val")
+	val := "val"
 
 	for _, k := range keys {
 		hive.Emit(Put{Key: k, Val: val})
