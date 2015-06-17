@@ -394,6 +394,7 @@ func TestAppHTTP(t *testing.T) {
 	}
 	a.HandleHTTPFunc("/test", func(w http.ResponseWriter, r *http.Request) {})
 	go h.server.ListenAndServe()
+	time.Sleep(1 * time.Second)
 	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", addr))
 	if err != nil {
 		t.Error(err)
