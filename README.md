@@ -1,4 +1,5 @@
-# Beehive
+# Beehive ![Travis Build Status](https://api.travis-ci.org/kandoo/beehive.svg?branch=master "Travis Build Status")
+
 A distributed messaging platform focused on simplicity. Our goal
 is to create a programming model that is almost identical to a
 centralized application yet can automatically be distributed and
