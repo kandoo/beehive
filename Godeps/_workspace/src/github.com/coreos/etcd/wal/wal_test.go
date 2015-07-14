@@ -1,18 +1,16 @@
-/*
-   Copyright 2014 CoreOS, Inc.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
+// Copyright 2015 CoreOS, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package wal
 
@@ -24,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/wal/walpb"
 )
@@ -58,6 +57,13 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
+	r := &walpb.Record{
+		Type: snapshotType,
+		Data: pbutil.MustMarshal(&walpb.Snapshot{}),
+	}
+	if err = e.encode(r); err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
 	e.flush()
 	if !reflect.DeepEqual(gd, wb.Bytes()) {
 		t.Errorf("data = %v, want %v", gd, wb.Bytes())
@@ -90,7 +96,7 @@ func TestOpenAtIndex(t *testing.T) {
 	}
 	f.Close()
 
-	w, err := Open(dir, 0)
+	w, err := Open(dir, walpb.Snapshot{})
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
@@ -109,7 +115,7 @@ func TestOpenAtIndex(t *testing.T) {
 	}
 	f.Close()
 
-	w, err = Open(dir, 5)
+	w, err = Open(dir, walpb.Snapshot{Index: 5})
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
@@ -126,7 +132,7 @@ func TestOpenAtIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(emptydir)
-	if _, err = Open(emptydir, 0); err != ErrFileNotFound {
+	if _, err = Open(emptydir, walpb.Snapshot{}); err != ErrFileNotFound {
 		t.Errorf("err = %v, want %v", err, ErrFileNotFound)
 	}
 }
@@ -145,15 +151,12 @@ func TestCut(t *testing.T) {
 	}
 	defer w.Close()
 
-	// TODO(unihorn): remove this when cut can operate on an empty file
-	if err := w.SaveEntry(&raftpb.Entry{}); err != nil {
-		t.Fatal(err)
-	}
 	state := raftpb.HardState{Term: 1}
-	if err := w.SaveState(&state); err != nil {
+	// TODO(unihorn): remove this when cut can operate on an empty file
+	if err := w.Save(state, []raftpb.Entry{{}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Cut(); err != nil {
+	if err := w.cut(); err != nil {
 		t.Fatal(err)
 	}
 	wname := walName(1, 1)
@@ -161,11 +164,15 @@ func TestCut(t *testing.T) {
 		t.Errorf("name = %s, want %s", g, wname)
 	}
 
-	e := &raftpb.Entry{Index: 1, Term: 1, Data: []byte{1}}
-	if err := w.SaveEntry(e); err != nil {
+	es := []raftpb.Entry{{Index: 1, Term: 1, Data: []byte{1}}}
+	if err := w.Save(raftpb.HardState{}, es); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.Cut(); err != nil {
+	if err := w.cut(); err != nil {
+		t.Fatal(err)
+	}
+	snap := walpb.Snapshot{Index: 2, Term: 1}
+	if err := w.SaveSnapshot(snap); err != nil {
 		t.Fatal(err)
 	}
 	wname = walName(2, 2)
@@ -183,7 +190,7 @@ func TestCut(t *testing.T) {
 	defer f.Close()
 	nw := &WAL{
 		decoder: newDecoder(f),
-		ri:      2,
+		start:   snap,
 	}
 	_, gst, _, err := nw.ReadAll()
 	if err != nil {
@@ -205,21 +212,22 @@ func TestRecover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ents := []raftpb.Entry{{Index: 0, Term: 0}, {Index: 1, Term: 1, Data: []byte{1}}, {Index: 2, Term: 2, Data: []byte{2}}}
-	for _, e := range ents {
-		if err = w.SaveEntry(&e); err != nil {
-			t.Fatal(err)
-		}
+	if err := w.SaveSnapshot(walpb.Snapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	ents := []raftpb.Entry{{Index: 1, Term: 1, Data: []byte{1}}, {Index: 2, Term: 2, Data: []byte{2}}}
+	if err = w.Save(raftpb.HardState{}, ents); err != nil {
+		t.Fatal(err)
 	}
 	sts := []raftpb.HardState{{Term: 1, Vote: 1, Commit: 1}, {Term: 2, Vote: 2, Commit: 2}}
 	for _, s := range sts {
-		if err = w.SaveState(&s); err != nil {
+		if err = w.Save(s, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	w.Close()
 
-	if w, err = Open(p, 0); err != nil {
+	if w, err = Open(p, walpb.Snapshot{}); err != nil {
 		t.Fatal(err)
 	}
 	metadata, state, entries, err := w.ReadAll()
@@ -315,34 +323,30 @@ func TestRecoverAfterCut(t *testing.T) {
 	}
 	defer os.RemoveAll(p)
 
-	w, err := Create(p, []byte("metadata"))
+	md, err := Create(p, []byte("metadata"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// TODO(unihorn): remove this when cut can operate on an empty file
-	if err = w.SaveEntry(&raftpb.Entry{}); err != nil {
-		t.Fatal(err)
-	}
-	if err = w.Cut(); err != nil {
-		t.Fatal(err)
-	}
-	for i := 1; i < 10; i++ {
-		e := raftpb.Entry{Index: uint64(i)}
-		if err = w.SaveEntry(&e); err != nil {
+	for i := 0; i < 10; i++ {
+		if err = md.SaveSnapshot(walpb.Snapshot{Index: uint64(i)}); err != nil {
 			t.Fatal(err)
 		}
-		if err = w.Cut(); err != nil {
+		es := []raftpb.Entry{{Index: uint64(i)}}
+		if err = md.Save(raftpb.HardState{}, es); err != nil {
+			t.Fatal(err)
+		}
+		if err = md.cut(); err != nil {
 			t.Fatal(err)
 		}
 	}
-	w.Close()
+	md.Close()
 
 	if err := os.Remove(path.Join(p, walName(4, 4))); err != nil {
 		t.Fatal(err)
 	}
 
 	for i := 0; i < 10; i++ {
-		w, err := Open(p, uint64(i))
+		w, err := Open(p, walpb.Snapshot{Index: uint64(i)})
 		if err != nil {
 			if i <= 4 {
 				if err != ErrFileNotFound {
@@ -362,8 +366,8 @@ func TestRecoverAfterCut(t *testing.T) {
 			t.Errorf("#%d: metadata = %s, want %s", i, metadata, "metadata")
 		}
 		for j, e := range entries {
-			if e.Index != uint64(j+i) {
-				t.Errorf("#%d: ents[%d].Index = %+v, want %+v", i, j, e.Index, j+i)
+			if e.Index != uint64(j+i+1) {
+				t.Errorf("#%d: ents[%d].Index = %+v, want %+v", i, j, e.Index, j+i+1)
 			}
 		}
 		w.Close()
@@ -381,12 +385,15 @@ func TestOpenAtUncommittedIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.SaveEntry(&raftpb.Entry{Index: 0}); err != nil {
+	if err := w.SaveSnapshot(walpb.Snapshot{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Save(raftpb.HardState{}, []raftpb.Entry{{Index: 0}}); err != nil {
 		t.Fatal(err)
 	}
 	w.Close()
 
-	w, err = Open(p, 1)
+	w, err = Open(p, walpb.Snapshot{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,16 +404,120 @@ func TestOpenAtUncommittedIndex(t *testing.T) {
 	w.Close()
 }
 
+// TestOpenForRead tests that OpenForRead can load all files.
+// The tests creates WAL directory, and cut out multiple WAL files. Then
+// it releases the lock of part of data, and excepts that OpenForRead
+// can read out all files even if some are locked for write.
+func TestOpenForRead(t *testing.T) {
+	p, err := ioutil.TempDir(os.TempDir(), "waltest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(p)
+	// create WAL
+	w, err := Create(p, nil)
+	defer w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// make 10 seperate files
+	for i := 0; i < 10; i++ {
+		es := []raftpb.Entry{{Index: uint64(i)}}
+		if err = w.Save(raftpb.HardState{}, es); err != nil {
+			t.Fatal(err)
+		}
+		if err = w.cut(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// release the lock to 5
+	unlockIndex := uint64(5)
+	w.ReleaseLockTo(unlockIndex)
+
+	// All are avaliable for read
+	w2, err := OpenForRead(p, walpb.Snapshot{})
+	defer w2.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, ents, err := w2.ReadAll()
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if g := ents[len(ents)-1].Index; g != 9 {
+		t.Errorf("last index read = %d, want %d", g, 9)
+	}
+}
+
 func TestSaveEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	var est raftpb.HardState
 	w := WAL{
 		encoder: newEncoder(&buf, 0),
 	}
-	if err := w.SaveState(&est); err != nil {
+	if err := w.saveState(&est); err != nil {
 		t.Errorf("err = %v, want nil", err)
 	}
 	if len(buf.Bytes()) != 0 {
 		t.Errorf("buf.Bytes = %d, want 0", len(buf.Bytes()))
+	}
+}
+
+func TestReleaseLockTo(t *testing.T) {
+	p, err := ioutil.TempDir(os.TempDir(), "waltest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(p)
+	// create WAL
+	w, err := Create(p, nil)
+	defer w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// make 10 seperate files
+	for i := 0; i < 10; i++ {
+		es := []raftpb.Entry{{Index: uint64(i)}}
+		if err = w.Save(raftpb.HardState{}, es); err != nil {
+			t.Fatal(err)
+		}
+		if err = w.cut(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// release the lock to 5
+	unlockIndex := uint64(5)
+	w.ReleaseLockTo(unlockIndex)
+
+	// expected remaining are 4,5,6,7,8,9,10
+	if len(w.locks) != 7 {
+		t.Errorf("len(w.locks) = %d, want %d", len(w.locks), 7)
+	}
+	for i, l := range w.locks {
+		_, lockIndex, err := parseWalName(path.Base(l.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if lockIndex != uint64(i+4) {
+			t.Errorf("#%d: lockindex = %d, want %d", i, lockIndex, uint64(i+4))
+		}
+	}
+
+	// release the lock to 15
+	unlockIndex = uint64(15)
+	w.ReleaseLockTo(unlockIndex)
+
+	// expected remaining is 10
+	if len(w.locks) != 1 {
+		t.Errorf("len(w.locks) = %d, want %d", len(w.locks), 1)
+	}
+	_, lockIndex, err := parseWalName(path.Base(w.locks[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if lockIndex != uint64(10) {
+		t.Errorf("lockindex = %d, want %d", lockIndex, 10)
 	}
 }

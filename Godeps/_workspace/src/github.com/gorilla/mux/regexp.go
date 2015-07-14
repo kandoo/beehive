@@ -35,12 +35,12 @@ func newRouteRegexp(tpl string, matchHost, matchPrefix, matchQuery, strictSlash 
 	defaultPattern := "[^/]+"
 	if matchQuery {
 		defaultPattern = "[^?&]+"
-		matchPrefix, strictSlash = true, false
 	} else if matchHost {
 		defaultPattern = "[^.]+"
-		matchPrefix, strictSlash = false, false
+		matchPrefix = false
 	}
-	if matchPrefix {
+	// Only match strict slash if not matching
+	if matchPrefix || matchHost || matchQuery {
 		strictSlash = false
 	}
 	// Set a flag for strictSlash.
@@ -52,9 +52,7 @@ func newRouteRegexp(tpl string, matchHost, matchPrefix, matchQuery, strictSlash 
 	varsN := make([]string, len(idxs)/2)
 	varsR := make([]*regexp.Regexp, len(idxs)/2)
 	pattern := bytes.NewBufferString("")
-	if !matchQuery {
-		pattern.WriteByte('^')
-	}
+	pattern.WriteByte('^')
 	reverse := bytes.NewBufferString("")
 	var end int
 	var err error
@@ -77,6 +75,7 @@ func newRouteRegexp(tpl string, matchHost, matchPrefix, matchQuery, strictSlash 
 		fmt.Fprintf(pattern, "%s(%s)", regexp.QuoteMeta(raw), patt)
 		// Build the reverse template.
 		fmt.Fprintf(reverse, "%s%%s", raw)
+
 		// Append variable name and compiled pattern.
 		varsN[i/2] = name
 		varsR[i/2], err = regexp.Compile(fmt.Sprintf("^%s$", patt))
@@ -140,7 +139,7 @@ type routeRegexp struct {
 func (r *routeRegexp) Match(req *http.Request, match *RouteMatch) bool {
 	if !r.matchHost {
 		if r.matchQuery {
-			return r.regexp.MatchString(req.URL.RawQuery)
+			return r.matchQueryString(req)
 		} else {
 			return r.regexp.MatchString(req.URL.Path)
 		}
@@ -149,11 +148,7 @@ func (r *routeRegexp) Match(req *http.Request, match *RouteMatch) bool {
 }
 
 // url builds a URL part using the given values.
-func (r *routeRegexp) url(pairs ...string) (string, error) {
-	values, err := mapFromPairs(pairs...)
-	if err != nil {
-		return "", err
-	}
+func (r *routeRegexp) url(values map[string]string) (string, error) {
 	urlValues := make([]interface{}, len(r.varsN))
 	for k, v := range r.varsN {
 		value, ok := values[v]
@@ -176,6 +171,22 @@ func (r *routeRegexp) url(pairs ...string) (string, error) {
 		}
 	}
 	return rv, nil
+}
+
+// getUrlQuery returns a single query parameter from a request URL.
+// For a URL with foo=bar&baz=ding, we return only the relevant key
+// value pair for the routeRegexp.
+func (r *routeRegexp) getUrlQuery(req *http.Request) string {
+	if !r.matchQuery {
+		return ""
+	}
+	key := strings.Split(r.template, "=")[0]
+	val := req.URL.Query().Get(key)
+	return key + "=" + val
+}
+
+func (r *routeRegexp) matchQueryString(req *http.Request) bool {
+	return r.regexp.MatchString(r.getUrlQuery(req))
 }
 
 // braceIndices returns the first level curly brace indices from a string.
@@ -249,9 +260,8 @@ func (v *routeRegexpGroup) setMatch(req *http.Request, m *RouteMatch, r *Route) 
 		}
 	}
 	// Store query string variables.
-	rawQuery := req.URL.RawQuery
 	for _, q := range v.queries {
-		queryVars := q.regexp.FindStringSubmatch(rawQuery)
+		queryVars := q.regexp.FindStringSubmatch(q.getUrlQuery(req))
 		if queryVars != nil {
 			for k, v := range q.varsN {
 				m.Vars[v] = queryVars[k+1]
@@ -262,13 +272,14 @@ func (v *routeRegexpGroup) setMatch(req *http.Request, m *RouteMatch, r *Route) 
 
 // getHost tries its best to return the request host.
 func getHost(r *http.Request) string {
-	if !r.URL.IsAbs() {
-		host := r.Host
-		// Slice off any port information.
-		if i := strings.Index(host, ":"); i != -1 {
-			host = host[:i]
-		}
-		return host
+	if r.URL.IsAbs() {
+		return r.URL.Host
 	}
-	return r.URL.Host
+	host := r.Host
+	// Slice off any port information.
+	if i := strings.Index(host, ":"); i != -1 {
+		host = host[:i]
+	}
+	return host
+
 }

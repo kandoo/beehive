@@ -1,18 +1,16 @@
-/*
-   Copyright 2014 CoreOS, Inc.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
+// Copyright 2015 CoreOS, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package raft
 
@@ -21,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/coreos/etcd/pkg/testutil"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 )
 
 // TestNodeStep ensures that node.Step sends msgProp to propc chan
@@ -44,7 +42,7 @@ func TestNodeStep(t *testing.T) {
 				t.Errorf("%d: cannot receive %s on propc chan", msgt, msgn)
 			}
 		} else {
-			if msgt == raftpb.MsgBeat || msgt == raftpb.MsgHup {
+			if msgt == raftpb.MsgBeat || msgt == raftpb.MsgHup || msgt == raftpb.MsgUnreachable || msgt == raftpb.MsgSnapStatus {
 				select {
 				case <-n.recvc:
 					t.Errorf("%d: step should ignore %s", msgt, msgn)
@@ -116,7 +114,7 @@ func TestNodePropose(t *testing.T) {
 
 	n := newNode()
 	s := NewMemoryStorage()
-	r := newRaft(1, []uint64{1}, 10, 1, s)
+	r := newTestRaft(1, []uint64{1}, 10, 1, s)
 	go n.run(r)
 	n.Campaign(context.TODO())
 	for {
@@ -154,7 +152,7 @@ func TestNodeProposeConfig(t *testing.T) {
 
 	n := newNode()
 	s := NewMemoryStorage()
-	r := newRaft(1, []uint64{1}, 10, 1, s)
+	r := newTestRaft(1, []uint64{1}, 10, 1, s)
 	go n.run(r)
 	n.Campaign(context.TODO())
 	for {
@@ -192,7 +190,7 @@ func TestNodeProposeConfig(t *testing.T) {
 // who is the current leader.
 func TestBlockProposal(t *testing.T) {
 	n := newNode()
-	r := newRaft(1, []uint64{1}, 10, 1, NewMemoryStorage())
+	r := newTestRaft(1, []uint64{1}, 10, 1, NewMemoryStorage())
 	go n.run(r)
 	defer n.Stop()
 
@@ -201,7 +199,7 @@ func TestBlockProposal(t *testing.T) {
 		errc <- n.Propose(context.TODO(), []byte("somedata"))
 	}()
 
-	testutil.ForceGosched()
+	testutil.WaitSchedule()
 	select {
 	case err := <-errc:
 		t.Errorf("err = %v, want blocking", err)
@@ -209,7 +207,7 @@ func TestBlockProposal(t *testing.T) {
 	}
 
 	n.Campaign(context.TODO())
-	testutil.ForceGosched()
+	testutil.WaitSchedule()
 	select {
 	case err := <-errc:
 		if err != nil {
@@ -225,7 +223,7 @@ func TestBlockProposal(t *testing.T) {
 func TestNodeTick(t *testing.T) {
 	n := newNode()
 	s := NewMemoryStorage()
-	r := newRaft(1, []uint64{1}, 10, 1, s)
+	r := newTestRaft(1, []uint64{1}, 10, 1, s)
 	go n.run(r)
 	elapsed := r.elapsed
 	n.Tick()
@@ -240,7 +238,7 @@ func TestNodeTick(t *testing.T) {
 func TestNodeStop(t *testing.T) {
 	n := newNode()
 	s := NewMemoryStorage()
-	r := newRaft(1, []uint64{1}, 10, 1, s)
+	r := newTestRaft(1, []uint64{1}, 10, 1, s)
 	donec := make(chan struct{})
 
 	go func() {
@@ -306,7 +304,7 @@ func TestNodeStart(t *testing.T) {
 	wants := []Ready{
 		{
 			SoftState: &SoftState{Lead: 1, RaftState: StateLeader},
-			HardState: raftpb.HardState{Term: 2, Commit: 2},
+			HardState: raftpb.HardState{Term: 2, Commit: 2, Vote: 1},
 			Entries: []raftpb.Entry{
 				{Type: raftpb.EntryConfChange, Term: 1, Index: 1, Data: ccdata},
 				{Term: 2, Index: 2},
@@ -317,13 +315,21 @@ func TestNodeStart(t *testing.T) {
 			},
 		},
 		{
-			HardState:        raftpb.HardState{Term: 2, Commit: 3},
+			HardState:        raftpb.HardState{Term: 2, Commit: 3, Vote: 1},
 			Entries:          []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
 			CommittedEntries: []raftpb.Entry{{Term: 2, Index: 3, Data: []byte("foo")}},
 		},
 	}
 	storage := NewMemoryStorage()
-	n := StartNode(1, []Peer{{ID: 1}}, 10, 1, storage)
+	c := &Config{
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+	}
+	n := StartNode(c, []Peer{{ID: 1}})
 	n.Campaign(ctx)
 	g := <-n.Ready()
 	if !reflect.DeepEqual(g, wants[0]) {
@@ -334,10 +340,10 @@ func TestNodeStart(t *testing.T) {
 	}
 
 	n.Propose(ctx, []byte("foo"))
-	if g := <-n.Ready(); !reflect.DeepEqual(g, wants[1]) {
-		t.Errorf("#%d: g = %+v,\n             w   %+v", 2, g, wants[1])
+	if g2 := <-n.Ready(); !reflect.DeepEqual(g2, wants[1]) {
+		t.Errorf("#%d: g = %+v,\n             w   %+v", 2, g2, wants[1])
 	} else {
-		storage.Append(g.Entries)
+		storage.Append(g2.Entries)
 		n.Advance()
 	}
 
@@ -356,7 +362,7 @@ func TestNodeRestart(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 1}
 
 	want := Ready{
-		HardState: emptyState,
+		HardState: st,
 		// commit up to index commit index in st
 		CommittedEntries: entries[:st.Commit],
 	}
@@ -364,7 +370,15 @@ func TestNodeRestart(t *testing.T) {
 	storage := NewMemoryStorage()
 	storage.SetHardState(st)
 	storage.Append(entries)
-	n := RestartNode(1, 10, 1, storage)
+	c := &Config{
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+	}
+	n := RestartNode(c)
 	if g := <-n.Ready(); !reflect.DeepEqual(g, want) {
 		t.Errorf("g = %+v,\n             w   %+v", g, want)
 	}
@@ -391,7 +405,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	st := raftpb.HardState{Term: 1, Commit: 3}
 
 	want := Ready{
-		HardState: emptyState,
+		HardState: st,
 		// commit up to index commit index in st
 		CommittedEntries: entries,
 	}
@@ -400,7 +414,15 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 	s.SetHardState(st)
 	s.ApplySnapshot(snap)
 	s.Append(entries)
-	n := RestartNode(1, 10, 1, s)
+	c := &Config{
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         s,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+	}
+	n := RestartNode(c)
 	if g := <-n.Ready(); !reflect.DeepEqual(g, want) {
 		t.Errorf("g = %+v,\n             w   %+v", g, want)
 	} else {
@@ -419,7 +441,15 @@ func TestNodeAdvance(t *testing.T) {
 	defer cancel()
 
 	storage := NewMemoryStorage()
-	n := StartNode(1, []Peer{{ID: 1}}, 10, 1, storage)
+	c := &Config{
+		ID:              1,
+		ElectionTick:    10,
+		HeartbeatTick:   1,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+	}
+	n := StartNode(c, []Peer{{ID: 1}})
 	n.Campaign(ctx)
 	<-n.Ready()
 	n.Propose(ctx, []byte("foo"))
