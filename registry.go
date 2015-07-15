@@ -529,6 +529,16 @@ func (r *registry) handleBatch(bReq batchReq) batchRes {
 	return bRes
 }
 
+func (r *registry) ProcessStatusChange(sch interface{}) {
+	switch ev := sch.(type) {
+	case raft.LeaderChanged:
+		if ev.New != r.HiveID {
+			return
+		}
+		glog.V(2).Infof("hive %v is the new leader", r.HiveID)
+	}
+}
+
 func init() {
 	gob.Register(BeeInfo{})
 	gob.Register(HiveInfo{})

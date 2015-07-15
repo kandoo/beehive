@@ -134,9 +134,10 @@ func (b *bee) startNode() error {
 		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
 	}
 	b.ticker = time.NewTicker(b.hive.config.RaftTick)
-	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b,
-		b.statePath(), b, 1024, b.ticker.C, b.hive.config.RaftElectTicks,
-		b.hive.config.RaftHBTicks)
+	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b.statePath(),
+		b, 1024, b.ticker.C, b.hive.config.RaftElectTicks,
+		b.hive.config.RaftHBTicks, b.hive.config.RaftInflights,
+		b.hive.config.RaftMaxMsgSize)
 	b.setRaftNode(node)
 	// This will act like a barrier.
 	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
