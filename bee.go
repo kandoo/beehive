@@ -235,12 +235,12 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 	}
 }
 
-func (b *bee) sendRaft(msgs []raftpb.Message) {
+func (b *bee) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 	if len(msgs) == 0 {
 		return
 	}
 
-	if err := b.hive.streamer.sendBeeRaft(msgs); err != nil {
+	if err := b.hive.streamer.sendBeeRaft(msgs, r); err != nil {
 		glog.Errorf("%v cannot send raft: %v", b, err)
 	}
 }

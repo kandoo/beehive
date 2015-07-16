@@ -598,12 +598,12 @@ func (h *hive) newProxyToHiveWithRetry(to uint64, backoffStep time.Duration,
 	return newProxyWithRetry(h.client, a, backoffStep, maxRetries), nil
 }
 
-func (h *hive) sendRaft(msgs []raftpb.Message) {
+func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 	if len(msgs) == 0 {
 		return
 	}
 
-	if err := h.streamer.sendRaft(msgs); err != nil {
+	if err := h.streamer.sendRaft(msgs, r); err != nil {
 		glog.Errorf("%v cannot send raft messages: %v", h, err)
 	}
 }

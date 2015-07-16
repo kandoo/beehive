@@ -23,10 +23,20 @@ const (
 )
 
 var (
+	// ErrStopped is returned when the node is already stopped.
 	ErrStopped = errors.New("node stopped")
+	// ErrUnreachable is returned when SendFunc cannot reach the destination node.
+	ErrUnreachable = errors.New("node unreachable")
 )
 
-type SendFunc func(m []raftpb.Message)
+type Reporter interface {
+	// Report reports the given node is not reachable for the last send.
+	ReportUnreachable(id uint64)
+	// ReportSnapshot reports the stutus of the sent snapshot.
+	ReportSnapshot(id uint64, status etcdraft.SnapshotStatus)
+}
+
+type SendFunc func(m []raftpb.Message, r Reporter)
 
 // NodeInfo stores the ID and the address of a hive.
 type NodeInfo struct {
@@ -369,7 +379,7 @@ func (n *Node) Start() {
 				}
 				n.raftStorage.Append(rd.Entries)
 
-				n.send(rd.Messages)
+				n.send(rd.Messages, n.node)
 
 				// Recover from snapshot if it is more recent than the currently
 				// applied.
