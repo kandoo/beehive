@@ -1,18 +1,16 @@
-/*
-   Copyright 2014 CoreOS, Inc.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
+// Copyright 2015 CoreOS, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package wal
 
@@ -21,6 +19,7 @@ import (
 	"encoding/binary"
 	"hash"
 	"io"
+	"sync"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/crc"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
@@ -29,7 +28,9 @@ import (
 )
 
 type decoder struct {
-	br  *bufio.Reader
+	mu sync.Mutex
+	br *bufio.Reader
+
 	c   io.Closer
 	crc hash.Hash32
 }
@@ -43,6 +44,9 @@ func newDecoder(rc io.ReadCloser) *decoder {
 }
 
 func (d *decoder) decode(rec *walpb.Record) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	rec.Reset()
 	l, err := readInt64(d.br)
 	if err != nil {
@@ -50,6 +54,11 @@ func (d *decoder) decode(rec *walpb.Record) error {
 	}
 	data := make([]byte, l)
 	if _, err = io.ReadFull(d.br, data); err != nil {
+		// ReadFull returns io.EOF only if no bytes were read
+		// the decoder should treat this as an ErrUnexpectedEOF instead.
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
 		return err
 	}
 	if err := rec.Unmarshal(data); err != nil {

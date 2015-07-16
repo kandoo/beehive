@@ -1,27 +1,31 @@
-/*
-   Copyright 2014 CoreOS, Inc.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
+// Copyright 2015 CoreOS, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package raft
 
 import (
 	"errors"
-	"log"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	pb "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+)
+
+type SnapshotStatus int
+
+const (
+	SnapshotFinish  SnapshotStatus = 1
+	SnapshotFailure SnapshotStatus = 2
 )
 
 var (
@@ -70,6 +74,8 @@ type Ready struct {
 
 	// Messages specifies outbound messages to be sent AFTER Entries are
 	// committed to stable storage.
+	// If it contains a MsgSnap message, the application MUST report back to raft
+	// when the snapshot has been received or has failed by calling ReportSnapshot.
 	Messages []pb.Message
 }
 
@@ -119,6 +125,12 @@ type Node interface {
 	// in snapshots. Will never return nil; it returns a pointer only
 	// to match MemoryStorage.Compact.
 	ApplyConfChange(cc pb.ConfChange) *pb.ConfState
+	// Status returns the current status of the raft state machine.
+	Status() Status
+	// Report reports the given node is not reachable for the last send.
+	ReportUnreachable(id uint64)
+	// ReportSnapshot reports the stutus of the sent snapshot.
+	ReportSnapshot(id uint64, status SnapshotStatus)
 	// Stop performs any necessary termination of the Node
 	Stop()
 }
@@ -128,13 +140,10 @@ type Peer struct {
 	Context []byte
 }
 
-// StartNode returns a new Node given a unique raft id, a list of raft peers, and
-// the election and heartbeat timeouts in units of ticks.
+// StartNode returns a new Node given configuration and a list of raft peers.
 // It appends a ConfChangeAddNode entry for each given peer to the initial log.
-func StartNode(id uint64, peers []Peer, election, heartbeat int, storage Storage) Node {
-	n := newNode()
-	r := newRaft(id, nil, election, heartbeat, storage)
-
+func StartNode(c *Config, peers []Peer) Node {
+	r := newRaft(c)
 	// become the follower at term 1 and apply initial configuration
 	// entires of term 1
 	r.becomeFollower(1, None)
@@ -165,16 +174,19 @@ func StartNode(id uint64, peers []Peer, election, heartbeat int, storage Storage
 		r.addNode(peer.ID)
 	}
 
+	n := newNode()
 	go n.run(r)
 	return &n
 }
 
-// RestartNode is identical to StartNode but does not take a list of peers.
+// RestartNode is similar to StartNode but does not take a list of peers.
 // The current membership of the cluster will be restored from the Storage.
-func RestartNode(id uint64, election, heartbeat int, storage Storage) Node {
-	n := newNode()
-	r := newRaft(id, nil, election, heartbeat, storage)
+// If the caller has an existing state machine, pass in the last log index that
+// has been applied to it; otherwise use zero.
+func RestartNode(c *Config) Node {
+	r := newRaft(c)
 
+	n := newNode()
 	go n.run(r)
 	return &n
 }
@@ -190,6 +202,7 @@ type node struct {
 	tickc      chan struct{}
 	done       chan struct{}
 	stop       chan struct{}
+	status     chan chan Status
 }
 
 func newNode() node {
@@ -203,6 +216,7 @@ func newNode() node {
 		tickc:      make(chan struct{}),
 		done:       make(chan struct{}),
 		stop:       make(chan struct{}),
+		status:     make(chan chan Status),
 	}
 }
 
@@ -222,15 +236,14 @@ func (n *node) run(r *raft) {
 	var propc chan pb.Message
 	var readyc chan Ready
 	var advancec chan struct{}
-	var prevLastUnstablei uint64
-	var prevLastUnstablet uint64
+	var prevLastUnstablei, prevLastUnstablet uint64
 	var havePrevLastUnstablei bool
 	var prevSnapi uint64
 	var rd Ready
 
 	lead := None
 	prevSoftSt := r.softState()
-	prevHardSt := r.HardState
+	prevHardSt := emptyState
 
 	for {
 		if advancec != nil {
@@ -244,19 +257,19 @@ func (n *node) run(r *raft) {
 			}
 		}
 
-		if lead != r.leader() {
+		if lead != r.lead {
 			if r.hasLeader() {
 				if lead == None {
-					log.Printf("raft.node: %x elected leader %x at term %d", r.id, r.leader(), r.Term)
+					raftLogger.Infof("raft.node: %x elected leader %x at term %d", r.id, r.lead, r.Term)
 				} else {
-					log.Printf("raft.node: %x changed leader from %x to %x at term %d", r.id, lead, r.leader(), r.Term)
+					raftLogger.Infof("raft.node: %x changed leader from %x to %x at term %d", r.id, lead, r.lead, r.Term)
 				}
 				propc = n.propc
 			} else {
-				log.Printf("raft.node: %x lost leader %x at term %d", r.id, lead, r.Term)
+				raftLogger.Infof("raft.node: %x lost leader %x at term %d", r.id, lead, r.Term)
 				propc = nil
 			}
-			lead = r.leader()
+			lead = r.lead
 		}
 
 		select {
@@ -267,7 +280,7 @@ func (n *node) run(r *raft) {
 			m.From = r.id
 			r.Step(m)
 		case m := <-n.recvc:
-			// filter out response message from unknow From.
+			// filter out response message from unknown From.
 			if _, ok := r.prs[m.From]; ok || !IsResponseMsg(m) {
 				r.Step(m) // raft never returns an error
 			}
@@ -284,6 +297,11 @@ func (n *node) run(r *raft) {
 			case pb.ConfChangeAddNode:
 				r.addNode(cc.NodeID)
 			case pb.ConfChangeRemoveNode:
+				// block incoming proposal when local node is
+				// removed
+				if cc.NodeID == r.id {
+					n.propc = nil
+				}
 				r.removeNode(cc.NodeID)
 			case pb.ConfChangeUpdateNode:
 				r.resetPendingConf()
@@ -323,6 +341,8 @@ func (n *node) run(r *raft) {
 			}
 			r.raftLog.stableSnapTo(prevSnapi)
 			advancec = nil
+		case c := <-n.status:
+			c <- getStatus(r)
 		case <-n.stop:
 			close(n.done)
 			return
@@ -400,6 +420,28 @@ func (n *node) ApplyConfChange(cc pb.ConfChange) *pb.ConfState {
 	case <-n.done:
 	}
 	return &cs
+}
+
+func (n *node) Status() Status {
+	c := make(chan Status)
+	n.status <- c
+	return <-c
+}
+
+func (n *node) ReportUnreachable(id uint64) {
+	select {
+	case n.recvc <- pb.Message{Type: pb.MsgUnreachable, From: id}:
+	case <-n.done:
+	}
+}
+
+func (n *node) ReportSnapshot(id uint64, status SnapshotStatus) {
+	rej := status == SnapshotFailure
+
+	select {
+	case n.recvc <- pb.Message{Type: pb.MsgSnapStatus, From: id, Reject: rej}:
+	case <-n.done:
+	}
 }
 
 func newReady(r *raft, prevSoftSt *SoftState, prevHardSt pb.HardState) Ready {

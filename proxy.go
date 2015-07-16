@@ -55,13 +55,13 @@ func newProxyWithRetry(client *http.Client, addr string,
 
 type clientMethod func() (*http.Response, error)
 
-func (p *proxy) sendRaftNew(buf io.Reader) error {
+func (p *proxy) sendRaft(buf io.Reader) error {
 	res, err := p.do("POST", p.raftURL, "application/x-raft", buf)
 	maybeCloseResponse(res)
 	return err
 }
 
-func (p *proxy) sendBeeRaftNew(buf io.Reader) error {
+func (p *proxy) sendBeeRaft(buf io.Reader) error {
 	res, err := p.do("POST", p.beeRaftURL, "application/x-raft", buf)
 	maybeCloseResponse(res)
 	return err

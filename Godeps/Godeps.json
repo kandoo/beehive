@@ -3,59 +3,99 @@
 	"GoVersion": "go1.4",
 	"Deps": [
 		{
-			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
-			"Rev": "7fd1620f09261338b6b1ca1289ace83aee0ec946"
+			"ImportPath": "bitbucket.org/ww/goautoneg",
+			"Comment": "null-5",
+			"Rev": "75cd24fc2f2c2a2088577d12123ddee5f54e0675"
+		},
+		{
+			"ImportPath": "github.com/beorn7/perks/quantile",
+			"Rev": "b965b613227fddccbfffe13eae360ed3fa822f8d"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/crc",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/fileutil",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/pbutil",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
-		},
-		{
-			"ImportPath": "github.com/coreos/etcd/pkg/types",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/raft",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/snap",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/wal",
-			"Comment": "v2.0.0-rc.1-34-gf143948",
-			"Rev": "f143948fdd2992156d17362f1e1c28c730fa67db"
+			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
+			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+		},
+		{
+			"ImportPath": "github.com/coreos/pkg/capnslog",
+			"Rev": "99f6e6b8f8ea30b0f82769c1411691c44a66d015"
+		},
+		{
+			"ImportPath": "github.com/gogo/protobuf/proto",
+			"Rev": "64f27bf06efee53589314a6e5a4af34cdd85adf6"
 		},
 		{
 			"ImportPath": "github.com/golang/glog",
-			"Rev": "d1c4472bf2efd3826f2b5bdcc02d8416798d678c"
+			"Rev": "44145f04b68cf362d9c4df2182967c2275eaefed"
+		},
+		{
+			"ImportPath": "github.com/golang/protobuf/proto",
+			"Rev": "ab974be44dc3b7b8a1fb306fb32fe9b9f3864b3d"
 		},
 		{
 			"ImportPath": "github.com/gorilla/context",
-			"Rev": "14f550f51af52180c2eefed15e5fd18d63c0a64a"
+			"Rev": "215affda49addc4c8ef7e2534915df2c8c35c6cd"
 		},
 		{
 			"ImportPath": "github.com/gorilla/mux",
-			"Rev": "4b8fbc56f3b2400a7c7ea3dba9b3539787c486b6"
+			"Rev": "9cb89f07ca03c6a28d1e237ba033bc6a29422fd6"
+		},
+		{
+			"ImportPath": "github.com/matttproud/golang_protobuf_extensions/pbutil",
+			"Rev": "fc2b8d3a73c4867e51861bbdd5ae3c1f0869dd6a"
+		},
+		{
+			"ImportPath": "github.com/prometheus/client_golang/model",
+			"Comment": "0.6.0-17-g3b16b46",
+			"Rev": "3b16b46a713f181888e5e9a1205ccc34d6917fb9"
+		},
+		{
+			"ImportPath": "github.com/prometheus/client_golang/prometheus",
+			"Comment": "0.6.0-17-g3b16b46",
+			"Rev": "3b16b46a713f181888e5e9a1205ccc34d6917fb9"
+		},
+		{
+			"ImportPath": "github.com/prometheus/client_golang/text",
+			"Comment": "0.6.0-17-g3b16b46",
+			"Rev": "3b16b46a713f181888e5e9a1205ccc34d6917fb9"
+		},
+		{
+			"ImportPath": "github.com/prometheus/client_model/go",
+			"Comment": "model-0.0.2-12-gfa8ad6f",
+			"Rev": "fa8ad6fec33561be4280a8f0514318c79d7f6cb6"
+		},
+		{
+			"ImportPath": "github.com/prometheus/procfs",
+			"Rev": "c91d8eefde16bd047416409eb56353ea84a186e4"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
-			"Rev": "cbcac7bb8415db9b6cb4d1ebab1dc9afbd688b97"
+			"Rev": "d9558e5c97f85372afee28cf2b6059d7d3818919"
 		}
 	]
 }

@@ -74,6 +74,8 @@ type HiveConfig struct {
 	RaftTick       time.Duration // the raft tick interval.
 	RaftHBTicks    int           // number of raft ticks that fires a heartbeat.
 	RaftElectTicks int           // number of raft ticks that fires election.
+	RaftInflights  int           // maximum number of inflights to a node.
+	RaftMaxMsgSize uint64        // maximum size of an append message.
 
 	MaxConnPerHost int           // max parallel data connections to a host.
 	ConnTimeout    time.Duration // timeout for connections between hives.
@@ -165,6 +167,11 @@ func init() {
 		"number of raft ticks to start an election (ie, election timeout)")
 	flag.IntVar(&DefaultCfg.RaftHBTicks, "rafthbticks", 1,
 		"number of raft ticks to fire a heartbeat (ie, heartbeat timeout)")
+	// TODO(soheil): use a better set of default values.
+	flag.IntVar(&DefaultCfg.RaftInflights, "raftmaxinflights", 4096/8,
+		"maximum number of inflight raft append messages")
+	flag.Uint64Var(&DefaultCfg.RaftMaxMsgSize, "raftmaxmsgsize", 1*1024*1024,
+		"maximum number of a raft append message")
 	flag.IntVar(&DefaultCfg.MaxConnPerHost, "maxconn", 32,
 		"maximum number of parallel data connectons to a remote host")
 	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
@@ -402,9 +409,9 @@ func (h *hive) startRaftNode() {
 	} else {
 		peers = append(peers, raft.NodeInfo(h.info()).Peer())
 	}
-	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h,
-		h.config.StatePath, h.registry, 1024, h.ticker.C, h.config.RaftElectTicks,
-		h.config.RaftHBTicks)
+	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h.config.StatePath,
+		h.registry, 1024, h.ticker.C, h.config.RaftElectTicks, h.config.RaftHBTicks,
+		h.config.RaftInflights, h.config.RaftMaxMsgSize)
 }
 
 func (h *hive) delBeeFromRegistry(id uint64) error {
@@ -434,16 +441,6 @@ func (h *hive) reloadState() {
 			glog.Errorf("cannot reload bee %v on %v", b.ID, h.id)
 			continue
 		}
-	}
-}
-
-func (h *hive) ProcessStatusChange(sch interface{}) {
-	switch ev := sch.(type) {
-	case raft.LeaderChanged:
-		if ev.New != h.ID() {
-			return
-		}
-		glog.V(2).Infof("%v is the new leader", h)
 	}
 }
 
@@ -601,12 +598,12 @@ func (h *hive) newProxyToHiveWithRetry(to uint64, backoffStep time.Duration,
 	return newProxyWithRetry(h.client, a, backoffStep, maxRetries), nil
 }
 
-func (h *hive) sendRaft(msgs []raftpb.Message) {
+func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 	if len(msgs) == 0 {
 		return
 	}
 
-	if err := h.streamer.sendRaft(msgs); err != nil {
+	if err := h.streamer.sendRaft(msgs, r); err != nil {
 		glog.Errorf("%v cannot send raft messages: %v", h, err)
 	}
 }

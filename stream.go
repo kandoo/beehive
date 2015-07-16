@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"net"
 	"sync"
 	"time"
 
+	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/raft"
@@ -18,13 +20,40 @@ var (
 	errStreamerCancelled = errors.New("streamer: ")
 )
 
+func snapStatus(err error) (ss etcdraft.SnapshotStatus) {
+	if err != nil {
+		ss = etcdraft.SnapshotFailure
+	} else {
+		ss = etcdraft.SnapshotFinish
+	}
+	return
+}
+
+func unreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	nerr, ok := err.(net.Error)
+	return ok && (nerr.Timeout() || !nerr.Temporary())
+}
+
 type streamer interface {
 	sendMsg(ms []msg) error
 	sendCmd(c cmd, to uint64) (interface{}, error)
-	sendRaft(ms []raftpb.Message) error
-	sendBeeRaft(ms []raftpb.Message) error
+	sendRaft(ms []raftpb.Message, r raft.Reporter) error
+	sendBeeRaft(ms []raftpb.Message, r raft.Reporter) error
 	stop()
 	// TODO(soheil): do we need start()?
+}
+
+type raftMsgAndReporter struct {
+	msg      raftpb.Message
+	reporter raft.Reporter
+}
+
+type reporterAndSnap struct {
+	reporter raft.Reporter
+	snap     bool
 }
 
 type loadBalancer struct {
@@ -141,7 +170,7 @@ func (lb *loadBalancer) sendCmd(c cmd, to uint64) (interface{}, error) {
 	return btchr.sendCmd(c, to)
 }
 
-func (lb *loadBalancer) sendRaft(ms []raftpb.Message) error {
+func (lb *loadBalancer) sendRaft(ms []raftpb.Message, r raft.Reporter) error {
 	if lb.stopped() {
 		return errStreamerStopped
 	}
@@ -151,14 +180,14 @@ func (lb *loadBalancer) sendRaft(ms []raftpb.Message) error {
 		if err != nil {
 			return err
 		}
-		if err = btchr.enqueRaft(m); err != nil {
+		if err = btchr.enqueRaft(m, r); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (lb *loadBalancer) sendBeeRaft(ms []raftpb.Message) error {
+func (lb *loadBalancer) sendBeeRaft(ms []raftpb.Message, r raft.Reporter) error {
 	if lb.stopped() {
 		return errStreamerStopped
 	}
@@ -168,7 +197,7 @@ func (lb *loadBalancer) sendBeeRaft(ms []raftpb.Message) error {
 		if err != nil {
 			return err
 		}
-		if err = btchr.enqueBeeRaft(m); err != nil {
+		if err = btchr.enqueBeeRaft(m, r); err != nil {
 			return err
 		}
 	}
@@ -233,8 +262,8 @@ type batcher struct {
 
 	msgs   chan msg
 	cmds   chan cmdAndChannel
-	rafts  chan raftpb.Message
-	bRafts chan raftpb.Message
+	rafts  chan raftMsgAndReporter
+	bRafts chan raftMsgAndReporter
 
 	done chan struct{}
 
@@ -253,8 +282,8 @@ func newBatcher(h *hive, to uint64) (*batcher, error) {
 		weights:   [4]int{1, 5, 10, 10},
 		msgs:      make(chan msg, h.config.DataChBufSize),
 		cmds:      make(chan cmdAndChannel, h.config.CmdChBufSize),
-		rafts:     make(chan raftpb.Message, h.config.DataChBufSize),
-		bRafts:    make(chan raftpb.Message, h.config.DataChBufSize),
+		rafts:     make(chan raftMsgAndReporter, h.config.DataChBufSize),
+		bRafts:    make(chan raftMsgAndReporter, h.config.DataChBufSize),
 		done:      make(chan struct{}),
 		prx:       prx,
 	}
@@ -274,8 +303,8 @@ func (b *batcher) batchRaft(wg *sync.WaitGroup) {
 	for {
 		reset := false
 		select {
-		case r := <-b.rafts:
-			if err := raftEnc.Encode(r); err != nil {
+		case mr := <-b.rafts:
+			if err := raftEnc.Encode(mr.msg); err != nil {
 				glog.Errorf("cannot encode raft message: %v", err)
 				reset = true
 			}
@@ -289,7 +318,7 @@ func (b *batcher) batchRaft(wg *sync.WaitGroup) {
 				continue
 			}
 
-			err := b.prx.sendRaftNew(&raftBuf)
+			err := b.prx.sendRaft(&raftBuf)
 			if err != nil {
 				glog.Errorf("error in sending raft to %v: %v", b.prx.to, err)
 			}
@@ -316,11 +345,20 @@ func (b *batcher) batchBeeRaft(wg *sync.WaitGroup) {
 	braftd := b.batchTick * time.Duration(b.weights[batcherBeeRaftIndex])
 	var tch <-chan time.Time
 
+	// TODO(soheil): make this cleaner when the new rpc method is ready for
+	//						   prime-time.
+	reporters := make(map[uint64]reporterAndSnap)
+
 	for {
 		reset := false
 		select {
-		case r := <-b.bRafts:
-			if err := bRaftEnc.Encode(r); err != nil {
+		case mr := <-b.bRafts:
+			rs := reporters[mr.msg.To]
+			rs.reporter = mr.reporter
+			rs.snap = rs.snap || !etcdraft.IsEmptySnap(mr.msg.Snapshot)
+			reporters[mr.msg.To] = rs
+
+			if err := bRaftEnc.Encode(mr.msg); err != nil {
 				glog.Errorf("cannot encode raft message: %v", err)
 				reset = true
 			}
@@ -335,10 +373,20 @@ func (b *batcher) batchBeeRaft(wg *sync.WaitGroup) {
 				continue
 			}
 
-			err := b.prx.sendBeeRaftNew(&bRaftBuf)
+			err := b.prx.sendBeeRaft(&bRaftBuf)
 			if err != nil {
 				glog.Errorf("error in sending bee raft to %v: %v", b.prx.to, err)
 			}
+
+			ss := snapStatus(err)
+			unr := unreachable(err)
+			for id, rs := range reporters {
+				rs.reporter.ReportSnapshot(id, ss)
+				if unr {
+					rs.reporter.ReportUnreachable(id)
+				}
+			}
+
 			reset = true
 
 		case <-b.done:
@@ -349,6 +397,7 @@ func (b *batcher) batchBeeRaft(wg *sync.WaitGroup) {
 			tch = nil
 			bRaftBuf.Reset()
 			bRaftEnc = raft.NewEncoder(&bRaftBuf)
+			reporters = make(map[uint64]reporterAndSnap)
 		}
 	}
 }
@@ -522,43 +571,55 @@ func (b *batcher) sendCmd(c cmd, to uint64) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (b *batcher) sendRaft(ms []raftpb.Message) error {
+func (b *batcher) sendRaft(ms []raftpb.Message, r raft.Reporter) error {
 	if b.stopped() {
 		return errStreamerStopped
 	}
 
 	for _, m := range ms {
-		b.rafts <- m
+		b.rafts <- raftMsgAndReporter{
+			msg:      m,
+			reporter: r,
+		}
 	}
 	return nil
 }
 
-func (b *batcher) enqueRaft(m raftpb.Message) error {
+func (b *batcher) enqueRaft(m raftpb.Message, r raft.Reporter) error {
 	if b.stopped() {
 		return errStreamerStopped
 	}
 
-	b.rafts <- m
+	b.rafts <- raftMsgAndReporter{
+		msg:      m,
+		reporter: r,
+	}
 	return nil
 }
 
-func (b *batcher) sendBeeRaft(ms []raftpb.Message) error {
+func (b *batcher) sendBeeRaft(ms []raftpb.Message, r raft.Reporter) error {
 	if b.stopped() {
 		return errStreamerStopped
 	}
 
 	for _, m := range ms {
-		b.bRafts <- m
+		b.bRafts <- raftMsgAndReporter{
+			msg:      m,
+			reporter: r,
+		}
 	}
 	return nil
 }
 
-func (b *batcher) enqueBeeRaft(m raftpb.Message) error {
+func (b *batcher) enqueBeeRaft(m raftpb.Message, r raft.Reporter) error {
 	if b.stopped() {
 		return errStreamerStopped
 	}
 
-	b.bRafts <- m
+	b.bRafts <- raftMsgAndReporter{
+		msg:      m,
+		reporter: r,
+	}
 	return nil
 }
 
