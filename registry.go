@@ -13,12 +13,12 @@ import (
 )
 
 var (
-	ErrUnsupportedRequest = errors.New("unsupported request")
-	ErrInvalidParam       = errors.New("invalid parameter")
-	ErrNoSuchHive         = errors.New("no such hive")
-	ErrDuplicateHive      = errors.New("dupblicate hive")
-	ErrNoSuchBee          = errors.New("no such bee")
-	ErrDuplicateBee       = errors.New("duplicate bee")
+	ErrUnsupportedRequest = errors.New("registry: unsupported request")
+	ErrInvalidParam       = errors.New("registry: invalid parameter")
+	ErrNoSuchHive         = errors.New("registry: no such hive")
+	ErrDuplicateHive      = errors.New("registry: duplicate hive")
+	ErrNoSuchBee          = errors.New("registry: no such bee")
+	ErrDuplicateBee       = errors.New("registry: duplicate bee")
 )
 
 // noOp is a barrier: a raft request to make sure all the updates are
