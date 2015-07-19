@@ -96,7 +96,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	}
 
 	if !glog.V(1) {
-		log.SetOutput(ioutil.Discard)
+		etcdraft.SetLogger(&etcdraft.DefaultLogger{Logger: log.New(ioutil.Discard, "", 0)})
 	}
 
 	os.MkdirAll(cfg.StatePath, 0700)
