@@ -39,14 +39,22 @@ func TestPersistentApp(t *testing.T) {
 	h.Stop()
 }
 
-func registerPersistentApp(h Hive, ch chan uint64) App {
+type hiveAndBeeID struct {
+	Hive uint64
+	Bee  uint64
+}
+
+func registerPersistentApp(h Hive, ch chan hiveAndBeeID) App {
 	app := h.NewApp("persistent", Persistent(3))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"D", "0"}}
 	}
 	rf := func(msg Msg, ctx RcvContext) error {
 		ctx.Dict("Test").Put("K", []byte{})
-		ch <- ctx.ID()
+		ch <- hiveAndBeeID{
+			Hive: h.ID(),
+			Bee:  ctx.ID(),
+		}
 		return nil
 	}
 	app.HandleFunc(AppTestMsg(0), mf, rf)
@@ -54,7 +62,7 @@ func registerPersistentApp(h Hive, ch chan uint64) App {
 }
 
 func TestReplicatedApp(t *testing.T) {
-	ch := make(chan uint64)
+	ch := make(chan hiveAndBeeID)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -97,7 +105,7 @@ func TestReplicatedApp(t *testing.T) {
 }
 
 func TestReplicatedAppFailure(t *testing.T) {
-	ch := make(chan uint64)
+	ch := make(chan hiveAndBeeID)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -159,7 +167,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
 	if id1 != id2 {
-		t.Errorf("different bees want=%v given=%v", id1, id2)
+		t.Errorf("different bees want=%v got=%v", id1, id2)
 	}
 
 	time.Sleep(elect)
@@ -168,7 +176,7 @@ func TestReplicatedAppFailure(t *testing.T) {
 }
 
 func TestReplicatedAppHandoff(t *testing.T) {
-	ch := make(chan uint64)
+	ch := make(chan hiveAndBeeID)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -209,7 +217,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 		t.Fatalf("cannot find the bee on %v", h3)
 	}
 
-	_, err := app1.(*app).qee.sendCmdToBee(id0, cmdHandoff{
+	_, err := app1.(*app).qee.sendCmdToBee(id0.Bee, cmdHandoff{
 		To: b3,
 	})
 	if err != nil {
@@ -219,11 +227,11 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	id1 := <-ch
 	h3.Emit(AppTestMsg(0))
 	id2 := <-ch
-	if id1 != b3 {
-		t.Errorf("different bees want=3 given=%v", id1)
+	if id1.Bee != b3 {
+		t.Errorf("different bees want=%v got=%v", b3, id1.Bee)
 	}
-	if id1 != id2 {
-		t.Errorf("different bees want=%v given=%v", id1, id2)
+	if id1.Bee != id2.Bee {
+		t.Errorf("different bees want=%v got=%v", id1.Bee, id2.Bee)
 	}
 
 	time.Sleep(cfg1.RaftElectTimeout())
@@ -233,7 +241,7 @@ func TestReplicatedAppHandoff(t *testing.T) {
 }
 
 func TestReplicatedAppMigrateToFollower(t *testing.T) {
-	ch := make(chan uint64)
+	ch := make(chan hiveAndBeeID)
 	apps := make([]App, 3)
 
 	cfg1 := DefaultCfg
@@ -276,8 +284,8 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	}
 
 	for try := 0; try < 3; try++ {
-		_, err := apps[owner-1].(*app).qee.processCmd(cmdMigrate{
-			Bee: owner,
+		_, err := apps[owner.Hive-1].(*app).qee.processCmd(cmdMigrate{
+			Bee: owner.Bee,
 			To:  h3.ID(),
 		})
 		if err != nil {
@@ -285,19 +293,19 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 		}
 		h2.Emit(AppTestMsg(0))
 		owner = <-ch
-		if owner == b3 {
+		if owner.Bee == b3 {
 			break
 		}
 	}
 
-	if owner != b3 {
-		t.Fatalf("different bees want=%v given=%v", b3, owner)
+	if owner.Bee != b3 {
+		t.Fatalf("different bees want=%v got=%v", b3, owner.Bee)
 	}
 
 	h3.Emit(AppTestMsg(0))
 	next := <-ch
-	if owner != next {
-		t.Errorf("different bees want=%v given=%v", owner, next)
+	if owner.Bee != next.Bee {
+		t.Errorf("different bees want=%v got=%v", owner.Bee, next.Bee)
 	}
 
 	time.Sleep(cfg1.RaftElectTimeout())
@@ -307,7 +315,7 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 }
 
 func TestReplicatedAppMigrateToNewHive(t *testing.T) {
-	ch := make(chan uint64)
+	ch := make(chan hiveAndBeeID)
 
 	cfg1 := DefaultCfg
 	cfg1.StatePath = "/tmp/bhtest1"
@@ -354,7 +362,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	waitTilStareted(h4)
 
 	_, err := app1.(*app).qee.processCmd(cmdMigrate{
-		Bee: id0,
+		Bee: id0.Bee,
 		To:  h4.ID(),
 	})
 	if err != nil {
@@ -370,11 +378,11 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 		t.Fatalf("cannot find the bee on %v", h4)
 	}
 
-	if id1 != b4 {
-		t.Errorf("different bees want=%v given=%v", b4, id1)
+	if id1.Bee != b4 {
+		t.Errorf("different bees want=%v got=%v", b4, id1.Bee)
 	}
-	if id1 != id2 {
-		t.Errorf("different bees want=%v given=%v", id1, id2)
+	if id1.Bee != id2.Bee {
+		t.Errorf("different bees want=%v got=%v", id1.Bee, id2.Bee)
 	}
 
 	time.Sleep(cfg1.RaftElectTimeout())

@@ -25,14 +25,12 @@ func BenchmarkThroughput(b *testing.B) {
 
 	b.StopTimer()
 	app := hive.NewApp("kvstore", bh.Persistent(1))
-	sync := bh.NewSync(app)
 	store := &KVStore{
-		Sync:    sync,
+		Hive:    hive,
 		Buckets: bees,
 	}
 	app.Handle(Put{}, store)
-	sync.Handle(Put{}, store)
-	sync.Handle(Get(""), store)
+	app.Handle(Get(""), store)
 	go hive.Start()
 
 	keys := make([]string, 64)
@@ -43,7 +41,7 @@ func BenchmarkThroughput(b *testing.B) {
 
 	for _, k := range keys {
 		hive.Emit(Put{Key: k, Val: val})
-		sync.Process(context.Background(), Get(k))
+		hive.Sync(context.Background(), Get(k))
 	}
 
 	b.StartTimer()
@@ -55,7 +53,7 @@ func BenchmarkThroughput(b *testing.B) {
 	}
 
 	for _, k := range keys {
-		sync.Process(context.Background(), Get(k))
+		hive.Sync(context.Background(), Get(k))
 	}
 	b.StopTimer()
 	hive.Stop()

@@ -46,14 +46,13 @@ func main() {
 		opts = append(opts, bh.WithPlacement(rp))
 	}
 	a := bh.NewApp("kvstore", opts...)
-	s := bh.NewSync(a)
 	kv := &store.KVStore{
-		Sync:    s,
+		Hive:    bh.DefaultHive,
 		Buckets: uint64(*buckets),
 	}
-	s.Handle(store.Put{}, kv)
-	s.Handle(store.Get(""), kv)
-	s.Handle(store.Del(""), kv)
+	a.Handle(store.Put{}, kv)
+	a.Handle(store.Get(""), kv)
+	a.Handle(store.Del(""), kv)
 	a.HandleHTTP("/{key}", kv)
 
 	bh.Start()

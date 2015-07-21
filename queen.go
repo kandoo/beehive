@@ -77,6 +77,12 @@ func (q *qee) App() string {
 	return q.app.Name()
 }
 
+func (q *qee) Sync(ctx context.Context, req interface{}) (res interface{},
+	err error) {
+
+	return q.hive.Sync(ctx, req)
+}
+
 func (q *qee) beeByID(id uint64) (b *bee, ok bool) {
 	q.RLock()
 	b, ok = q.bees[id]

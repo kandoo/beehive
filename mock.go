@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+
 	"github.com/kandoo/beehive/state"
 )
 
@@ -131,4 +133,10 @@ func (m MockRcvContext) CommitTx() error {
 
 func (m MockRcvContext) AbortTx() error {
 	return nil
+}
+
+func (m MockRcvContext) Sync(ctx context.Context, req interface{}) (
+	res interface{}, err error) {
+
+	return m.CtxHive.Sync(ctx, req)
 }

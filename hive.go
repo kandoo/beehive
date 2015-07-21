@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -49,6 +50,9 @@ type Hive interface {
 	SendToBee(msgData interface{}, to uint64)
 	// Replies to a message.
 	ReplyTo(msg Msg, replyData interface{}) error
+	// Sync processes a synchrounous message (req) and blocks until the response
+	// is recieved.
+	Sync(ctx context.Context, req interface{}) (res interface{}, err error)
 
 	// Registers a message for encoding/decoding. This method should be called
 	// only on messages that have no active handler. Such messages are almost
@@ -66,6 +70,7 @@ type HiveConfig struct {
 	DataChBufSize uint // buffer size of the data channels.
 	CmdChBufSize  uint // buffer size of the control channels.
 	BatchSize     uint // number of messages to batch.
+	SyncPoolSize  uint // number of sync go-routines.
 
 	Instrument     bool // whether to instrument apps on the hive.
 	OptimizeThresh uint // when to notify the optimizer (in msg/s).
@@ -108,6 +113,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		config: cfg,
 		dataCh: newMsgChannel(cfg.DataChBufSize),
 		ctrlCh: make(chan cmdAndChannel),
+		syncCh: make(chan syncReqAndChan, cfg.DataChBufSize),
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(cfg.RaftTick),
@@ -124,6 +130,9 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	} else {
 		h.collector = &noOpStatCollector{}
 	}
+
+	h.initSync()
+
 	return h
 }
 
@@ -153,6 +162,8 @@ func init() {
 		"buffer size of command channels")
 	flag.UintVar(&DefaultCfg.BatchSize, "batch", 1024,
 		"number of messages to batch per transaction")
+	flag.UintVar(&DefaultCfg.SyncPoolSize, "sync", 16,
+		"number of sync go-routines")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"whether to insturment apps")
 	flag.UintVar(&DefaultCfg.OptimizeThresh, "optthresh", 10,
@@ -208,6 +219,7 @@ type hive struct {
 
 	dataCh *msgChannel
 	ctrlCh chan cmdAndChannel
+	syncCh chan syncReqAndChan
 	sigCh  chan os.Signal
 
 	apps map[string]*app
@@ -242,6 +254,28 @@ func (h *hive) RegisterMsg(msg interface{}) {
 	gob.Register(msg)
 }
 
+// Sync processes a synchrounous request and returns the response and error.
+func (h *hive) Sync(ctx context.Context, req interface{}) (res interface{},
+	err error) {
+
+	id := uint64(rand.Int63())
+	ch := make(chan syncRes, 1)
+	h.syncCh <- syncReqAndChan{
+		req: syncReq{ID: id, Data: req},
+		ch:  ch,
+	}
+
+	select {
+	case r := <-ch:
+		if r.Err != nil {
+			return nil, errors.New(r.Err.Error())
+		}
+		return r.Data, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 func (h *hive) app(name string) (*app, bool) {
 	a, ok := h.apps[name]
 	return a, ok
@@ -366,6 +400,13 @@ func (h *hive) registerHandler(t string, q *qee, l Handler) {
 	}
 
 	h.qees[t] = append(h.qees[t], qeeAndHandler{q, l})
+}
+
+func (h *hive) initSync() {
+	a := h.NewApp("beehive-sync")
+	for i := uint(0); i < h.config.SyncPoolSize; i++ {
+		newSync(a, h.syncCh)
+	}
 }
 
 func (h *hive) bee(id uint64) (BeeInfo, error) {

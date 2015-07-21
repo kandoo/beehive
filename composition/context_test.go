@@ -4,6 +4,7 @@ import (
 	"time"
 
 	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -66,4 +67,10 @@ func (c mockContext) AbortTx() error {
 
 func (c mockContext) DeferReply(msg bh.Msg) bh.Repliable {
 	return bh.Repliable{}
+}
+
+func (c mockContext) Sync(ctx context.Context, req interface{}) (
+	res interface{}, err error) {
+
+	return nil, nil
 }

@@ -335,12 +335,18 @@ func (a *app) DetachedFunc(start StartFunc, stop StopFunc, rcv RcvFunc) {
 
 func (a *app) Handle(msg interface{}, h Handler) error {
 	if a.qee == nil {
-		glog.Fatalf("App's qee is nil!")
+		glog.Fatalf("app's qee is nil!")
 	}
 
 	t := MsgType(msg)
 	a.hive.RegisterMsg(msg)
-	return a.registerHandler(t, h)
+	if err := a.registerHandler(t, h); err != nil {
+		return err
+	}
+
+	s := syncReq{Data: msg}
+	t = MsgType(s)
+	return a.registerHandler(t, syncHandler{handler: h})
 }
 
 func (a *app) registerHandler(t string, h Handler) error {

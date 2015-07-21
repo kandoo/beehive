@@ -39,7 +39,7 @@ type Result struct {
 type Del string
 
 type KVStore struct {
-	*bh.Sync
+	Hive    bh.Hive
 	Buckets uint64
 }
 
@@ -91,16 +91,16 @@ func (s *KVStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch r.Method {
 	case "GET":
-		res, err = s.Process(ctx, Get(k))
+		res, err = s.Hive.Sync(ctx, Get(k))
 	case "PUT":
 		var v []byte
 		v, err = ioutil.ReadAll(r.Body)
 		if err != nil {
 			break
 		}
-		res, err = s.Process(ctx, Put{Key: k, Val: string(v)})
+		res, err = s.Hive.Sync(ctx, Put{Key: k, Val: string(v)})
 	case "DELETE":
-		res, err = s.Process(ctx, Del(k))
+		res, err = s.Hive.Sync(ctx, Del(k))
 	}
 	cnl()
 

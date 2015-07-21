@@ -26,14 +26,13 @@ func TestSync(t *testing.T) {
 	mapf := func(msg Msg, ctx MapContext) MappedCells {
 		return ctx.LocalMappedCells()
 	}
-	sync := NewSync(app)
-	sync.HandleFunc(query(""), mapf, rcvf)
+	app.HandleFunc(query(""), mapf, rcvf)
 
 	go h.Start()
 	defer h.Stop()
 
 	req := query("test")
-	res, err := sync.Process(context.Background(), req)
+	res, err := h.Sync(context.Background(), req)
 	if err != nil {
 		t.Fatalf("error in process: %v", err)
 	}
@@ -43,15 +42,16 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncCancel(t *testing.T) {
-	sync := &Sync{
-		reqch: make(chan requestAndChan, 2048),
-		done:  make(chan chan struct{}),
-		reqs:  make(map[uint64]chan response),
-	}
+	cfg := DefaultCfg
+	cfg.StatePath = "/tmp/bhtest-sync"
+	cfg.Addr = newHiveAddrForTest()
+	removeState(cfg)
+	h := NewHiveWithConfig(cfg)
+
 	req := query("test")
 	ctx, ccl := context.WithCancel(context.Background())
 	go ccl()
-	_, err := sync.Process(ctx, req)
+	_, err := h.Sync(ctx, req)
 	if err == nil {
 		t.Errorf("no error in process: %v", err)
 	}
@@ -95,9 +95,7 @@ func TestSyncDeferReply(t *testing.T) {
 		return ctx.LocalMappedCells()
 	}
 
-	sync := NewSync(app)
-	sync.HandleFunc(query(""), mapf, deferf)
-
+	app.HandleFunc(query(""), mapf, deferf)
 	app.HandleFunc(reply(""), mapf, replyf)
 
 	go h.Start()
@@ -109,7 +107,7 @@ func TestSyncDeferReply(t *testing.T) {
 	}()
 
 	req := query("test")
-	res, err := sync.Process(context.Background(), req)
+	res, err := h.Sync(context.Background(), req)
 	if err != nil {
 		t.Fatalf("error in process: %v", err)
 	}
@@ -132,6 +130,7 @@ func (h benchSyncHandler) Map(msg Msg, ctx MapContext) MappedCells {
 func BenchmarkSync(b *testing.B) {
 	log.SetOutput(ioutil.Discard)
 	b.StopTimer()
+
 	cfg := DefaultCfg
 	cfg.StatePath = "/tmp/bhbench-sync"
 	cfg.Addr = newHiveAddrForTest()
@@ -139,8 +138,7 @@ func BenchmarkSync(b *testing.B) {
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("sync")
-	sync := NewSync(app)
-	sync.Handle(0, benchSyncHandler{})
+	app.Handle(0, benchSyncHandler{})
 
 	go h.Start()
 	defer h.Stop()
@@ -148,7 +146,7 @@ func BenchmarkSync(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		sync.Process(context.Background(), i)
+		h.Sync(context.Background(), i)
 	}
 	b.StopTimer()
 }
@@ -164,14 +162,12 @@ func ExampleSyncInstall() {
 
 	hive := NewHive()
 	app := hive.NewApp("sync-app")
-
-	sync := NewSync(app)
-	sync.HandleFunc(query(""), mapf, rcvf)
+	app.HandleFunc(query(""), mapf, rcvf)
 
 	go hive.Start()
 	defer hive.Stop()
 
-	result, err := sync.Process(context.Background(), query("your name"))
+	result, err := hive.Sync(context.Background(), query("your name"))
 	if err != nil {
 		fmt.Printf("error in sync: %v", err)
 		return

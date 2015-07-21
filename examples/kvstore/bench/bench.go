@@ -49,15 +49,12 @@ func main() {
 
 	hive := bh.NewHive()
 	app := hive.NewApp("kvstore", bh.Persistent(*replFactor))
-	sync := bh.NewSync(app)
 	kvs := &store.KVStore{
-		Sync:    sync,
+		Hive:    hive,
 		Buckets: uint64(*buckets),
 	}
 	app.Handle(store.Put{}, kvs)
 	app.Handle(store.Get(""), kvs)
-	sync.Handle(store.Put{}, kvs)
-	sync.Handle(store.Get(""), kvs)
 	go hive.Start()
 
 	time.Sleep(4 * time.Minute)
@@ -76,7 +73,7 @@ func main() {
 
 	for _, k := range keys {
 		hive.Emit(store.Put{Key: k, Val: val})
-		sync.Process(context.Background(), store.Get(k))
+		hive.Sync(context.Background(), store.Get(k))
 	}
 
 	ts := make([]time.Duration, *rounds)
@@ -88,7 +85,7 @@ func main() {
 			}
 		}
 		for _, k := range keys {
-			sync.Process(context.Background(), store.Get(k))
+			hive.Sync(context.Background(), store.Get(k))
 		}
 		ts[i] = time.Since(start)
 	}

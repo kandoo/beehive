@@ -811,6 +811,12 @@ func (b *bee) BeeLocal() interface{} {
 	return b.local
 }
 
+func (b *bee) Sync(ctx context.Context, req interface{}) (res interface{},
+	err error) {
+
+	return b.hive.Sync(ctx, req)
+}
+
 func (b *bee) StartDetached(h DetachedHandler) uint64 {
 	d, err := b.qee.processCmd(cmdStartDetached{Handler: h})
 	if err != nil {

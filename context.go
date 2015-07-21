@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"time"
 
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -16,6 +17,9 @@ type Context interface {
 	App() string
 	// Dict is a helper function that returns the specific dict within the state.
 	Dict(name string) state.Dict
+	// Sync processes a synchrounous message (req) and blocks until the response
+	// is recieved.
+	Sync(ctx context.Context, req interface{}) (res interface{}, err error)
 }
 
 // MapContext is passed to the map functions of message handlers. It provides
@@ -41,7 +45,7 @@ type Repliable struct {
 // Reply replies to the Repliable using replyData.
 func (r *Repliable) Reply(ctx RcvContext, replyData interface{}) {
 	if r.SyncID != 0 {
-		replyData = response{
+		replyData = syncRes{
 			ID:   r.SyncID,
 			Data: replyData,
 		}
