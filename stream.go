@@ -301,10 +301,17 @@ func (b *batcher) batchRaft(wg *sync.WaitGroup) {
 	raftd := b.batchTick * time.Duration(b.weights[batcherRaftIndex])
 	var tch <-chan time.Time
 
+	reporters := make(map[uint64]reporterAndSnap)
+
 	for {
 		reset := false
 		select {
 		case mr := <-b.rafts:
+			rs := reporters[mr.msg.To]
+			rs.reporter = mr.reporter
+			rs.snap = rs.snap || !etcdraft.IsEmptySnap(mr.msg.Snapshot)
+			reporters[mr.msg.To] = rs
+
 			if err := raftEnc.Encode(mr.msg); err != nil {
 				glog.Errorf("cannot encode raft message: %v", err)
 				reset = true
@@ -323,6 +330,16 @@ func (b *batcher) batchRaft(wg *sync.WaitGroup) {
 			if err != nil {
 				glog.Errorf("error in sending raft to %v: %v", b.prx.to, err)
 			}
+
+			ss := snapStatus(err)
+			unr := unreachable(err)
+			for id, rs := range reporters {
+				rs.reporter.ReportSnapshot(id, ss)
+				if unr {
+					rs.reporter.ReportUnreachable(id)
+				}
+			}
+
 			reset = true
 
 		case <-b.done:
@@ -333,6 +350,7 @@ func (b *batcher) batchRaft(wg *sync.WaitGroup) {
 			tch = nil
 			raftBuf.Reset()
 			raftEnc = raft.NewEncoder(&raftBuf)
+			reporters = make(map[uint64]reporterAndSnap)
 		}
 	}
 }
