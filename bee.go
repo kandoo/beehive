@@ -279,8 +279,9 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 	}
 
 	cmd := cmd{
-		To:   bid,
+		Hive: hid,
 		App:  b.app.Name(),
+		Bee:  bid,
 		Data: cmdJoinColony{Colony: newc},
 	}
 	if _, err := b.hive.streamer.sendCmd(cmd, hid); err != nil {
@@ -609,7 +610,9 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 		case cmdStop, cmdStart:
 			b.handleCmdLocal(cc)
 		default:
-			cc.cmd.To = to
+			cc.cmd.Hive = bi.Hive
+			cc.cmd.App = bi.App
+			cc.cmd.Bee = to
 			res, err := b.hive.streamer.sendCmd(cc.cmd, bi.Hive)
 			if cc.ch != nil {
 				cc.ch <- cmdResult{Data: res, Err: err}
@@ -647,7 +650,7 @@ func (b *bee) enqueCmd(cc cmdAndChannel) {
 
 func (b *bee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
-	b.ctrlCh <- newCmdAndChannel(data, b.app.Name(), b.ID(), ch)
+	b.ctrlCh <- newCmdAndChannel(data, b.hive.ID(), b.app.Name(), b.ID(), ch)
 	return (<-ch).get()
 }
 

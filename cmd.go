@@ -6,16 +6,18 @@ import (
 	"fmt"
 )
 
+// If App is "" and To is 0, the command is handed to the hive.
 // If App is not "" and To is 0, the command should be handed to the qee.
 // Otherwise it is for a bee of that app.
 type cmd struct {
-	To   uint64
+	Hive uint64
 	App  string
+	Bee  uint64
 	Data interface{}
 }
 
 func (c cmd) String() string {
-	return fmt.Sprintf("CMD -> %v\t%#v", c.To, c.Data)
+	return fmt.Sprintf("CMD -> %v/%s/%v\t%#v", c.Hive, c.App, c.Bee, c.Data)
 }
 
 // ErrInvalidCmd is returned when the requested command is invalid or is not
@@ -36,14 +38,15 @@ func (r cmdResult) get() (interface{}, error) {
 	return r.Data, r.Err
 }
 
-func newCmdAndChannel(d interface{}, a string, to uint64,
+func newCmdAndChannel(d interface{}, h uint64, a string, b uint64,
 	ch chan cmdResult) cmdAndChannel {
 
 	return cmdAndChannel{
 		cmd: cmd{
-			Data: d,
+			Hive: h,
 			App:  a,
-			To:   to,
+			Bee:  b,
+			Data: d,
 		},
 		ch: ch,
 	}

@@ -306,8 +306,8 @@ func (h *hive) stopQees() {
 
 	stopCh := make(chan cmdResult)
 	for q := range qs {
-		q.ctrlCh <- newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
-		glog.V(3).Infof("Waiting on a qee: %v", q)
+		q.ctrlCh <- newCmdAndChannel(cmdStop{}, h.ID(), q.app.Name(), 0, stopCh)
+		glog.V(3).Infof("waiting on a qee: %v", q)
 		stopped := false
 		tries := 5
 		for !stopped {
@@ -315,7 +315,7 @@ func (h *hive) stopQees() {
 			case res := <-stopCh:
 				_, err := res.get()
 				if err != nil {
-					glog.Errorf("Error in stopping a qee: %v", err)
+					glog.Errorf("error in stopping a qee: %v", err)
 				}
 				stopped = true
 			case <-time.After(1 * time.Second):
@@ -324,7 +324,7 @@ func (h *hive) stopQees() {
 					stopped = true
 					continue
 				}
-				glog.Infof("Still waiting for a qee %v...", q)
+				glog.Infof("still waiting for a qee %v...", q)
 			}
 		}
 	}
@@ -375,7 +375,7 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 
 func (h *hive) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
-	h.ctrlCh <- newCmdAndChannel(data, "", 0, ch)
+	h.ctrlCh <- newCmdAndChannel(data, h.ID(), "", 0, ch)
 	return (<-ch).get()
 }
 
@@ -535,18 +535,12 @@ func (h *hive) Stop() error {
 		return errors.New("hive is already stopped")
 	}
 
-	_, err := h.sendCmd(cmdStop{})
+	_, err := h.processCmd(cmdStop{})
 	return err
 }
 
 func (h *hive) waitUntilStarted() {
-	h.sendCmd(cmdPing{})
-}
-
-func (h *hive) sendCmd(cmd interface{}) (interface{}, error) {
-	ch := make(chan cmdResult)
-	h.ctrlCh <- newCmdAndChannel(cmd, "", 0, ch)
-	return (<-ch).get()
+	h.processCmd(cmdPing{})
 }
 
 func (h *hive) NewApp(name string, options ...AppOption) App {

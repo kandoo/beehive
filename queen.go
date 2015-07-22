@@ -214,14 +214,14 @@ func (q *qee) registerBee(info BeeInfo) error {
 
 func (q *qee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
-	q.ctrlCh <- newCmdAndChannel(data, q.app.Name(), 0, ch)
+	q.ctrlCh <- newCmdAndChannel(data, q.hive.ID(), q.app.Name(), 0, ch)
 	return (<-ch).get()
 }
 
 func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 	if b, ok := q.beeByID(bid); ok {
 		ch := make(chan cmdResult)
-		b.enqueCmd(newCmdAndChannel(data, q.app.Name(), bid, ch))
+		b.enqueCmd(newCmdAndChannel(data, q.hive.ID(), q.app.Name(), bid, ch))
 		return (<-ch).get()
 	}
 
@@ -235,8 +235,9 @@ func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 	}
 
 	cmd := cmd{
-		To:   bid,
-		App:  q.app.Name(),
+		Hive: info.Hive,
+		App:  info.App,
+		Bee:  info.ID,
 		Data: data,
 	}
 	return q.hive.streamer.sendCmd(cmd, info.Hive)
@@ -246,7 +247,7 @@ func (q *qee) stopBees() {
 	q.RLock()
 	defer q.RUnlock()
 	stopCh := make(chan cmdResult)
-	stopCmd := newCmdAndChannel(cmdStop{}, q.app.Name(), 0, stopCh)
+	stopCmd := newCmdAndChannel(cmdStop{}, q.hive.ID(), q.app.Name(), 0, stopCh)
 	for _, b := range q.bees {
 		glog.V(2).Infof("%v is stopping %v", q, b)
 		b.enqueCmd(stopCmd)
@@ -259,14 +260,14 @@ func (q *qee) stopBees() {
 }
 
 func (q *qee) handleCmd(cc cmdAndChannel) {
-	if cc.cmd.To != 0 {
-		if b, ok := q.beeByID(cc.cmd.To); ok {
+	if cc.cmd.Bee != Nil {
+		if b, ok := q.beeByID(cc.cmd.Bee); ok {
 			b.enqueCmd(cc)
 			return
 		}
 
 		// If the bee is a proxy we should try to relay the message.
-		if info, err := q.hive.registry.bee(cc.cmd.To); err == nil &&
+		if info, err := q.hive.registry.bee(cc.cmd.Bee); err == nil &&
 			!q.isLocalBee(info) {
 
 			if b, err := q.newProxyBee(info); err == nil {
@@ -279,7 +280,7 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 
 		if cc.ch != nil {
 			cc.ch <- cmdResult{
-				Err: fmt.Errorf("%v cannot find bee %v", q, cc.cmd.To),
+				Err: fmt.Errorf("%v cannot find bee %v", q, cc.cmd.Bee),
 			}
 		}
 		return
@@ -596,6 +597,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	var col Colony
 	var bi BeeInfo
 	cmd := cmd{
+		Hive: hive,
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
@@ -605,7 +607,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	}
 	col.Leader = res.(uint64)
 
-	cmd.To = col.Leader
+	cmd.Bee = col.Leader
 	cmd.Data = cmdJoinColony{
 		Colony: col,
 	}
@@ -711,6 +713,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 	}
 
 	c = cmd{
+		Hive: to,
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
@@ -724,8 +727,9 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 	// factor of 1 as well.
 	if !q.app.persistent() {
 		c = cmd{
-			To:   newb,
+			Hive: to,
 			App:  q.app.Name(),
+			Bee:  newb,
 			Data: cmdJoinColony{Colony: Colony{Leader: newb}},
 		}
 		if _, err = q.hive.streamer.sendCmd(c, to); err != nil {

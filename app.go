@@ -365,8 +365,8 @@ func (a *app) handler(t string) Handler {
 }
 
 func (a *app) Detached(h DetachedHandler) {
-	a.qee.ctrlCh <- newCmdAndChannel(cmdStartDetached{Handler: h}, a.Name(), 0,
-		nil)
+	a.qee.ctrlCh <- newCmdAndChannel(cmdStartDetached{Handler: h}, a.hive.ID(),
+		a.Name(), 0, nil)
 }
 
 func (a *app) Dict(name string) state.Dict {

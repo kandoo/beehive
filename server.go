@@ -139,13 +139,13 @@ func (h *v1Handler) processCommand(c cmd) cmdResult {
 				Err: bhgob.Errorf("%v cannot find app %v", h.srv.hive, c.App),
 			}
 		}
-		if c.To == Nil {
+		if c.Bee == Nil {
 			ctrlCh = a.qee.ctrlCh
 		} else {
-			b, ok := a.qee.beeByID(c.To)
+			b, ok := a.qee.beeByID(c.Bee)
 			if !ok {
 				return cmdResult{
-					Err: bhgob.Errorf("%v cannot find bee %v", a.qee, c.To),
+					Err: bhgob.Errorf("%v cannot find bee %v", a.qee, c.Bee),
 				}
 			}
 			ctrlCh = b.ctrlCh

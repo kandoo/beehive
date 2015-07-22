@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -159,10 +160,10 @@ func (lb *loadBalancer) sendCmd(c cmd, to uint64) (interface{}, error) {
 
 	var btchr *batcher
 	var err error
-	if c.To == Nil {
+	if c.Bee == Nil {
 		btchr, err = lb.hiveBatcher(to)
 	} else {
-		btchr, err = lb.beeBatcher(c.To)
+		btchr, err = lb.beeBatcher(c.Bee)
 	}
 	if err != nil {
 		return nil, err
