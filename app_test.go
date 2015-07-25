@@ -10,11 +10,7 @@ import (
 type AppTestMsg int
 
 func TestPersistentApp(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
-	h := NewHiveWithConfig(cfg)
+	h := NewHiveWithConfig(newHiveConfigForTest())
 
 	app := h.NewApp("persistent", Persistent(3))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
@@ -64,30 +60,21 @@ func registerPersistentApp(h Hive, ch chan hiveAndBeeID) App {
 func TestReplicatedApp(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -107,30 +94,21 @@ func TestReplicatedApp(t *testing.T) {
 func TestReplicatedAppFailure(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -178,30 +156,21 @@ func TestReplicatedAppFailure(t *testing.T) {
 func TestReplicatedAppHandoff(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -244,30 +213,21 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 	apps := make([]App, 3)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	apps[0] = registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	apps[1] = registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	apps[2] = registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -317,30 +277,21 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -351,11 +302,8 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	id0 := <-ch
 
-	cfg4 := DefaultCfg
-	cfg4.StatePath = "/tmp/bhtest4"
-	cfg4.Addr = newHiveAddrForTest()
-	cfg4.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg4)
+	cfg4 := newHiveConfigForTest()
+	cfg4.PeerAddrs = []string{cfg1.RPCAddr}
 	h4 := NewHiveWithConfig(cfg4)
 	registerPersistentApp(h4, ch)
 	go h4.Start()
@@ -394,7 +342,8 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 
 func TestAppHTTP(t *testing.T) {
 	h := hive{}
-	addr := newHiveAddrForTest()
+	cfg := newHiveConfigForTest()
+	addr := cfg.PublicAddr
 	h.server = newServer(&h, addr)
 	a := &app{
 		name: "testapp",
@@ -413,10 +362,7 @@ func TestAppHTTP(t *testing.T) {
 }
 
 func TestRuntimeMap(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest1"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 	a := h.NewApp("RuntimeMap")
 

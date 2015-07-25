@@ -38,20 +38,14 @@ func TestPlacement(t *testing.T) {
 	// TODO(soheil): refactor all these into a single test utility method.
 	ch := make(chan uint64)
 
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	registerPlacementApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPlacementApp(h2, ch)
 	go h2.Start()

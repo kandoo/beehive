@@ -48,10 +48,7 @@ func TestDeferReply(t *testing.T) {
 		return ctx.LocalMappedCells()
 	}
 
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-bee"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("defer")
@@ -67,10 +64,7 @@ func TestDeferReply(t *testing.T) {
 }
 
 func TestInRate(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-bee-rate"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	type rateTestMsg struct{}
@@ -101,10 +95,7 @@ func TestInRate(t *testing.T) {
 }
 
 func TestOutRate(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-bee-rate"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	type outRateTestMsg struct{}
@@ -153,10 +144,7 @@ func TestOutRate(t *testing.T) {
 }
 
 func TestBeeTxTerm(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-bee-tx-term"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	ch := make(chan bool)

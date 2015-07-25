@@ -12,10 +12,7 @@ import (
 type query string
 
 func TestSync(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-sync"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("sync")
@@ -42,10 +39,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncCancel(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-sync"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	req := query("test")
@@ -58,10 +52,7 @@ func TestSyncCancel(t *testing.T) {
 }
 
 func TestSyncDeferReply(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-sync"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("syncDeferReply")
@@ -131,10 +122,7 @@ func BenchmarkSync(b *testing.B) {
 	log.SetOutput(ioutil.Discard)
 	b.StopTimer()
 
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhbench-sync"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	app := h.NewApp("sync")

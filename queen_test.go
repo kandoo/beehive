@@ -7,10 +7,7 @@ import (
 )
 
 func TestQueenMultipleKeys(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest-queen-multiple"
-	removeState(cfg)
-	cfg.Addr = newHiveAddrForTest()
+	cfg := newHiveConfigForTest()
 	h := NewHiveWithConfig(cfg)
 
 	ch := make(chan uint64)
@@ -72,12 +69,9 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 
 	var hives []Hive
 	for i := 0; i < hiveN; i++ {
-		cfg := DefaultCfg
-		cfg.StatePath = "/tmp/bhbench-queen-single"
-		removeState(cfg)
-		cfg.Addr = newHiveAddrForTest()
+		cfg := newHiveConfigForTest()
 		if i != 0 {
-			cfg.PeerAddrs = []string{hives[0].(*hive).config.Addr}
+			cfg.PeerAddrs = []string{hives[0].(*hive).config.RPCAddr}
 		}
 		h := NewHiveWithConfig(cfg)
 

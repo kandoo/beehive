@@ -18,10 +18,16 @@ func pingHive(h Hive) {
 }
 
 var (
-	port = 6677
+	testPort = 6000
 )
 
-func newHiveAddrForTest() string {
-	port++
-	return fmt.Sprintf("127.0.0.1:%v", port)
+func newHiveConfigForTest() (cfg HiveConfig) {
+	cfg = DefaultCfg
+	testPort++
+	cfg.RPCAddr = fmt.Sprintf("127.0.0.1:%v", testPort)
+	testPort++
+	cfg.PublicAddr = fmt.Sprintf("127.0.0.1:%v", testPort)
+	cfg.StatePath = fmt.Sprintf("/tmp/bhtest-%v", testPort)
+	removeState(cfg)
+	return cfg
 }

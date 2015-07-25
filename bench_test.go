@@ -26,12 +26,9 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 	kch := make(chan benchKill)
 	var hs []Hive
 	for i := 0; i < hives; i++ {
-		cfg := DefaultCfg
-		cfg.StatePath = "/tmp/bhbench-e2e-" + name + strconv.Itoa(i)
-		removeState(cfg)
-		cfg.Addr = newHiveAddrForTest()
+		cfg := newHiveConfigForTest()
 		if i > 0 {
-			cfg.PeerAddrs = []string{hs[0].(*hive).config.Addr}
+			cfg.PeerAddrs = []string{hs[0].(*hive).config.RPCAddr}
 		}
 		h := NewHiveWithConfig(cfg)
 

@@ -80,45 +80,30 @@ func runHiveTest(cfg HiveConfig, t *testing.T) {
 }
 
 func TestHiveStart(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.Addr = newHiveAddrForTest()
-	cfg.StatePath = "/tmp/bhtest"
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	runHiveTest(cfg, t)
 }
 
 func TestHiveRestart(t *testing.T) {
-	cfg := DefaultCfg
-	cfg.StatePath = "/tmp/bhtest"
-	cfg.Addr = newHiveAddrForTest()
-	removeState(cfg)
+	cfg := newHiveConfigForTest()
 	runHiveTest(cfg, t)
 	time.Sleep(1 * time.Second)
 	runHiveTest(cfg, t)
 }
 
 func TestHiveCluster(t *testing.T) {
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	go h2.Start()
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	go h3.Start()
 
@@ -131,27 +116,18 @@ func TestHiveCluster(t *testing.T) {
 }
 
 func TestHiveFailure(t *testing.T) {
-	cfg1 := DefaultCfg
-	cfg1.StatePath = "/tmp/bhtest1"
-	cfg1.Addr = newHiveAddrForTest()
-	removeState(cfg1)
+	cfg1 := newHiveConfigForTest()
 	h1 := NewHiveWithConfig(cfg1)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := DefaultCfg
-	cfg2.StatePath = "/tmp/bhtest2"
-	cfg2.Addr = newHiveAddrForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg2)
+	cfg2 := newHiveConfigForTest()
+	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
 	h2 := NewHiveWithConfig(cfg2)
 	go h2.Start()
 
-	cfg3 := DefaultCfg
-	cfg3.StatePath = "/tmp/bhtest3"
-	cfg3.Addr = newHiveAddrForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	removeState(cfg3)
+	cfg3 := newHiveConfigForTest()
+	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
 	h3 := NewHiveWithConfig(cfg3)
 	go h3.Start()
 
