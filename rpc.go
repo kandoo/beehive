@@ -59,9 +59,13 @@ type dialTry struct {
 	tries uint64
 }
 
-type clientAndBackoff struct {
+type clientBackoff struct {
 	client  *rpcClient
 	backoff time.Time
+}
+
+func (cb clientBackoff) isSet() bool {
+	return cb == clientBackoff{}
 }
 
 type rpcClientPool struct {

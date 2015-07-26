@@ -1,7 +1,6 @@
 package beehive
 
 import (
-	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -51,6 +50,7 @@ type bee struct {
 	handleMsg func(mhs []msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
 	batchSize uint
+	prxClient clientBackoff
 
 	inBucket  *bucket.Bucket
 	outBucket *bucket.Bucket
@@ -598,19 +598,48 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 		glog.Fatalf("cannot find bee %v: %v", to, err)
 	}
 
-	var msgbuf bytes.Buffer
 	mfn := func(mhs []msgAndHandler) {
+		if !b.prxClient.backoff.Equal(time.Time{}) &&
+			time.Now().Before(b.prxClient.backoff) {
+
+			glog.Errorf("%v cannot send message: backing off", b)
+			return
+		}
+
+		if b.prxClient.client == nil {
+			c, err := b.hive.client.beeClient(to)
+			if err != nil {
+				if berr, ok := err.(*rpcBackoffError); ok {
+					b.prxClient = clientBackoff{backoff: berr.Until}
+				}
+				glog.Errorf("%v cannot send message: %v", b, err)
+				return
+			}
+			b.prxClient = clientBackoff{client: c}
+		}
+
 		msgs := make([]msg, 0, len(mhs))
 		for i := range mhs {
 			msg := *(mhs[i].msg)
 			msg.MsgTo = to
 			msgs = append(msgs, msg)
 		}
-		if err := b.hive.client.sendMsg(msgs); err != nil {
-			glog.Errorf("%v cannot send messages: %v", b, err)
+
+		for {
+			if err := b.prxClient.client.sendMsg(msgs); err == nil {
+				return
+			}
+
+			// Maybe a second try, if the previous connection is closed.
+			if b.prxClient.client, err = b.hive.client.resetBeeClient(to,
+				b.prxClient.client); err != nil {
+
+				glog.Errorf("%v cannot send message: %v", b, err)
+				return
+			}
 		}
-		msgbuf.Reset()
 	}
+
 	cfn := func(cc cmdAndChannel) {
 		switch cc.cmd.Data.(type) {
 		case cmdStop, cmdStart:
@@ -619,6 +648,7 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 			cc.cmd.Hive = bi.Hive
 			cc.cmd.App = bi.App
 			cc.cmd.Bee = to
+			// TODO(soheil): maybe use prxClient here as well.
 			res, err := b.hive.client.sendCmd(cc.cmd)
 			if cc.ch != nil {
 				cc.ch <- cmdResult{Data: res, Err: err}
