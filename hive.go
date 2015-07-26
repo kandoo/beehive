@@ -62,10 +62,10 @@ type Hive interface {
 
 // HiveConfig represents the configuration of a hive.
 type HiveConfig struct {
-	Addr      string   // listening address of the hive.
-	PeerAddrs []string // peer addresses.
-	RegAddrs  []string // reigstery service addresses.
-	StatePath string   // where to store state data.
+	PublicAddr string   // public address of the hive.
+	RPCAddr    string   // RPC address of the hive.
+	PeerAddrs  []string // peer addresses.
+	StatePath  string   // where to store state data.
 
 	DataChBufSize uint // buffer size of the data channels.
 	CmdChBufSize  uint // buffer size of the control channels.

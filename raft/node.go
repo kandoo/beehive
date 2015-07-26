@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
@@ -461,7 +460,7 @@ func (n *Node) snapshot(snapi uint64, confs raftpb.ConfState) {
 		if err != nil {
 			// the snapshot was done asynchronously with the progress of raft.
 			// raft might have already got a newer snapshot.
-			if err == raft.ErrSnapOutOfDate {
+			if err == etcdraft.ErrSnapOutOfDate {
 				return
 			}
 			glog.Fatalf("unexpected create snapshot error %v", err)
@@ -477,13 +476,14 @@ func (n *Node) snapshot(snapi uint64, confs raftpb.ConfState) {
 		if snapi > numberOfCatchUpEntries {
 			compacti = snapi - numberOfCatchUpEntries
 		}
-		err = n.raftStorage.Compact(compacti)
-		if err != nil {
+		fmt.Println("snap compat ", compacti, snapi)
+		if err = n.raftStorage.Compact(compacti); err != nil {
 			// the compaction was done asynchronously with the progress of raft.
 			// raft log might already been compact.
-			if err == raft.ErrCompacted {
+			if err == etcdraft.ErrCompacted {
 				return
 			}
+
 			glog.Fatalf("unexpected compaction error %v", err)
 		}
 		glog.Infof("compacted raft log at %d", compacti)
