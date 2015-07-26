@@ -23,7 +23,7 @@ func NewError(err error) Error {
 }
 
 func Errorf(format string, args ...interface{}) Error {
-	return Error(fmt.Sprintf(format, args))
+	return Error(fmt.Sprintf(format, args...))
 }
 
 func init() {
