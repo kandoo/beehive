@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/rpc"
 	"os"
 	"os/signal"
@@ -120,7 +119,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(cfg.RaftTick),
-		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
 	h.streamer = newRPCClientPool(h)
@@ -236,8 +234,7 @@ type hive struct {
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	client   *http.Client
-	streamer streamer
+	streamer *rpcClientPool
 
 	replStrategy replicationStrategy
 	collector    collector
