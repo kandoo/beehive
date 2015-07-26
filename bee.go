@@ -240,9 +240,13 @@ func (b *bee) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 	}
 
 	for _, msg := range msgs {
-		if err := b.hive.streamer.sendBeeRaft(msg, r); err != nil {
-			glog.Errorf("%v cannot send raft: %v", b, err)
-		}
+		go func(msg raftpb.Message) {
+			if err := b.hive.streamer.sendBeeRaft(msg, r); err != nil &&
+				!isBackoffError(err) {
+
+				glog.Errorf("%v cannot send raft: %v", b, err)
+			}
+		}(msg)
 	}
 }
 

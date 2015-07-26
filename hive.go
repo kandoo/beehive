@@ -655,8 +655,12 @@ func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 	}
 
 	for i, msg := range msgs {
-		if err := h.streamer.sendRaft(msg, r); err != nil {
-			glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)
-		}
+		go func(msg raftpb.Message) {
+			if err := h.streamer.sendRaft(msg, r); err != nil &&
+				!isBackoffError(err) {
+
+				glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)
+			}
+		}(msg)
 	}
 }
