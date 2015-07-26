@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/rpc"
 	"os"
 	"os/signal"
@@ -120,10 +119,9 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
 		ticker: time.NewTicker(cfg.RaftTick),
-		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
-	h.streamer = newRPCClientPool(h)
+	h.client = newRPCClientPool(h)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
 	h.server = newServer(h, cfg.PubAddr)
@@ -236,8 +234,7 @@ type hive struct {
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	client   *http.Client
-	streamer streamer
+	client   *rpcClientPool
 
 	replStrategy replicationStrategy
 	collector    collector
@@ -656,7 +653,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 
 	for i, msg := range msgs {
 		go func(msg raftpb.Message) {
-			if err := h.streamer.sendRaft(msg, r); err != nil &&
+			if err := h.client.sendRaft(msg, r); err != nil &&
 				!isBackoffError(err) {
 
 				glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)

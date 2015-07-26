@@ -241,7 +241,7 @@ func (b *bee) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 
 	for _, msg := range msgs {
 		go func(msg raftpb.Message) {
-			if err := b.hive.streamer.sendBeeRaft(msg, r); err != nil &&
+			if err := b.hive.client.sendBeeRaft(msg, r); err != nil &&
 				!isBackoffError(err) {
 
 				glog.Errorf("%v cannot send raft: %v", b, err)
@@ -289,7 +289,7 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 		Bee:  bid,
 		Data: cmdJoinColony{Colony: newc},
 	}
-	if _, err := b.hive.streamer.sendCmd(cmd); err != nil {
+	if _, err := b.hive.client.sendCmd(cmd); err != nil {
 		fmt.Println("ZZZZZZZZZZZZZZZZZZZz", err)
 		return err
 	}
@@ -606,7 +606,7 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 			msg.MsgTo = to
 			msgs = append(msgs, msg)
 		}
-		if err := b.hive.streamer.sendMsg(msgs); err != nil {
+		if err := b.hive.client.sendMsg(msgs); err != nil {
 			glog.Errorf("%v cannot send messages: %v", b, err)
 		}
 		msgbuf.Reset()
@@ -619,7 +619,7 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 			cc.cmd.Hive = bi.Hive
 			cc.cmd.App = bi.App
 			cc.cmd.Bee = to
-			res, err := b.hive.streamer.sendCmd(cc.cmd)
+			res, err := b.hive.client.sendCmd(cc.cmd)
 			if cc.ch != nil {
 				cc.ch <- cmdResult{Data: res, Err: err}
 			}
@@ -1011,7 +1011,7 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 					App:  b.app.Name(),
 					Data: cmdCreateBee{},
 				}
-				res, err := b.hive.streamer.sendCmd(cmd)
+				res, err := b.hive.client.sendCmd(cmd)
 				if err != nil {
 					glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
 					fch <- BeeInfo{}
