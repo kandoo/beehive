@@ -91,8 +91,8 @@ var (
 				$('<div>', {
 						'id': 'hive'+ p.id,
 						'class': 'hive',
-						'html': '<a href="http://' + p.addr + '" class="addr">Hive ' +
-											p.id +
+						'html': '<a href="http://' + p.public_addr +
+										'" class="addr">Hive ' + p.id +
 										'</a>'
 					}).appendTo('body');
 			}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 )
 
+// Cmd represents a control command.
+//
 // If App is "" and To is 0, the command is handed to the hive.
 // If App is not "" and To is 0, the command should be handed to the qee.
 // Otherwise it is for a bee of that app.

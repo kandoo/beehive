@@ -26,7 +26,7 @@ func newHiveConfigForTest() (cfg HiveConfig) {
 	testPort++
 	cfg.RPCAddr = fmt.Sprintf("127.0.0.1:%v", testPort)
 	testPort++
-	cfg.PublicAddr = fmt.Sprintf("127.0.0.1:%v", testPort)
+	cfg.PubAddr = fmt.Sprintf("127.0.0.1:%v", testPort)
 	cfg.StatePath = fmt.Sprintf("/tmp/bhtest-%v", testPort)
 	removeState(cfg)
 	return cfg

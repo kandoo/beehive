@@ -57,7 +57,6 @@ type bee struct {
 
 	node       *raft.Node
 	ticker     *time.Ticker
-	peers      map[uint64]*proxy
 	emitInRaft bool
 	raftTerm   uint64
 	txTerm     uint64
@@ -240,8 +239,10 @@ func (b *bee) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 		return
 	}
 
-	if err := b.hive.streamer.sendBeeRaft(msgs, r); err != nil {
-		glog.Errorf("%v cannot send raft: %v", b, err)
+	for _, msg := range msgs {
+		if err := b.hive.streamer.sendBeeRaft(msg, r); err != nil {
+			glog.Errorf("%v cannot send raft: %v", b, err)
+		}
 	}
 }
 
@@ -284,7 +285,8 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 		Bee:  bid,
 		Data: cmdJoinColony{Colony: newc},
 	}
-	if _, err := b.hive.streamer.sendCmd(cmd, hid); err != nil {
+	if _, err := b.hive.streamer.sendCmd(cmd); err != nil {
+		fmt.Println("ZZZZZZZZZZZZZZZZZZZz", err)
 		return err
 	}
 
@@ -579,7 +581,7 @@ func (b *bee) followerHandlers() (func(mhs []msgAndHandler),
 	return mfn, b.handleCmdLocal
 }
 
-func (b *bee) becomeProxy(p *proxy) {
+func (b *bee) becomeProxy() {
 	b.proxy = true
 	b.handleMsg, b.handleCmd = b.proxyHandlers(b.ID())
 }
@@ -613,7 +615,7 @@ func (b *bee) proxyHandlers(to uint64) (func(mhs []msgAndHandler),
 			cc.cmd.Hive = bi.Hive
 			cc.cmd.App = bi.App
 			cc.cmd.Bee = to
-			res, err := b.hive.streamer.sendCmd(cc.cmd, bi.Hive)
+			res, err := b.hive.streamer.sendCmd(cc.cmd)
 			if cc.ch != nil {
 				cc.ch <- cmdResult{Data: res, Err: err}
 			}
@@ -988,7 +990,7 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 			break
 		}
 
-		fch := make(chan uint64)
+		fch := make(chan BeeInfo)
 
 		tries := r - 1
 		if len(hives) < tries {
@@ -1001,27 +1003,31 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 				glog.V(2).Infof("trying to create a new follower for %v on hive %v", b,
 					hives[0])
 				cmd := cmd{
+					Hive: hives[i],
 					App:  b.app.Name(),
 					Data: cmdCreateBee{},
 				}
-				res, err := b.hive.streamer.sendCmd(cmd, hives[i])
+				res, err := b.hive.streamer.sendCmd(cmd)
 				if err != nil {
 					glog.Errorf("%v cannot create a new bee on %v: %v", b, hives[0], err)
-					fch <- 0
+					fch <- BeeInfo{}
 					return
 				}
-				fch <- res.(uint64)
+				fch <- BeeInfo{
+					ID:   res.(uint64),
+					Hive: hives[i],
+				}
 			}(i)
 		}
 
 		for i := 0; i < tries; i++ {
-			fid := <-fch
-			if fid == 0 {
+			finf := <-fch
+			if finf.ID == 0 {
 				continue
 			}
 
-			if err := b.addFollower(fid, hives[i]); err != nil {
-				glog.Errorf("%v cannot add %v as a follower: %v", b, fid, err)
+			if err := b.addFollower(finf.ID, finf.Hive); err != nil {
+				glog.Errorf("%v cannot add %v as a follower: %v", b, finf.ID, err)
 				continue
 			}
 			recruited++
@@ -1034,12 +1040,6 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 }
 
 func (b *bee) handoffNonPersistent(to uint64) error {
-	info, err := b.hive.registry.bee(to)
-	if err != nil {
-		glog.Fatalf("%d %v", to, err)
-		return err
-	}
-
 	s, err := b.stateL1.Save()
 	if err != nil {
 		return err
@@ -1057,11 +1057,7 @@ func (b *bee) handoffNonPersistent(to uint64) error {
 		return err
 	}
 
-	p, err := b.hive.newProxyToHive(info.Hive)
-	if err != nil {
-		return err
-	}
-	b.becomeProxy(p)
+	b.becomeProxy()
 	return nil
 }
 

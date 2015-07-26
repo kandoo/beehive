@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/rpc"
 	"os"
 	"os/signal"
 	"sync"
@@ -62,10 +63,10 @@ type Hive interface {
 
 // HiveConfig represents the configuration of a hive.
 type HiveConfig struct {
-	PublicAddr string   // public address of the hive.
-	RPCAddr    string   // RPC address of the hive.
-	PeerAddrs  []string // peer addresses.
-	StatePath  string   // where to store state data.
+	PubAddr   string   // public address of the hive.
+	RPCAddr   string   // RPC address of the hive.
+	PeerAddrs []string // peer addresses.
+	StatePath string   // where to store state data.
 
 	DataChBufSize uint // buffer size of the data channels.
 	CmdChBufSize  uint // buffer size of the control channels.
@@ -122,10 +123,10 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		client: newHTTPClient(cfg.ConnTimeout),
 	}
 
-	h.streamer = newLoadBalancer(h, cfg.BatcherPerHost)
+	h.streamer = newRPCClientPool(h)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
-	h.server = newServer(h, cfg.Addr)
+	h.server = newServer(h, cfg.PubAddr)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -152,12 +153,12 @@ func NewHive() Hive {
 }
 
 func init() {
-	flag.StringVar(&DefaultCfg.Addr, "laddr", "localhost:7767",
+	flag.StringVar(&DefaultCfg.PubAddr, "pubaddr", "localhost:7677",
+		"the listening address used to communicate with other nodes")
+	flag.StringVar(&DefaultCfg.RPCAddr, "rpcaddr", "localhost:7767",
 		"the listening address used to communicate with other nodes")
 	flag.Var(&bhflag.CSV{S: &DefaultCfg.PeerAddrs}, "paddrs",
 		"address of peers. Seperate entries with a comma")
-	flag.Var(&bhflag.CSV{S: &DefaultCfg.RegAddrs}, "raddrs",
-		"address of etcd machines. Separate entries with a comma ','")
 	flag.UintVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
 		"buffer size of data channels")
 	flag.UintVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
@@ -227,8 +228,10 @@ type hive struct {
 	apps map[string]*app
 	qees map[string][]qeeAndHandler
 
-	server   *server
-	listener net.Listener
+	server      *server
+	listener    net.Listener
+	RPCServer   *rpcServer
+	rpcListener net.Listener
 
 	node     *raft.Node
 	registry *registry
@@ -245,7 +248,7 @@ func (h *hive) ID() uint64 {
 }
 
 func (h *hive) String() string {
-	return fmt.Sprintf("hive %v@%v", h.id, h.config.Addr)
+	return fmt.Sprintf("hive %v@%v", h.id, h.config.RPCAddr)
 }
 
 func (h *hive) Config() HiveConfig {
@@ -293,6 +296,10 @@ func (h *hive) stopListener() {
 	if h.listener != nil {
 		h.listener.Close()
 	}
+
+	if h.rpcListener != nil {
+		h.rpcListener.Close()
+	}
 }
 
 func (h *hive) stopQees() {
@@ -320,7 +327,7 @@ func (h *hive) stopQees() {
 				stopped = true
 			case <-time.After(1 * time.Second):
 				if tries--; tries < 0 {
-					glog.Infof("Giving up on qee %v", q)
+					glog.Infof("giving up on qee %v", q)
 					stopped = true
 					continue
 				}
@@ -521,7 +528,7 @@ func (h *hive) Start() error {
 func (h *hive) info() HiveInfo {
 	return HiveInfo{
 		ID:   h.id,
-		Addr: h.config.Addr,
+		Addr: h.config.RPCAddr,
 	}
 }
 
@@ -605,10 +612,10 @@ func (h *hive) registerSignals() {
 }
 
 func (h *hive) listen() error {
-	l, e := net.Listen("tcp", h.config.Addr)
-	if e != nil {
-		glog.Errorf("%v cannot listen: %v", h, e)
-		return e
+	l, err := net.Listen("tcp", h.config.PubAddr)
+	if err != nil {
+		glog.Errorf("%v cannot listen: %v", h, err)
+		return err
 	}
 	glog.Infof("%v listens", h)
 	h.listener = l
@@ -617,22 +624,29 @@ func (h *hive) listen() error {
 		h.server.Serve(l)
 		glog.Infof("%v closed listener", h)
 	}()
-	return nil
-}
 
-func (h *hive) newProxyToHive(to uint64) (*proxy, error) {
-	// TODO(soheil): maybe we should use the cache here.
-	return h.newProxyToHiveWithRetry(to, 0, 1)
-}
-
-func (h *hive) newProxyToHiveWithRetry(to uint64, backoffStep time.Duration,
-	maxRetries uint32) (*proxy, error) {
-	// TODO(soheil): maybe we should use the cache here.
-	a, err := h.hiveAddr(to)
+	rl, err := net.Listen("tcp", h.config.RPCAddr)
 	if err != nil {
-		return nil, err
+		glog.Errorf("%v cannot listen for rpc: %v", err)
+		return err
 	}
-	return newProxyWithRetry(h.client, a, backoffStep, maxRetries), nil
+
+	glog.Infof("%v RPC server starts", h)
+	h.rpcListener = rl
+	rs := rpc.NewServer()
+	if err := rs.RegisterName("rpcServer", newRPCServer(h)); err != nil {
+		glog.Fatalf("cannot register rpc server: %v", err)
+	}
+	go func() {
+		for {
+			conn, err := rl.Accept()
+			if err != nil {
+				return
+			}
+			go rs.ServeConn(conn)
+		}
+	}()
+	return nil
 }
 
 func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
@@ -640,7 +654,9 @@ func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 		return
 	}
 
-	if err := h.streamer.sendRaft(msgs, r); err != nil {
-		glog.Errorf("%v cannot send raft messages: %v", h, err)
+	for i, msg := range msgs {
+		if err := h.streamer.sendRaft(msg, r); err != nil {
+			glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)
+		}
 	}
 }

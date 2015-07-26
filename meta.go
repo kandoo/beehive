@@ -23,13 +23,14 @@ func peersInfo(addrs []string) map[uint64]HiveInfo {
 	}
 
 	ch := make(chan []HiveInfo, len(addrs))
-	client := newHTTPClient(10 * time.Second)
 	for _, a := range addrs {
 		go func(a string) {
-			p := newProxy(client, a)
-			if s, err := p.state(); err == nil {
-				ch <- s.Peers
+			s, err := getHiveState(a)
+			if err != nil {
+				glog.Errorf("cannot communicate with %v: %v", a, err)
+				return
 			}
+			ch <- s.Peers
 		}(a)
 	}
 
@@ -49,17 +50,22 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 	}
 
 	ch := make(chan uint64, len(paddrs))
-	client := newHTTPClient(10 * time.Second)
-	for _, a := range paddrs {
-		glog.Infof("requesting hive ID from %v", a)
-		go func(a string) {
-			p := newProxyWithRetry(client, a, 100*time.Millisecond, 5)
-			id, err := sendCmd(p, cmd{Data: cmdNewHiveID{Addr: addr}})
+	for _, paddr := range paddrs {
+		glog.Infof("requesting hive ID from %v", paddr)
+		go func(paddr string) {
+			c, err := newRPCClient(paddr)
 			if err != nil {
 				glog.Error(err)
 				return
 			}
-			_, err = sendCmd(p, cmd{
+
+			id, err := c.sendCmd(cmd{Data: cmdNewHiveID{Addr: addr}})
+			if err != nil {
+				glog.Error(err)
+				return
+			}
+
+			_, err = c.sendCmd(cmd{
 				Data: cmdAddHive{
 					Info: raft.NodeInfo{
 						ID:   id.(uint64),
@@ -72,12 +78,12 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 				return
 			}
 			ch <- id.(uint64)
-		}(a)
+		}(paddr)
 		select {
 		case id := <-ch:
 			return id
 		case <-time.After(1 * time.Second):
-			glog.Infof("timeout in requesting hive ID from %v", a)
+			glog.Infof("cannot get id from %v", paddr)
 			continue
 		}
 	}
@@ -96,7 +102,7 @@ func meta(cfg HiveConfig) hiveMeta {
 		// TODO(soheil): We should also update our peer addresses when we have an
 		// existing meta.
 		m.Peers = peersInfo(cfg.PeerAddrs)
-		m.Hive.Addr = cfg.Addr
+		m.Hive.Addr = cfg.RPCAddr
 		if len(cfg.PeerAddrs) == 0 {
 			// The initial ID is 1. There is no raft node up yet to allocate an ID. So
 			// we must do this when the hive starts.
@@ -104,7 +110,7 @@ func meta(cfg HiveConfig) hiveMeta {
 			goto save
 		}
 
-		m.Hive.ID = hiveIDFromPeers(cfg.Addr, cfg.PeerAddrs)
+		m.Hive.ID = hiveIDFromPeers(cfg.RPCAddr, cfg.PeerAddrs)
 		goto save
 	}
 
@@ -112,7 +118,7 @@ func meta(cfg HiveConfig) hiveMeta {
 	if err = dec.Decode(&m); err != nil {
 		glog.Fatalf("Cannot decode meta: %v", err)
 	}
-	m.Hive.Addr = cfg.Addr
+	m.Hive.Addr = cfg.RPCAddr
 	f.Close()
 
 save:

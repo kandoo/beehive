@@ -343,7 +343,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 func TestAppHTTP(t *testing.T) {
 	h := hive{}
 	cfg := newHiveConfigForTest()
-	addr := cfg.PublicAddr
+	addr := cfg.PubAddr
 	h.server = newServer(&h, addr)
 	a := &app{
 		name: "testapp",

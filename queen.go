@@ -177,12 +177,8 @@ func (q *qee) newProxyBee(info BeeInfo) (*bee, error) {
 		return nil, errors.New("cannot create proxy for a local bee")
 	}
 
-	p, err := q.hive.newProxyToHive(info.Hive)
-	if err != nil {
-		return nil, err
-	}
 	b := q.defaultLocalBee(info.ID)
-	b.becomeProxy(p)
+	b.becomeProxy()
 	q.addBee(b)
 	go b.start()
 	return b, nil
@@ -240,7 +236,7 @@ func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 		Bee:  info.ID,
 		Data: data,
 	}
-	return q.hive.streamer.sendCmd(cmd, info.Hive)
+	return q.hive.streamer.sendCmd(cmd)
 }
 
 func (q *qee) stopBees() {
@@ -287,7 +283,6 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 	}
 
 	glog.V(2).Infof("%v handles command %#v", q, cc.cmd.Data)
-
 	var err error
 	var res interface{}
 	switch cmd := cc.cmd.Data.(type) {
@@ -601,7 +596,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	res, err := q.hive.streamer.sendCmd(cmd, hive)
+	res, err := q.hive.streamer.sendCmd(cmd)
 	if err != nil {
 		goto fallback
 	}
@@ -611,7 +606,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	cmd.Data = cmdJoinColony{
 		Colony: col,
 	}
-	if _, err = q.hive.streamer.sendCmd(cmd, hive); err != nil {
+	if _, err = q.hive.streamer.sendCmd(cmd); err != nil {
 		goto fallback
 	}
 
@@ -717,7 +712,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	r, err = q.hive.streamer.sendCmd(c, to)
+	r, err = q.hive.streamer.sendCmd(c)
 	if err != nil {
 		return Nil, err
 	}
@@ -732,7 +727,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 			Bee:  newb,
 			Data: cmdJoinColony{Colony: Colony{Leader: newb}},
 		}
-		if _, err = q.hive.streamer.sendCmd(c, to); err != nil {
+		if _, err = q.hive.streamer.sendCmd(c); err != nil {
 			return Nil, err
 		}
 		goto handoff
@@ -789,7 +784,6 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:      q.hive,
 		app:       q.app,
-		peers:     make(map[uint64]*proxy),
 		batchSize: batch,
 		inBucket:  inb,
 		outBucket: outb,

@@ -90,7 +90,7 @@ func main() {
 
 	config := bh.DefaultCfg
 	for h := 0; h < *nhives; h++ {
-		config.Addr = fmt.Sprintf(lAddr, port)
+		config.RPCAddr = fmt.Sprintf(lAddr, port)
 		port++
 
 		jCh := make(chan bool)
