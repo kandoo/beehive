@@ -21,8 +21,7 @@ Beehive is:
 
 ## Installation
 
-_Prerequisite_ you need to install go (preferably version 1.2+) and
-set up your GOPATH.
+_Prerequisite_ you need to install go 1.4+ and set up your `GOPATH`.
 
 To install Beehive, run:
 
