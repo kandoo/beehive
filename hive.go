@@ -626,11 +626,11 @@ func (h *hive) listen() (err error) {
 		for {
 			conn, err := rl.Accept()
 			if err != nil {
+				glog.Infof("%v closed rpc listener", h)
 				return
 			}
 			go rs.ServeConn(conn)
 		}
-		glog.Infof("%v closed rpc listener")
 	}()
 
 	go m.Serve()
@@ -643,12 +643,12 @@ func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 		return
 	}
 
-	for i, msg := range msgs {
+	for _, msg := range msgs {
 		go func(msg raftpb.Message) {
 			if err := h.client.sendRaft(msg, r); err != nil &&
 				!isBackoffError(err) {
 
-				glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)
+				glog.Errorf("%v cannot send raft messages: %v", h, err)
 			}
 		}(msg)
 	}

@@ -1117,7 +1117,7 @@ func (b *bee) handoff(to uint64) error {
 	time.Sleep(b.hive.config.RaftElectTimeout())
 
 	if _, err := b.hive.node.Process(context.TODO(), noOp{}); err != nil {
-		glog.Errorf("%v cannot sync raft: %v", err)
+		glog.Errorf("%v cannot sync raft: %v", b, err)
 	}
 
 	if b.colony().IsFollower(b.ID()) {
