@@ -102,7 +102,7 @@ func meta(cfg HiveConfig) hiveMeta {
 		// TODO(soheil): We should also update our peer addresses when we have an
 		// existing meta.
 		m.Peers = peersInfo(cfg.PeerAddrs)
-		m.Hive.Addr = cfg.RPCAddr
+		m.Hive.Addr = cfg.Addr
 		if len(cfg.PeerAddrs) == 0 {
 			// The initial ID is 1. There is no raft node up yet to allocate an ID. So
 			// we must do this when the hive starts.
@@ -110,7 +110,7 @@ func meta(cfg HiveConfig) hiveMeta {
 			goto save
 		}
 
-		m.Hive.ID = hiveIDFromPeers(cfg.RPCAddr, cfg.PeerAddrs)
+		m.Hive.ID = hiveIDFromPeers(cfg.Addr, cfg.PeerAddrs)
 		goto save
 	}
 
@@ -118,7 +118,7 @@ func meta(cfg HiveConfig) hiveMeta {
 	if err = dec.Decode(&m); err != nil {
 		glog.Fatalf("Cannot decode meta: %v", err)
 	}
-	m.Hive.Addr = cfg.RPCAddr
+	m.Hive.Addr = cfg.Addr
 	f.Close()
 
 save:

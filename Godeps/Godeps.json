@@ -12,6 +12,10 @@
 			"Rev": "b965b613227fddccbfffe13eae360ed3fa822f8d"
 		},
 		{
+			"ImportPath": "github.com/bradfitz/http2",
+			"Rev": "f8202bc903bda493ebba4aa54922d78430c2c42f"
+		},
+		{
 			"ImportPath": "github.com/coreos/etcd/pkg/crc",
 			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
 			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
@@ -92,6 +96,10 @@
 		{
 			"ImportPath": "github.com/prometheus/procfs",
 			"Rev": "c91d8eefde16bd047416409eb56353ea84a186e4"
+		},
+		{
+			"ImportPath": "github.com/soheilhy/cmux",
+			"Rev": "69469eaa1ca87f6a4c27ce096536320ab60353fb"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",

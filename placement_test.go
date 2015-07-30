@@ -45,7 +45,7 @@ func TestPlacement(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPlacementApp(h2, ch)
 	go h2.Start()

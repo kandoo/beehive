@@ -20,20 +20,11 @@ const (
 	minWait = 50 * time.Millisecond
 )
 
-type streamer interface {
-	sendMsg(ms []msg) error
-	sendCmd(c cmd) (interface{}, error)
-	sendRaft(msg raftpb.Message, r raft.Reporter) error
-	sendBeeRaft(msg raftpb.Message, r raft.Reporter) error
-	stop()
-}
-
 // HiveState represents the state of a hive.
 type HiveState struct {
-	ID      uint64     `json:"id"`          // ID is the ID of the hive.
-	PubAddr string     `json:"public_addr"` // PubAddr is hive's public address.
-	RPCAddr string     `json:"rpc_addr"`    // RPC is hive's RPC address.
-	Peers   []HiveInfo `json:"peers"`       // Peers of the hive.
+	ID    uint64     `json:"id"`    // ID is the ID of the hive.
+	Addr  string     `json:"addr"`  // Addr is the hive's address.
+	Peers []HiveInfo `json:"peers"` // Peers of the hive.
 }
 
 type rpcBackoffError struct {
@@ -379,10 +370,9 @@ func newRPCServer(h *hive) *rpcServer {
 
 func (s *rpcServer) HiveState(dummy struct{}, state *HiveState) error {
 	*state = HiveState{
-		ID:      s.h.ID(),
-		PubAddr: s.h.config.PubAddr,
-		RPCAddr: s.h.config.RPCAddr,
-		Peers:   s.h.registry.hives(),
+		ID:    s.h.ID(),
+		Addr:  s.h.config.Addr,
+		Peers: s.h.registry.hives(),
 	}
 	return nil
 }
@@ -461,7 +451,6 @@ func (s *rpcServer) ProcessCmd(cmds []cmd, res *[]cmdResult) error {
 
 func (s *rpcServer) ProcessRaft(msg raftpb.Message, dummy *bool) (err error) {
 	if msg.To != s.h.ID() {
-		fmt.Println("teeeeeeeeeeeeeeeees raft")
 		return fmt.Errorf("%v recieves a raft message for %v", s.h, msg.To)
 	}
 

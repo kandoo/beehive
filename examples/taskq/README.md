@@ -23,20 +23,19 @@ $ go get github.com/kandoo/beehive/examples/taskq
 ## Running the first node 
 You can run the first node using:
 ```bash
-taskq -logtostderr -rpcaddr RPC1 -pubaddr PUB1 -statepath STATE1
+taskq -logtostderr -addr ADDR1 -statepath STATE1
 ```
 
-`RPC1` and `PUB1` are the RPC and public addresses of the first
-node in the form of `IP:PORT`. `STATE1` is the directory in which
-the first node stores its state.
+`ADDR1` is the address of the first node in the form of `IP:PORT`.
+`STATE1` is the directory in which the first node stores its state.
 
 ## Running a cluster
 You can run new nodes to join the cluster using:
 ```bash
-taskq -logtostderr -rpcaddr RPCN -pubaddr PUBN -paddrs RPC1 -statepath STATEN
+taskq -logtostderr -addr ADDRN -paddrs ADDR1 -statepath STATEN
 ```
 
-`RPCN` and `PUBN` are the RPC and public addresses of the new node
-in the form of `IP:PORT`. `RPC1` is the address of the first node.
+`ADDRN` is the address of the new node in the form of `IP:PORT`.
+`ADDR1` is the address of the first node.
 `STATEN` is the directory in which the N'th node stores its state.
 

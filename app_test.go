@@ -67,14 +67,14 @@ func TestReplicatedApp(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -101,14 +101,14 @@ func TestReplicatedAppFailure(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -163,14 +163,14 @@ func TestReplicatedAppHandoff(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -220,14 +220,14 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	apps[1] = registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	apps[2] = registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -284,14 +284,14 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	registerPersistentApp(h3, ch)
 	go h3.Start()
@@ -303,7 +303,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	id0 := <-ch
 
 	cfg4 := newHiveConfigForTest()
-	cfg4.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg4.PeerAddrs = []string{cfg1.Addr}
 	h4 := NewHiveWithConfig(cfg4)
 	registerPersistentApp(h4, ch)
 	go h4.Start()
@@ -343,14 +343,14 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 func TestAppHTTP(t *testing.T) {
 	h := hive{}
 	cfg := newHiveConfigForTest()
-	addr := cfg.PubAddr
-	h.server = newServer(&h, addr)
+	addr := cfg.Addr
+	h.httpServer = newServer(&h, addr)
 	a := &app{
 		name: "testapp",
 		hive: &h,
 	}
 	a.HandleHTTPFunc("/test", func(w http.ResponseWriter, r *http.Request) {})
-	go h.server.ListenAndServe()
+	go h.httpServer.ListenAndServe()
 	time.Sleep(1 * time.Second)
 	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", addr))
 	if err != nil {

@@ -290,7 +290,6 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 		Data: cmdJoinColony{Colony: newc},
 	}
 	if _, err := b.hive.client.sendCmd(cmd); err != nil {
-		fmt.Println("ZZZZZZZZZZZZZZZZZZZz", err)
 		return err
 	}
 

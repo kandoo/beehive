@@ -388,7 +388,7 @@ func (a *app) HandleHTTPFunc(path string,
 
 func (a *app) subrouter() *mux.Router {
 	if a.router == nil {
-		a.router = a.hive.server.router.PathPrefix(a.appHTTPPrefix()).Subrouter()
+		a.router = a.hive.httpServer.router.PathPrefix(a.appHTTPPrefix()).Subrouter()
 	}
 	return a.router
 }
