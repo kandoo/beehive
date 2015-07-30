@@ -19,6 +19,7 @@ import (
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/soheilhy/cmux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
@@ -62,8 +63,7 @@ type Hive interface {
 
 // HiveConfig represents the configuration of a hive.
 type HiveConfig struct {
-	PubAddr   string   // public address of the hive.
-	RPCAddr   string   // RPC address of the hive.
+	Addr      string   // public address of the hive.
 	PeerAddrs []string // peer addresses.
 	StatePath string   // where to store state data.
 
@@ -121,10 +121,9 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		ticker: time.NewTicker(cfg.RaftTick),
 	}
 
-	h.streamer = newRPCClientPool(h)
+	h.client = newRPCClientPool(h)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
-	h.server = newServer(h, cfg.PubAddr)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -151,10 +150,8 @@ func NewHive() Hive {
 }
 
 func init() {
-	flag.StringVar(&DefaultCfg.PubAddr, "pubaddr", "localhost:7677",
-		"the listening address used to communicate with other nodes")
-	flag.StringVar(&DefaultCfg.RPCAddr, "rpcaddr", "localhost:7767",
-		"the listening address used to communicate with other nodes")
+	flag.StringVar(&DefaultCfg.Addr, "addr", "localhost:7677",
+		"the server listening address used for both RPC and HTTP")
 	flag.Var(&bhflag.CSV{S: &DefaultCfg.PeerAddrs}, "paddrs",
 		"address of peers. Seperate entries with a comma")
 	flag.UintVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
@@ -226,15 +223,13 @@ type hive struct {
 	apps map[string]*app
 	qees map[string][]qeeAndHandler
 
-	server      *server
-	listener    net.Listener
-	RPCServer   *rpcServer
-	rpcListener net.Listener
+	httpServer *httpServer
+	listener   net.Listener
 
 	node     *raft.Node
 	registry *registry
 	ticker   *time.Ticker
-	streamer *rpcClientPool
+	client   *rpcClientPool
 
 	replStrategy replicationStrategy
 	collector    collector
@@ -245,7 +240,7 @@ func (h *hive) ID() uint64 {
 }
 
 func (h *hive) String() string {
-	return fmt.Sprintf("hive %v@%v", h.id, h.config.RPCAddr)
+	return fmt.Sprintf("hive %v@%v", h.id, h.config.Addr)
 }
 
 func (h *hive) Config() HiveConfig {
@@ -292,10 +287,6 @@ func (h *hive) stopListener() {
 	glog.Infof("%v closes listener...", h)
 	if h.listener != nil {
 		h.listener.Close()
-	}
-
-	if h.rpcListener != nil {
-		h.rpcListener.Close()
 	}
 }
 
@@ -525,7 +516,7 @@ func (h *hive) Start() error {
 func (h *hive) info() HiveInfo {
 	return HiveInfo{
 		ID:   h.id,
-		Addr: h.config.RPCAddr,
+		Addr: h.config.Addr,
 	}
 }
 
@@ -608,32 +599,29 @@ func (h *hive) registerSignals() {
 	}()
 }
 
-func (h *hive) listen() error {
-	l, err := net.Listen("tcp", h.config.PubAddr)
+func (h *hive) listen() (err error) {
+	h.listener, err = net.Listen("tcp", h.config.Addr)
 	if err != nil {
 		glog.Errorf("%v cannot listen: %v", h, err)
 		return err
 	}
-	glog.Infof("%v listens", h)
-	h.listener = l
+	glog.Infof("%v is listening", h)
 
+	m := cmux.New(h.listener)
+	hl := m.Match(cmux.HTTP1Fast())
+	rl := m.Match(cmux.Any())
+
+	h.httpServer = newServer(h, h.config.Addr)
 	go func() {
-		h.server.Serve(l)
-		glog.Infof("%v closed listener", h)
+		h.httpServer.Serve(hl)
+		glog.Infof("%v closed http listener", h)
 	}()
 
-	rl, err := net.Listen("tcp", h.config.RPCAddr)
-	if err != nil {
-		glog.Errorf("%v cannot listen for rpc: %v", err)
-		return err
-	}
-
-	glog.Infof("%v RPC server starts", h)
-	h.rpcListener = rl
 	rs := rpc.NewServer()
 	if err := rs.RegisterName("rpcServer", newRPCServer(h)); err != nil {
 		glog.Fatalf("cannot register rpc server: %v", err)
 	}
+
 	go func() {
 		for {
 			conn, err := rl.Accept()
@@ -642,7 +630,11 @@ func (h *hive) listen() error {
 			}
 			go rs.ServeConn(conn)
 		}
+		glog.Infof("%v closed rpc listener")
 	}()
+
+	go m.Serve()
+
 	return nil
 }
 
@@ -653,7 +645,7 @@ func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
 
 	for i, msg := range msgs {
 		go func(msg raftpb.Message) {
-			if err := h.streamer.sendRaft(msg, r); err != nil &&
+			if err := h.client.sendRaft(msg, r); err != nil &&
 				!isBackoffError(err) {
 
 				glog.Errorf("%v cannot send raft messages: %v, %v", h, err, i)

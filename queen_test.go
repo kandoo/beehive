@@ -71,7 +71,7 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 	for i := 0; i < hiveN; i++ {
 		cfg := newHiveConfigForTest()
 		if i != 0 {
-			cfg.PeerAddrs = []string{hives[0].(*hive).config.RPCAddr}
+			cfg.PeerAddrs = []string{hives[0].(*hive).config.Addr}
 		}
 		h := NewHiveWithConfig(cfg)
 

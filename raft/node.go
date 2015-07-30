@@ -476,7 +476,6 @@ func (n *Node) snapshot(snapi uint64, confs raftpb.ConfState) {
 		if snapi > numberOfCatchUpEntries {
 			compacti = snapi - numberOfCatchUpEntries
 		}
-		fmt.Println("snap compat ", compacti, snapi)
 		if err = n.raftStorage.Compact(compacti); err != nil {
 			// the compaction was done asynchronously with the progress of raft.
 			// raft log might already been compact.

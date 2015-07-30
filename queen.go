@@ -236,7 +236,7 @@ func (q *qee) sendCmdToBee(bid uint64, data interface{}) (interface{}, error) {
 		Bee:  info.ID,
 		Data: data,
 	}
-	return q.hive.streamer.sendCmd(cmd)
+	return q.hive.client.sendCmd(cmd)
 }
 
 func (q *qee) stopBees() {
@@ -596,7 +596,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	res, err := q.hive.streamer.sendCmd(cmd)
+	res, err := q.hive.client.sendCmd(cmd)
 	if err != nil {
 		goto fallback
 	}
@@ -606,7 +606,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	cmd.Data = cmdJoinColony{
 		Colony: col,
 	}
-	if _, err = q.hive.streamer.sendCmd(cmd); err != nil {
+	if _, err = q.hive.client.sendCmd(cmd); err != nil {
 		goto fallback
 	}
 
@@ -712,7 +712,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 		App:  q.app.Name(),
 		Data: cmdCreateBee{},
 	}
-	r, err = q.hive.streamer.sendCmd(c)
+	r, err = q.hive.client.sendCmd(c)
 	if err != nil {
 		return Nil, err
 	}
@@ -727,7 +727,7 @@ func (q *qee) migrate(bid uint64, to uint64) (newb uint64, err error) {
 			Bee:  newb,
 			Data: cmdJoinColony{Colony: Colony{Leader: newb}},
 		}
-		if _, err = q.hive.streamer.sendCmd(c); err != nil {
+		if _, err = q.hive.client.sendCmd(c); err != nil {
 			return Nil, err
 		}
 		goto handoff

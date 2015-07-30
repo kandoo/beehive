@@ -98,12 +98,12 @@ func TestHiveCluster(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	go h2.Start()
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	go h3.Start()
 
@@ -122,12 +122,12 @@ func TestHiveFailure(t *testing.T) {
 	waitTilStareted(h1)
 
 	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg2.PeerAddrs = []string{cfg1.Addr}
 	h2 := NewHiveWithConfig(cfg2)
 	go h2.Start()
 
 	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.RPCAddr}
+	cfg3.PeerAddrs = []string{cfg1.Addr}
 	h3 := NewHiveWithConfig(cfg3)
 	go h3.Start()
 

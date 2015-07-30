@@ -28,7 +28,7 @@ func benchmarkEndToEnd(b *testing.B, name string, hives int, emittingHive int,
 	for i := 0; i < hives; i++ {
 		cfg := newHiveConfigForTest()
 		if i > 0 {
-			cfg.PeerAddrs = []string{hs[0].(*hive).config.RPCAddr}
+			cfg.PeerAddrs = []string{hs[0].(*hive).config.Addr}
 		}
 		h := NewHiveWithConfig(cfg)
 

@@ -26,7 +26,7 @@ func buildURL(scheme, addr, path string) string {
 }
 
 // server is the HTTP server that act as the remote endpoint for Beehive.
-type server struct {
+type httpServer struct {
 	http.Server
 
 	hive   *hive
@@ -34,9 +34,9 @@ type server struct {
 }
 
 // newServer creates a new server for the hive.
-func newServer(h *hive, addr string) *server {
+func newServer(h *hive, addr string) *httpServer {
 	r := mux.NewRouter()
-	s := &server{
+	s := &httpServer{
 		Server: http.Server{
 			Addr:    addr,
 			Handler: r,
@@ -52,14 +52,14 @@ func newServer(h *hive, addr string) *server {
 }
 
 // Provides the net/http interface for the server.
-func (s *server) HandleFunc(p string,
+func (s *httpServer) HandleFunc(p string,
 	h func(http.ResponseWriter, *http.Request)) {
 
 	s.router.HandleFunc(p, h)
 }
 
 type v1Handler struct {
-	srv *server
+	srv *httpServer
 }
 
 func (h *v1Handler) install(r *mux.Router) {
@@ -69,10 +69,9 @@ func (h *v1Handler) install(r *mux.Router) {
 
 func (h *v1Handler) handleHiveState(w http.ResponseWriter, r *http.Request) {
 	s := HiveState{
-		ID:      h.srv.hive.ID(),
-		PubAddr: h.srv.hive.config.PubAddr,
-		RPCAddr: h.srv.hive.config.RPCAddr,
-		Peers:   h.srv.hive.registry.hives(),
+		ID:    h.srv.hive.ID(),
+		Addr:  h.srv.hive.config.Addr,
+		Peers: h.srv.hive.registry.hives(),
 	}
 
 	j, err := json.Marshal(s)
