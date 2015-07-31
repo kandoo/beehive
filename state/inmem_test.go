@@ -133,7 +133,10 @@ func TestSaveRestore(t *testing.T) {
 	}
 
 	size := 0
-	dst.Dict(d).ForEach(func(k string, v interface{}) { size++ })
+	dst.Dict(d).ForEach(func(k string, v interface{}) bool {
+		size++
+		return true
+	})
 	if size > 1 {
 		t.Errorf("dictionary has more than one entry: %v -> %v", k, v)
 	}

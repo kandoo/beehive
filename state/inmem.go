@@ -85,6 +85,8 @@ func (d *inMemDict) Del(k string) error {
 
 func (d *inMemDict) ForEach(f IterFn) {
 	for k, v := range d.Dict {
-		f(k, v)
+		if !f(k, v) {
+			return
+		}
 	}
 }

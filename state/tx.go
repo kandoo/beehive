@@ -239,19 +239,18 @@ func (d *TxDict) Del(k string) error {
 }
 
 func (d *TxDict) ForEach(f IterFn) {
-	d.Dict.ForEach(func(k string, v interface{}) {
+	d.Dict.ForEach(func(k string, v interface{}) (next bool) {
 		op, ok := d.Ops[k]
 		if ok {
 			switch op.T {
 			case Put:
-				f(op.K, op.V)
-				return
+				return f(op.K, op.V)
 			case Del:
-				return
+				return true
 			}
 		}
 
-		f(k, v)
+		return f(k, v)
 	})
 }
 

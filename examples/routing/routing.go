@@ -184,7 +184,12 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		}
 		ctx.SetBeeLocal(false)
 
-		ctx.Dict(routeDict).ForEach(func(k string, v interface{}) {
+		type keyTable struct {
+			k string
+			t RoutingTable
+		}
+		var entries []keyTable
+		ctx.Dict(routeDict).ForEach(func(k string, v interface{}) bool {
 			tbl := v.(RoutingTable)
 
 			from := Node{
@@ -213,8 +218,13 @@ func (r Router) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 				tbl[to] = route
 			}
 
-			ctx.Dict(routeDict).Put(k, tbl)
+			entries = append(entries, keyTable{k, tbl})
+			return true
 		})
+
+		for _, e := range entries {
+			ctx.Dict(routeDict).Put(e.k, e.t)
+		}
 	}
 
 	return nil

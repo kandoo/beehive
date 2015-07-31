@@ -1,7 +1,8 @@
 package state
 
-// IterFn is the function used to iterate the entries of a dictionary.
-type IterFn func(key string, val interface{})
+// IterFn is the function used to iterate the entries of a dictionary. If
+// it returns false the foreach loop will stop.
+type IterFn func(key string, val interface{}) (next bool)
 
 // Dict is a simple key-value store.
 type Dict interface {

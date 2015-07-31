@@ -190,7 +190,7 @@ func (p localStatPoller) Map(msg Msg, ctx MapContext) MappedCells {
 
 func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 	d := ctx.Dict(dictLocalStat)
-	d.ForEach(func(k string, v interface{}) {
+	d.ForEach(func(k string, v interface{}) bool {
 		lm := v.(localBeeMatrix)
 		now := time.Now()
 		dur := uint64(now.Sub(lm.UpdateTime) / time.Second)
@@ -198,13 +198,14 @@ func (p localStatPoller) Rcv(msg Msg, ctx RcvContext) error {
 			dur = 1
 		}
 		if lm.UpdateMsgCnt/dur < p.thresh {
-			return
+			return true
 		}
 
 		ctx.Emit(beeMatrixUpdate(lm.BeeMatrix))
 		lm.UpdateTime = now
 		lm.UpdateMsgCnt = 0
 		d.Put(k, lm)
+		return true
 	})
 	return nil
 }
@@ -267,9 +268,10 @@ type optimizer struct {
 
 func getOptimizerStats(dict state.Dict) (stats map[uint64]optimizerStat) {
 	stats = make(map[uint64]optimizerStat)
-	dict.ForEach(func(k string, v interface{}) {
+	dict.ForEach(func(k string, v interface{}) bool {
 		id := parseBeeID(k)
 		stats[id] = v.(optimizerStat)
+		return true
 	})
 	return
 }
@@ -407,9 +409,10 @@ func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
 	res := statResponse{
 		Matrix: make(map[uint64]map[uint64]uint64),
 	}
-	dict.ForEach(func(k string, v interface{}) {
+	dict.ForEach(func(k string, v interface{}) bool {
 		os := v.(optimizerStat)
 		res.Matrix[os.Bee] = os.Matrix
+		return true
 	})
 	return ctx.ReplyTo(msg, res)
 }
