@@ -17,10 +17,14 @@ import (
 )
 
 const (
+	// queues is a logical dictionary name used in map functions.
+	queues = "q"
 	// active is the name of the active dictionary.
 	active = "active"
 	// dequed is the name of the dequed dictionary.
 	dequed = "dequed"
+	// ooo is the name of the out of order dictionary.
+	ooo = "ooo"
 	// httpTimeout represents the timeout for sync request from http handlers.
 	httpTimeout = 30 * time.Second
 )
@@ -67,85 +71,105 @@ type Ack struct {
 // Timeout represents a timeout message.
 type Timeout time.Time
 
+// idToKey converts an integer ID to a dictionary key.
+func idToKey(id uint64) (key string) {
+	return strconv.FormatUint(id, 16)
+}
+
+// keyToId converts a dictionary key to an integer ID.
+func keyToId(key string) (id uint64) {
+	id, _ = strconv.ParseUint(key, 16, 64)
+	return id
+}
+
 // EnQHandler handles Enque messages.
 type EnQHandler struct{}
 
 func (h EnQHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	enq := msg.Data().(Enque)
-
 	dict := ctx.Dict(active)
-	key := string(enq.Task.Queue)
 
-	var tasks TaskRing
-	if val, err := dict.Get(key); err == nil {
-		tasks = val.(TaskRing)
+	next := uint64(1)
+	if v, err := dict.Get("_next_"); err == nil {
+		next = v.(uint64)
 	}
 
-	enq.Task.ID = tasks.Stats.Enque + 1
-	tasks.Enque(enq.Task)
+	key := idToKey(next)
+	enq.Task.ID = next
+	if err := dict.Put(key, enq.Task); err != nil {
+		return err
+	}
 
-	return dict.Put(key, tasks)
+	return dict.Put("_next_", next+1)
 }
 
 func (h EnQHandler) Map(msg beehive.Msg,
 	ctx beehive.MapContext) beehive.MappedCells {
 
-	// Send the Enque message to the bee that owns the Queue's entry in
-	// the active dictionary.
+	// Send the Enque message to the bee that owns queues/q.
 	q := string(msg.Data().(Enque).Queue)
-	return beehive.MappedCells{{active, q}}
+	return beehive.MappedCells{{queues, q}}
+}
+
+// doDequeTask adds a task to the dequed dictionary and replys to the message.
+func doDequeTask(msg beehive.Msg, ctx beehive.RcvContext, t Task) error {
+	ctx.ReplyTo(msg, t)
+
+	ddict := ctx.Dict(dequed)
+	return ddict.Put(idToKey(t.ID), dqTask{
+		Task:      t,
+		DequeTime: time.Now(),
+	})
 }
 
 // DeQHandler handles Deque messages.
 type DeQHandler struct{}
 
 func (h DeQHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
-	deq := msg.Data().(Deque)
+	// Lookup tasks in the out of order dictionary.
+	odict := ctx.Dict(ooo)
 
-	adict := ctx.Dict(active)
-	key := string(deq.Queue)
+	var key string
+	odict.ForEach(func(k string, v interface{}) (next bool) {
+		key = k
+		return false
+	})
 
-	var atasks TaskRing
-	if val, err := adict.Get(key); err == nil {
-		atasks = val.(TaskRing)
+	if key != "" {
+		v, err := odict.Get(key)
+		if err != nil {
+			return err
+		}
+		odict.Del(key)
+		return doDequeTask(msg, ctx, v.(Task))
 	}
 
-	task, ok := atasks.Deque()
-	if !ok {
+	// If the out of order dictionary had no tasks,
+	// try dequeueing from the active dictionary.
+	adict := ctx.Dict(active)
+
+	first := uint64(1)
+	if v, err := adict.Get("_first_"); err == nil {
+		first = v.(uint64)
+	}
+
+	firstKey := idToKey(first)
+	v, err := adict.Get(firstKey)
+	if err != nil {
 		return ErrEmptyQueue
 	}
-	if err := adict.Put(key, atasks); err != nil {
-		return err
-	}
+	adict.Del(firstKey)
+	adict.Put("_first_", first+1)
 
-	ddict := ctx.Dict(dequed)
-	var dtasks map[uint64]dqTask
-	if val, err := ddict.Get(key); err == nil {
-		dtasks = val.(map[uint64]dqTask)
-	} else {
-		dtasks = make(map[uint64]dqTask)
-	}
-
-	dtasks[task.ID] = dqTask{
-		Task:      task,
-		DequeTime: time.Now(),
-	}
-
-	if err := ddict.Put(key, dtasks); err != nil {
-		return err
-	}
-
-	ctx.ReplyTo(msg, task)
-	return nil
+	return doDequeTask(msg, ctx, v.(Task))
 }
 
 func (h DeQHandler) Map(msg beehive.Msg,
 	ctx beehive.MapContext) beehive.MappedCells {
 
-	// Send the Deque message to the bee that owns the Queue's entry in
-	// the active and the dequed dictionaries.
+	// Send the Deque message to the bee that owns queues/q.
 	q := string(msg.Data().(Deque).Queue)
-	return beehive.MappedCells{{active, q}, {dequed, q}}
+	return beehive.MappedCells{{queues, q}}
 }
 
 // AckHandler handles Ack messages.
@@ -153,46 +177,35 @@ type AckHandler struct{}
 
 func (h AckHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	ack := msg.Data().(Ack)
+	key := idToKey(ack.ID)
 
 	ddict := ctx.Dict(dequed)
-	key := string(ack.Queue)
-
-	if val, err := ddict.Get(key); err == nil {
-		dtasks := val.(map[uint64]dqTask)
-		if _, ok := dtasks[ack.ID]; ok {
-			delete(dtasks, ack.ID)
-			return ddict.Put(key, dtasks)
-		}
+	if err := ddict.Del(key); err == nil {
+		return nil
 	}
 
-	// The task might have been moved from dequed to active, because of a timeout.
-	// So, we need to search the active dictionary as well.
-	adict := ctx.Dict(active)
-	var atasks TaskRing
-	if val, err := adict.Get(key); err == nil {
-		atasks = val.(TaskRing)
+	// The task might have been moved from dequed to out of order, because of a
+	// timeout. So, we need to search the active dictionary as well.
+	odict := ctx.Dict(ooo)
+	if err := odict.Del(key); err == nil {
+		return nil
 	}
 
-	if ok := atasks.Remove(ack.ID); !ok {
-		return ErrNoSuchTask
-	}
-
-	return adict.Put(key, atasks)
+	return ErrNoSuchTask
 }
 
 func (h AckHandler) Map(msg beehive.Msg,
 	ctx beehive.MapContext) beehive.MappedCells {
 
-	// Send the Ack message to the bee that owns the Queue's entry in
-	// the active and the dequed dictionaries.
+	// Send the Ack message to the bee that owns queues/q.
 	q := string(msg.Data().(Ack).Queue)
-	return beehive.MappedCells{{active, q}, {dequed, q}}
+	return beehive.MappedCells{{queues, q}}
 }
 
 // TimeoutHandler handles Ack messages.
 type TimeoutHandler struct {
 	// ExpDur is the duration after which a dequed and unacknowledged task
-	// is returned to the active dictionary.
+	// is returned to the out-of-order dictionary.
 	ExpDur time.Duration
 }
 
@@ -200,38 +213,24 @@ func (h TimeoutHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	tout := time.Time(msg.Data().(Timeout))
 	ddict := ctx.Dict(dequed)
 
-	expired := make(map[string][]Task)
-	ddict.ForEach(func(k string, v interface{}) {
-		dtasks := v.(map[uint64]dqTask)
-		for _, t := range dtasks {
-			if tout.Sub(t.DequeTime) < h.ExpDur {
-				continue
-			}
-
-			expired[k] = append(expired[k], t.Task)
+	var expiredKeys []string
+	odict := ctx.Dict(ooo)
+	ddict.ForEach(func(k string, v interface{}) (next bool) {
+		t := v.(dqTask)
+		if tout.Sub(t.DequeTime) < h.ExpDur {
+			return true
 		}
+
+		key := idToKey(t.ID)
+		odict.Put(key, t.Task)
+		expiredKeys = append(expiredKeys, key)
+		return true
 	})
 
-	adict := ctx.Dict(active)
-	for q, etasks := range expired {
-		v, _ := ddict.Get(q)
-		dtasks := v.(map[uint64]dqTask)
-		v, _ = adict.Get(q)
-		atasks := v.(TaskRing)
-
-		for _, t := range etasks {
-			delete(dtasks, t.ID)
-			atasks.Enque(t)
-		}
-
-		if err := ddict.Put(q, dtasks); err != nil {
-			return err
-		}
-
-		if err := adict.Put(q, atasks); err != nil {
-			return err
-		}
+	for _, k := range expiredKeys {
+		ddict.Del(k)
 	}
+
 	return nil
 }
 
@@ -371,5 +370,5 @@ func RegisterTaskQ(h beehive.Hive) {
 func init() {
 	gob.Register(Queue(""))
 	gob.Register(Task{})
-	gob.Register(map[uint64]dqTask{})
+	gob.Register(dqTask{})
 }
