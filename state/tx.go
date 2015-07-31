@@ -230,6 +230,10 @@ func (d *TxDict) Get(k string) (interface{}, error) {
 }
 
 func (d *TxDict) Del(k string) error {
+	if _, err := d.Get(k); err != nil {
+		return ErrNoSuchKey
+	}
+
 	d.Ops[k] = Op{
 		T: Del,
 		D: d.Dict.Name(),

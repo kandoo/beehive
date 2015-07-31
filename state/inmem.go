@@ -79,6 +79,10 @@ func (d *inMemDict) Put(k string, v interface{}) error {
 }
 
 func (d *inMemDict) Del(k string) error {
+	if _, ok := d.Dict[k]; !ok {
+		return ErrNoSuchKey
+	}
+
 	delete(d.Dict, k)
 	return nil
 }
