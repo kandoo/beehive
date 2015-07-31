@@ -124,6 +124,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h.client = newRPCClientPool(h)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
+	h.httpServer = newServer(h, h.config.Addr)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -611,7 +612,6 @@ func (h *hive) listen() (err error) {
 	hl := m.Match(cmux.HTTP1Fast())
 	rl := m.Match(cmux.Any())
 
-	h.httpServer = newServer(h, h.config.Addr)
 	go func() {
 		h.httpServer.Serve(hl)
 		glog.Infof("%v closed http listener", h)
