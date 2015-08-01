@@ -99,7 +99,7 @@
 		},
 		{
 			"ImportPath": "github.com/soheilhy/cmux",
-			"Rev": "09b35f69d59677d75045df05ffc25d4dc627c72a"
+			"Rev": "51556c6df50a9b03b4f4de67558e8e7beaba1cc9"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
