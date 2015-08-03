@@ -489,8 +489,8 @@ func (s *rpcServer) ProcessBeeRaft(msg raftpb.Message, dummy *bool) error {
 }
 
 func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
-	for _, m := range msgs {
-		s.h.enqueMsg(&m)
+	for i := range msgs {
+		s.h.enqueMsg(&msgs[i])
 	}
 	return nil
 }
