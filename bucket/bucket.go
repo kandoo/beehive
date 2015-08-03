@@ -146,7 +146,14 @@ func (b *Bucket) Ticker() *time.Ticker {
 	if b.Unlimited() {
 		t := time.NewTicker(DefaultResolution)
 		t.Stop()
-		return t
+		// drain the timer.
+		for {
+			select {
+			case <-t.C:
+			default:
+				return t
+			}
+		}
 	}
 
 	if b.ticker == nil {
