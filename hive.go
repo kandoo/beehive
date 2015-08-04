@@ -258,10 +258,18 @@ func (h *hive) Sync(ctx context.Context, req interface{}) (res interface{},
 
 	id := uint64(rand.Int63())
 	ch := make(chan syncRes, 1)
-	h.syncCh <- syncReqAndChan{
-		req: syncReq{ID: id, Data: req},
-		ch:  ch,
-	}
+
+	// We should run this in parallel in case we are blocked on h.syncCh.
+	go func() {
+		sc := syncReqAndChan{
+			req: syncReq{ID: id, Data: req},
+			ch:  ch,
+		}
+		select {
+		case h.syncCh <- sc:
+		case <-ctx.Done():
+		}
+	}()
 
 	select {
 	case r := <-ch:
