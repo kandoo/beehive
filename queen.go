@@ -21,13 +21,15 @@ type qee struct {
 	hive *hive
 	app  *app
 
-	dataCh  *msgChannel
-	ctrlCh  chan cmdAndChannel
-	stopped bool
+	dataCh      *msgChannel
+	ctrlCh      chan cmdAndChannel
+	placementCh chan placementRes
+	stopped     bool
 
 	state *state.Transactional
 
-	bees map[uint64]*bee
+	bees         map[uint64]*bee
+	pendingCells map[CellKey]*pendingCells
 
 	maxID  uint64
 	nextID uint64
@@ -50,6 +52,10 @@ func (q *qee) start() {
 			}
 			q.handleMsgs(batch)
 			batch = batch[0:0]
+
+		case p := <-q.placementCh:
+			// TODO(soheil): maybe batch.
+			q.handlePlacementRes(p)
 
 		case c := <-q.ctrlCh:
 			q.handleCmd(c)
@@ -419,28 +425,125 @@ func (q *qee) handleLocalBcast(mh msgAndHandler) {
 	q.RUnlock()
 }
 
-type beeCells struct {
-	cells   map[CellKey]struct{}
-	bee     *bee
-	beeID   uint64
-	visited bool
+type placementRes struct {
+	hive   uint64
+	bee    uint64
+	pCells *pendingCells
 }
 
-func (bc beeCells) MappedCells() (mapped MappedCells) {
-	for c := range bc.cells {
+type pendingCells struct {
+	visited bool
+
+	bee   *bee
+	beeID uint64
+
+	cells map[CellKey]struct{}
+	msgs  []msgAndHandler
+}
+
+func newBeeCellMsgs() *pendingCells {
+	return &pendingCells{
+		cells: make(map[CellKey]struct{}),
+	}
+}
+
+func (pc *pendingCells) MappedCells() (mapped MappedCells) {
+	for c := range pc.cells {
 		mapped = append(mapped, c)
 	}
 	return
 }
 
-type msgCells struct {
-	msg   msgAndHandler
-	cells MappedCells
+func (q *qee) addToPendings(pc *pendingCells) {
+	for c := range pc.cells {
+		q.pendingCells[c] = pc
+	}
+}
+
+func (q *qee) queueIfPending(cells MappedCells, mh msgAndHandler) (ok bool) {
+	if len(q.pendingCells) == 0 {
+		return false
+	}
+
+	var pc *pendingCells
+	for _, c := range cells {
+		if pc, ok = q.pendingCells[c]; ok {
+			pc.msgs = append(pc.msgs, mh)
+			break
+		}
+	}
+
+	if !ok || len(cells) == 1 {
+		return ok
+	}
+
+	for _, c := range cells {
+		q.pendingCells[c] = pc
+	}
+	return true
+}
+
+func (q *qee) removePending(pc *pendingCells) {
+	for cell := range pc.cells {
+		delete(q.pendingCells, cell)
+	}
+}
+
+func (q *qee) handlePlacementRes(res placementRes) error {
+	defer q.removePending(res.pCells)
+
+	if res.bee == Nil {
+		b, err := q.newLocalBee(true)
+		if err != nil {
+			return err
+		}
+
+		lock := lockMappedCell{
+			Colony: Colony{Leader: b.ID()},
+			App:    q.app.Name(),
+			Cells:  res.pCells.MappedCells(),
+		}
+
+		lockRes, err := q.hive.node.Process(context.TODO(), lock)
+		if err != nil {
+			return err
+		}
+
+		col := lockRes.(Colony)
+		if col.Leader == b.ID() {
+			b.processCmd(cmdAddMappedCells{Cells: lock.Cells})
+		} else {
+			var err error
+			if b, err = q.beeByCells(lock.Cells); err != nil {
+				return err
+			}
+		}
+
+		for _, mh := range res.pCells.msgs {
+			b.enqueMsg(mh)
+		}
+		return nil
+	}
+
+	bi := BeeInfo{
+		ID:     res.bee,
+		Hive:   res.hive,
+		App:    q.app.Name(),
+		Colony: Colony{Leader: res.bee},
+	}
+	b, err := q.newProxyBee(bi)
+	if err != nil {
+		return err
+	}
+	q.addBee(b)
+	for _, mh := range res.pCells.msgs {
+		b.enqueMsg(mh)
+	}
+	return nil
 }
 
 func (q *qee) handleMsgs(mhs []msgAndHandler) {
-	pendingM := make([]msgCells, 0, len(mhs))
-	pendingC := make(map[CellKey]*beeCells)
+	pendingC := make(map[CellKey]*pendingCells)
 
 	for i := range mhs {
 		mh := mhs[i]
@@ -462,86 +565,75 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 			continue
 		}
 
+		if q.queueIfPending(cells, mh) {
+			continue
+		}
+
 		b, err := q.beeByCells(cells)
 		if err == nil {
 			b.enqueMsg(mh)
 			continue
 		}
 
-		pendingM = append(pendingM, msgCells{
-			msg:   mhs[i],
-			cells: cells,
-		})
+		var bcm *pendingCells
+		ok := false
+		for _, c := range cells {
+			if bcm, ok = pendingC[c]; ok {
+				break
+			}
+		}
+
+		if !ok {
+			bcm = newBeeCellMsgs()
+		}
+
+		for _, c := range cells {
+			// FIXME(soheil): what if map returns conflicting cells.
+			pendingC[c] = bcm
+			bcm.cells[c] = struct{}{}
+		}
+
+		bcm.msgs = append(bcm.msgs, mhs[i])
 	}
 
-	if len(pendingM) == 0 {
+	if len(pendingC) == 0 {
 		return
 	}
 
-	for _, m := range pendingM {
-		cells := m.cells
-		var bc *beeCells
-		for _, c := range cells {
-			pbc, ok := pendingC[c]
-			if !ok {
-				if bc == nil {
-					bc = &beeCells{
-						cells: make(map[CellKey]struct{}),
-					}
-				}
-
-				bc.cells[c] = struct{}{}
-				pendingC[c] = bc
-				continue
-			}
-
-			if bc == nil {
-				bc = pbc
-				continue
-			}
-
-			for k := range pbc.cells {
-				bc.cells[k] = struct{}{}
-			}
-			for k := range pbc.cells {
-				pendingC[k] = bc
-			}
-			pendingC[c] = bc
-		}
-	}
-
 	var lockBatch batchReq
-	for _, bc := range pendingC {
-		if bc.visited {
+	for _, pc := range pendingC {
+		if pc.visited {
 			continue
 		}
 
+		pc.visited = true
+
 		// TODO(soheil): we should do this in parallel.
-		mapped := bc.MappedCells()
+		mapped := pc.MappedCells()
+		if mapped == nil {
+			panic(mapped)
+		}
 		hive := q.placeBee(mapped)
 
 		var err error
 		if hive == q.hive.ID() {
-			bc.beeID, err = q.newBeeID()
+			pc.beeID, err = q.newBeeID()
 			if err != nil {
 				// TODO(soheil): this shouldn't be fatal.
 				glog.Fatalf("%v cannot allocate a bee ID %v", q, err)
 			}
-			lockBatch.addReq(addBee(q.defaultBeeInfo(bc.beeID, false, true)))
+			lockBatch.addReq(addBee(q.defaultBeeInfo(pc.beeID, false, true)))
 		} else {
-			if bc.bee, err = q.newRemoteBee(hive); err != nil {
-				glog.Fatalf("%v cannot place a new bee %v", q, err)
-			}
-			bc.beeID = bc.bee.ID()
+			q.addToPendings(pc)
+			go q.newRemoteBee(pc, hive)
+			continue
 		}
 
 		lockBatch.addReq(lockMappedCell{
-			Colony: Colony{Leader: bc.beeID},
+			Colony: Colony{Leader: pc.beeID},
 			App:    q.app.Name(),
 			Cells:  mapped,
 		})
-
-		bc.visited = true
 	}
 
 	lockRes, err := q.hive.node.Process(context.TODO(), lockBatch)
@@ -562,35 +654,33 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 
 		res := r.Res
 		cells := lock.Cells
-		bc := pendingC[cells[0]]
+		pc := pendingC[cells[0]]
 
 		if res.(Colony).Leader == lock.Colony.Leader {
-			if bc.bee == nil {
+			if pc.bee == nil {
 				var err error
-				if bc.bee, err = q.newLocalBeeWithID(bc.beeID, true); err != nil {
+				if pc.bee, err = q.newLocalBeeWithID(pc.beeID, true); err != nil {
 					glog.Fatalf("%v cannot create local bee %v", err)
 				}
 			}
-			bc.bee.processCmd(cmdAddMappedCells{Cells: cells})
+			pc.bee.processCmd(cmdAddMappedCells{Cells: cells})
 		} else {
 			// TODO(soheil): maybe, we can find by id.
 			var err error
-			if bc.bee, err = q.beeByCells(cells); err != nil {
+			if pc.bee, err = q.beeByCells(cells); err != nil {
 				glog.Fatalf("neither can lock a cell nor can find its bee")
 			}
 		}
-	}
 
-	for _, mh := range pendingM {
-		b := pendingC[mh.cells[0]].bee
-		glog.V(2).Infof("message sent to bee %v: %v", b, mh.msg)
-		b.enqueMsg(mh.msg)
+		for _, mh := range pc.msgs {
+			glog.V(2).Infof("%v enques message to bee %v: %v", q, pc.bee, mh.msg)
+			pc.bee.enqueMsg(mh)
+		}
 	}
 }
 
-func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
+func (q *qee) newRemoteBee(pc *pendingCells, hive uint64) {
 	var col Colony
-	var bi BeeInfo
 	cmd := cmd{
 		Hive: hive,
 		App:  q.app.Name(),
@@ -598,6 +688,7 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 	}
 	res, err := q.hive.client.sendCmd(cmd)
 	if err != nil {
+		q.placementCh <- placementRes{pCells: pc}
 		goto fallback
 	}
 	col.Leader = res.(uint64)
@@ -610,23 +701,18 @@ func (q *qee) newRemoteBee(hive uint64) (b *bee, err error) {
 		goto fallback
 	}
 
-	bi = BeeInfo{
-		ID:     col.Leader,
-		Hive:   hive,
-		App:    q.app.Name(),
-		Colony: col,
+	q.placementCh <- placementRes{
+		hive:   hive,
+		bee:    col.Leader,
+		pCells: pc,
 	}
-	b, err = q.newProxyBee(bi)
-	if err != nil {
-		goto fallback
-	}
-	q.addBee(b)
-	return b, nil
+
+	return
 
 fallback:
 	glog.Errorf("%v cannot create a new bee on %v. will place locally: %v", q,
 		hive, err)
-	return q.newLocalBee(true)
+	q.placementCh <- placementRes{pCells: pc}
 }
 
 func (q *qee) placeBee(cells MappedCells) (hiveID uint64) {

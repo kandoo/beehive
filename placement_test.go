@@ -1,14 +1,15 @@
 package beehive
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
-type nonLocalPlacementMethod struct{}
+type testNonLocalPlacementMethod struct{}
 
-func (m nonLocalPlacementMethod) Place(cells MappedCells, thisHive Hive,
+func (m testNonLocalPlacementMethod) Place(cells MappedCells, thisHive Hive,
 	liveHives []HiveInfo) HiveInfo {
 
 	for _, h := range liveHives {
@@ -20,14 +21,23 @@ func (m nonLocalPlacementMethod) Place(cells MappedCells, thisHive Hive,
 	return HiveInfo{}
 }
 
-func registerPlacementApp(h Hive, ch chan uint64) App {
+type testPlacementRes struct {
+	hive uint64
+	msg  int
+}
+
+func registerPlacementApp(h Hive, ch chan testPlacementRes) App {
 	a := h.NewApp("placementapp", NonTransactional(),
-		WithPlacement(nonLocalPlacementMethod{}))
+		WithPlacement(testNonLocalPlacementMethod{}))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
-		return MappedCells{{"D", "Centralized"}}
+		return MappedCells{{"D", strconv.Itoa(msg.Data().(int))}}
 	}
 	rf := func(msg Msg, ctx RcvContext) error {
-		ch <- ctx.Hive().ID()
+		ctx.Hive().ID()
+		ch <- testPlacementRes{
+			hive: ctx.Hive().ID(),
+			msg:  msg.Data().(int),
+		}
 		return nil
 	}
 	a.HandleFunc(int(0), mf, rf)
@@ -36,24 +46,30 @@ func registerPlacementApp(h Hive, ch chan uint64) App {
 
 func TestPlacement(t *testing.T) {
 	// TODO(soheil): refactor all these into a single test utility method.
-	ch := make(chan uint64)
+	ch := make(chan testPlacementRes)
+	var hives []Hive
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
-	registerPlacementApp(h1, ch)
-	go h1.Start()
-	waitTilStareted(h1)
+	nh := 2
+	for i := 0; i < nh; i++ {
+		cfg := newHiveConfigForTest()
+		if i != 0 {
+			cfg.PeerAddrs = []string{hives[0].(*hive).config.Addr}
+		}
+		hives = append(hives, NewHiveWithConfig(cfg))
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
-	registerPlacementApp(h2, ch)
-	go h2.Start()
-	waitTilStareted(h2)
+		registerPlacementApp(hives[i], ch)
+		go hives[i].Start()
+		waitTilStareted(hives[i])
+	}
 
-	h1.Emit(int(0))
-	id := <-ch
-	if id == h1.ID() {
-		t.Errorf("received on an incorrect hive: hiveid=%d want=%d", id, h2.ID())
+	for i := 0; i < nh; i++ {
+		go hives[i].Emit(i)
+	}
+
+	for i := 0; i < nh; i++ {
+		res := <-ch
+		if res.hive == hives[res.msg].ID() {
+			t.Errorf("Got the message from the same hive")
+		}
 	}
 }

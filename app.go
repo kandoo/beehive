@@ -401,12 +401,14 @@ func (a *app) appHTTPPrefix() string {
 func (a *app) initQee() {
 	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
-		dataCh: newMsgChannel(a.hive.config.DataChBufSize),
-		ctrlCh: make(chan cmdAndChannel, a.hive.config.CmdChBufSize),
-		hive:   a.hive,
-		app:    a,
-		bees:   make(map[uint64]*bee),
-		state:  state.NewTransactional(a.newState()),
+		dataCh:       newMsgChannel(a.hive.config.DataChBufSize),
+		ctrlCh:       make(chan cmdAndChannel, a.hive.config.CmdChBufSize),
+		placementCh:  make(chan placementRes, a.hive.config.CmdChBufSize),
+		hive:         a.hive,
+		app:          a,
+		bees:         make(map[uint64]*bee),
+		state:        state.NewTransactional(a.newState()),
+		pendingCells: make(map[CellKey]*pendingCells),
 	}
 }
 
