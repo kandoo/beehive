@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OneOfOne/xxhash"
 	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/OneOfOne/xxhash"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 )

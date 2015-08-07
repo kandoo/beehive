@@ -1,11 +1,18 @@
 {
 	"ImportPath": "github.com/kandoo/beehive",
 	"GoVersion": "go1.4",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "bitbucket.org/ww/goautoneg",
 			"Comment": "null-5",
 			"Rev": "75cd24fc2f2c2a2088577d12123ddee5f54e0675"
+		},
+		{
+			"ImportPath": "github.com/OneOfOne/xxhash",
+			"Rev": "b5299520b343dbb4c53e3c80838c091a4a8fed66"
 		},
 		{
 			"ImportPath": "github.com/beorn7/perks/quantile",
@@ -96,6 +103,10 @@
 		{
 			"ImportPath": "github.com/prometheus/procfs",
 			"Rev": "c91d8eefde16bd047416409eb56353ea84a186e4"
+		},
+		{
+			"ImportPath": "github.com/soheilhy/args",
+			"Rev": "6bcf4c78e87e38c051ddd7dc4deae19d3fc5b9bc"
 		},
 		{
 			"ImportPath": "github.com/soheilhy/cmux",
