@@ -200,7 +200,6 @@ func (p *rpcClientPool) resetHiveClient(hive uint64, prev *rpcClient) (
 
 	client, ok := p.lookupHive(hive)
 	if ok && client != prev {
-		p.Unlock()
 		return
 	}
 
