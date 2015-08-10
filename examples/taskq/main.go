@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
-	"log"
 	"os"
 	"runtime/pprof"
+
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 
 	"github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/examples/taskq/server"
@@ -17,13 +18,17 @@ func main() {
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
 		if err != nil {
-			log.Fatal(err)
+			glog.Error("cannot register cpu profile: %v", err)
+			os.Exit(-1)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
 
 	h := beehive.NewHive()
-	server.RegisterTaskQ(h)
+	if err := server.RegisterTaskQ(h); err != nil {
+		glog.Errorf("cannot register taskq: %v", err)
+		os.Exit(-1)
+	}
 	h.Start()
 }
