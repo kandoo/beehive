@@ -28,7 +28,8 @@ const (
 )
 
 var (
-	ErrOldTx = errors.New("transaction has an old term")
+	ErrOldTx       = errors.New("transaction has an old term")
+	ErrIsNotMaster = errors.New("bee is not master")
 )
 
 type bee struct {
@@ -968,7 +969,9 @@ func (b *bee) replicate() error {
 		return b.commitTxL1()
 	}
 
-	b.maybeRecruitFollowers()
+	if err := b.maybeRecruitFollowers(); err != nil {
+		return err
+	}
 
 	tx := tx{
 		Tx:   stx,
@@ -989,14 +992,14 @@ func (b *bee) replicate() error {
 	return nil
 }
 
-func (b *bee) maybeRecruitFollowers() {
+func (b *bee) maybeRecruitFollowers() error {
 	if b.detached {
-		return
+		return nil
 	}
 
 	c := b.colony()
 	if c.Leader != b.ID() {
-		glog.Fatalf("%v is not master of %v and is replicating", b, c)
+		return ErrIsNotMaster
 	}
 
 	if n := len(c.Followers) + 1; n < b.app.replFactor {
@@ -1005,6 +1008,8 @@ func (b *bee) maybeRecruitFollowers() {
 			glog.Warningf("%v can replicate only on %v node(s)", b, n)
 		}
 	}
+
+	return nil
 }
 
 func (b *bee) doRecruitFollowers() (recruited int) {
