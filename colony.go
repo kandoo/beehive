@@ -12,17 +12,19 @@ const (
 
 // Colony is the colony of bees that maintain a consistent state.
 type Colony struct {
+	ID        uint64   `json:"id"`
 	Leader    uint64   `json:"leader"`
 	Followers []uint64 `json:"followers"`
 }
 
 func (c Colony) String() string {
-	return fmt.Sprintf("colony(leader=%v, followers=%+v)", c.Leader, c.Followers)
+	return fmt.Sprintf("colony(id=%v, leader=%v, followers=%+v)", c.ID, c.Leader,
+		c.Followers)
 }
 
 // IsNil returns whether the colony does not represent a valid colony.
 func (c Colony) IsNil() bool {
-	return c.Leader == Nil && len(c.Followers) == 0
+	return c.ID == Nil && c.Leader == Nil && len(c.Followers) == 0
 }
 
 // IsLeader returns whether id is the leader of this colony.
@@ -87,6 +89,10 @@ func (c Colony) DeepCopy() Colony {
 
 // Equals return whether c is equal to thatC.
 func (c Colony) Equals(thatC Colony) bool {
+	if c.ID != thatC.ID {
+		return false
+	}
+
 	if c.Leader != thatC.Leader {
 		return false
 	}

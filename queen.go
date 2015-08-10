@@ -154,12 +154,17 @@ func (q *qee) defaultBeeInfo(id uint64, detached bool, initColony bool) (
 	info.App = q.App()
 	info.Hive = q.hive.ID()
 	if initColony {
-		info.Colony = Colony{
-			Leader: id,
-		}
+		info.Colony = q.defaultColony(id)
 	}
 	info.Detached = detached
 	return
+}
+
+func (q *qee) defaultColony(bee uint64) Colony {
+	return Colony{
+		ID:     bee,
+		Leader: bee,
+	}
 }
 
 func (q *qee) newLocalBeeWithID(id uint64, withColony bool) (*bee, error) {
@@ -167,7 +172,7 @@ func (q *qee) newLocalBeeWithID(id uint64, withColony bool) (*bee, error) {
 	b.setState(q.app.newState())
 
 	if withColony {
-		b.beeColony = Colony{Leader: id}
+		b.beeColony = q.defaultColony(id)
 		b.becomeLeader()
 	} else {
 		b.becomeZombie()
@@ -427,7 +432,7 @@ func (q *qee) handleLocalBcast(mh msgAndHandler) {
 
 type placementRes struct {
 	hive   uint64
-	bee    uint64
+	colony Colony
 	pCells *pendingCells
 }
 
@@ -492,14 +497,14 @@ func (q *qee) removePending(pc *pendingCells) {
 func (q *qee) handlePlacementRes(res placementRes) error {
 	defer q.removePending(res.pCells)
 
-	if res.bee == Nil {
+	if res.colony.IsNil() {
 		b, err := q.newLocalBee(true)
 		if err != nil {
 			return err
 		}
 
 		lock := lockMappedCell{
-			Colony: Colony{Leader: b.ID()},
+			Colony: b.colony(),
 			App:    q.app.Name(),
 			Cells:  res.pCells.MappedCells(),
 		}
@@ -526,10 +531,10 @@ func (q *qee) handlePlacementRes(res placementRes) error {
 	}
 
 	bi := BeeInfo{
-		ID:     res.bee,
+		ID:     res.colony.Leader,
 		Hive:   res.hive,
 		App:    q.app.Name(),
-		Colony: Colony{Leader: res.bee},
+		Colony: res.colony,
 	}
 	b, err := q.newProxyBee(bi)
 	if err != nil {
@@ -615,22 +620,21 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 		}
 		hive := q.placeBee(mapped)
 
-		var err error
-		if hive == q.hive.ID() {
-			pc.beeID, err = q.newBeeID()
-			if err != nil {
-				// TODO(soheil): this shouldn't be fatal.
-				glog.Fatalf("%v cannot allocate a bee ID %v", q, err)
-			}
-			lockBatch.addReq(addBee(q.defaultBeeInfo(pc.beeID, false, true)))
-		} else {
+		if hive != q.hive.ID() {
 			q.addToPendings(pc)
 			go q.newRemoteBee(pc, hive)
 			continue
 		}
 
+		var err error
+		pc.beeID, err = q.newBeeID()
+		if err != nil {
+			// TODO(soheil): this shouldn't be fatal.
+			glog.Fatalf("%v cannot allocate a bee ID %v", q, err)
+		}
+		lockBatch.addReq(addBee(q.defaultBeeInfo(pc.beeID, false, true)))
 		lockBatch.addReq(lockMappedCell{
-			Colony: Colony{Leader: pc.beeID},
+			Colony: q.defaultColony(pc.beeID),
 			App:    q.app.Name(),
 			Cells:  mapped,
 		})
@@ -703,10 +707,9 @@ func (q *qee) newRemoteBee(pc *pendingCells, hive uint64) {
 
 	q.placementCh <- placementRes{
 		hive:   hive,
-		bee:    col.Leader,
+		colony: col,
 		pCells: pc,
 	}
-
 	return
 
 fallback:
