@@ -139,11 +139,18 @@ func (b *bee) startNode() error {
 		b.hive.config.RaftMaxMsgSize)
 	b.setRaftNode(node)
 	// This will act like a barrier.
-	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
-	defer ccl()
-	if _, err := node.Process(ctx, noOp{}); err != nil {
-		glog.Errorf("%v cannot start raft: %v", b, err)
-		return err
+	for {
+		ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
+		defer ccl()
+		_, err := node.Process(ctx, noOp{})
+		if err == nil {
+			break
+		}
+		if err != nil && err != context.DeadlineExceeded {
+			glog.Errorf("%v cannot start raft: %v", b, err)
+			return err
+		}
+		glog.Errorf("%v cannot start raft: retrying", b)
 	}
 	b.enableEmit()
 	glog.V(2).Infof("%v started its raft node", b)
