@@ -238,7 +238,7 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			glog.Errorf("%v cannot update its colony: %v", b, err)
 			return
 		}
-		// FIXME(soheil): add health checks here and recruite if needed.
+		// FIXME(soheil): add health checks here and recruit if needed.
 	}
 }
 
