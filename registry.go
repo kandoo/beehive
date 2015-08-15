@@ -118,8 +118,8 @@ type registry struct {
 func newRegistry(name string) *registry {
 	return &registry{
 		name:   name,
-		HiveID: 1, // We need to start from one to preserve the first hive's ID.
-		BeeID:  1,
+		HiveID: 1,             // To preserve the first hive's ID.
+		BeeID:  hiveGroup + 1, // To avoid conflicting group IDs.
 		Hives:  make(map[uint64]HiveInfo),
 		Bees:   make(map[uint64]BeeInfo),
 		Store:  newCellStore(),
@@ -181,19 +181,24 @@ func (r *registry) String() string {
 	return fmt.Sprintf("registry for %v", r.name)
 }
 
-func (r *registry) ApplyConfChange(cc raftpb.ConfChange,
-	n raft.NodeInfo) error {
+func (r *registry) ApplyConfChange(cc raftpb.ConfChange, gn raft.GroupNode) (
+	err error) {
 
-	glog.V(2).Infof("%v applies conf change %#v for %v", r, cc, n)
+	glog.V(2).Infof("%v applies conf change %#v for %v", r, cc, gn.Node)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
-		if n.ID != cc.NodeID {
-			glog.Fatalf("invalid data in the config change: %v != %v", n, cc.NodeID)
+		if gn.Node != cc.NodeID {
+			glog.Fatalf("invalid data in the config change: %v != %v", gn.Node,
+				cc.NodeID)
 		}
-		if n.Addr != "" {
-			r.addHive(HiveInfo(n))
+		if gn.Data != nil {
+			hi := HiveInfo{
+				ID:   gn.Node,
+				Addr: gn.Data.(string),
+			}
+			r.addHive(hi)
+			glog.V(2).Infof("%v adds hive %v@%v", r, hi.ID, hi.Addr)
 		}
-		glog.V(2).Infof("%v adds hive %v@%v", r, n.ID, n.Addr)
 
 	case raftpb.ConfChangeRemoveNode:
 		r.delHive(cc.NodeID)

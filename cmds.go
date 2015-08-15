@@ -1,16 +1,12 @@
 package beehive
 
-import (
-	"encoding/gob"
-
-	"github.com/kandoo/beehive/raft"
-)
+import "encoding/gob"
 
 type cmdAddFollower struct {
 	Hive uint64
 	Bee  uint64
 }
-type cmdAddHive struct{ Info raft.NodeInfo }
+type cmdAddHive struct{ Hive HiveInfo }
 type cmdCampaign struct{}
 type cmdCreateBee struct{}
 type cmdFindBee struct{ ID uint64 }
@@ -38,12 +34,9 @@ type cmdSync struct{}
 func init() {
 	gob.Register(cmdAddFollower{})
 	gob.Register(cmdAddHive{})
-	gob.Register(cmdAddHive{})
 	gob.Register(cmdAddMappedCells{})
 	gob.Register(cmdCampaign{})
 	gob.Register(cmdCreateBee{})
-	gob.Register(cmdCreateBee{})
-	gob.Register(cmdFindBee{})
 	gob.Register(cmdFindBee{})
 	gob.Register(cmdHandoff{})
 	gob.Register(cmdJoinColony{})

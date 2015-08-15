@@ -31,6 +31,7 @@ func (l *line) call(r Response) {
 
 	if ch, ok := l.list[r.ID]; ok {
 		ch <- r
+		delete(l.list, r.ID)
 	}
 }
 

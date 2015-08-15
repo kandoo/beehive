@@ -14,6 +14,7 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+
 	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/raft"
 	"github.com/kandoo/beehive/state"
@@ -56,8 +57,6 @@ type bee struct {
 	inBucket  *bucket.Bucket
 	outBucket *bucket.Bucket
 
-	node       *raft.Node
-	ticker     *time.Ticker
 	emitInRaft bool
 	raftTerm   uint64
 	txTerm     uint64
@@ -100,12 +99,6 @@ func (b *bee) setColony(c Colony) {
 
 	b.beeColony = c
 }
-func (b *bee) setRaftNode(n *raft.Node) {
-	b.Lock()
-	defer b.Unlock()
-
-	b.node = n
-}
 
 func (b *bee) term() uint64 {
 	return atomic.LoadUint64(&b.raftTerm)
@@ -116,34 +109,45 @@ func (b *bee) setTerm(term uint64) {
 	atomic.StoreUint64(&b.raftTerm, term)
 }
 
-func (b *bee) raftNode() *raft.Node {
-	b.Lock()
-	defer b.Unlock()
-
-	return b.node
+func (b *bee) peer(gid, bid uint64) etcdraft.Peer {
+	bi, err := b.hive.registry.bee(bid)
+	if err != nil {
+		glog.Fatalf("%v cannot find peer bee %v: %v", b, bid, err)
+	}
+	// TODO(soheil): maybe include address.
+	return raft.GroupNode{Node: bi.Hive, Group: gid, Data: bid}.Peer()
 }
 
-func (b *bee) startNode() error {
-	// TODO(soheil): restart if needed.
+func (b *bee) peers() (ps []etcdraft.Peer) {
 	c := b.colony()
 	if c.IsNil() {
+		return []etcdraft.Peer{}
+	}
+
+	if c.Leader == b.ID() {
+		ps = append(ps, b.peer(c.ID, c.Leader))
+	}
+	return
+}
+
+func (b *bee) createGroup() error {
+	c := b.colony()
+	if c.IsNil() || c.ID == Nil {
 		return fmt.Errorf("%v is in no colony", b)
 	}
-	peers := make([]etcdraft.Peer, 0, 1)
-	if c.Leader == b.ID() {
-		peers = append(peers, raft.NodeInfo{ID: c.Leader}.Peer())
+	err := b.hive.node.CreateGroup(c.ID, b.String(), b.peers(), b.statePath(), b,
+		1024, b.hive.config.RaftElectTicks, b.hive.config.RaftHBTicks,
+		b.hive.config.RaftInflights, b.hive.config.RaftMaxMsgSize)
+	if err != nil {
+		return err
 	}
-	b.ticker = time.NewTicker(b.hive.config.RaftTick)
-	node := raft.NewNode(b.String(), b.beeID, peers, b.sendRaft, b.statePath(),
-		b, 1024, b.ticker.C, b.hive.config.RaftElectTicks,
-		b.hive.config.RaftHBTicks, b.hive.config.RaftInflights,
-		b.hive.config.RaftMaxMsgSize)
-	b.setRaftNode(node)
+
 	// This will act like a barrier.
 	for {
-		ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, ccl := context.WithTimeout(context.Background(),
+			b.hive.config.RaftTick)
 		defer ccl()
-		_, err := node.Process(ctx, noOp{})
+		_, err := b.hive.node.Process(ctx, c.ID, noOp{})
 		if err == nil {
 			break
 		}
@@ -151,21 +155,11 @@ func (b *bee) startNode() error {
 			glog.Errorf("%v cannot start raft: %v", b, err)
 			return err
 		}
-		glog.Errorf("%v cannot start raft: retrying", b)
+		glog.V(2).Infof("%v cannot start raft: retrying", b)
 	}
 	b.enableEmit()
 	glog.V(2).Infof("%v started its raft node", b)
 	return nil
-}
-
-func (b *bee) stopNode() {
-	node := b.raftNode()
-	if node == nil {
-		return
-	}
-	node.Stop()
-	b.disableEmit()
-	b.ticker.Stop()
 }
 
 func (b *bee) enableEmit() {
@@ -191,7 +185,11 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 		}
 
 		oldc := b.colony()
-		if oldc.Leader == ev.New {
+		oldi, err := b.hive.bee(oldc.Leader)
+		if err != nil {
+			glog.Fatalf("%v cannot find leader: %v", err)
+		}
+		if oldi.Hive == ev.New {
 			glog.V(2).Infof("%v has no need to change %v", b, oldc)
 			return
 		}
@@ -201,61 +199,71 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			newc.Leader = Nil
 			newc.AddFollower(oldc.Leader)
 		}
-		newc.DelFollower(ev.New)
-		newc.Leader = ev.New
+		newi := b.fellowBeeOnHive(ev.New)
+		newc.DelFollower(newi.ID)
+		newc.Leader = newi.ID
 		b.setColony(newc)
 
 		go b.processCmd(cmdRefreshRole{})
 
-		if ev.New != b.ID() {
+		if ev.New != b.hive.ID() {
 			return
 		}
 
 		b.setTerm(ev.Term)
 
-		// FIXME(): add raft term to make sure it's versioned.
-		glog.V(2).Infof("%v is the new leader of %v", b, oldc)
-		up := updateColony{
-			Old: oldc,
-			New: newc,
-		}
+		// TODO(soheil): this can be problematic if not done in sync.
+		go func() {
+			// FIXME(): add raft term to make sure it's versioned.
+			glog.V(2).Infof("%v is the new leader of %v", b, oldc)
+			up := updateColony{
+				Old: oldc,
+				New: newc,
+			}
 
-		t := b.hive.config.RaftTick
-		// TODO(soheil): should we have a max retry?
-		// TODO(soheil): maybe do this in a go-routine.
-		for {
-			ctx, cnl := context.WithTimeout(context.Background(), t)
-			defer cnl()
-			_, err := b.hive.node.Process(ctx, up)
-			if err == nil {
+			t := b.hive.config.RaftTick
+			// TODO(soheil): should we have a max retry?
+			// TODO(soheil): maybe do this in a go-routine.
+			for {
+				ctx, cnl := context.WithTimeout(context.Background(), t)
+				defer cnl()
+				_, err := b.hive.raftProcess(ctx, up)
+				if err == nil {
+					return
+				}
+
+				if err == context.DeadlineExceeded {
+					continue
+				}
+
+				glog.Errorf("%v cannot update its colony: %v", b, err)
 				return
 			}
-
-			if err == context.DeadlineExceeded {
-				continue
-			}
-
-			glog.Errorf("%v cannot update its colony: %v", b, err)
-			return
-		}
+		}()
 		// FIXME(soheil): add health checks here and recruit if needed.
 	}
 }
 
-func (b *bee) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
-	if len(msgs) == 0 {
-		return
+func (b *bee) fellowBeeOnHive(hive uint64) (fellow BeeInfo) {
+	c := b.colony()
+	i, err := b.hive.bee(c.Leader)
+	if err != nil {
+		glog.Fatalf("%v cannot find leader %v", b, c.Leader)
 	}
-
-	for _, msg := range msgs {
-		go func(msg raftpb.Message) {
-			if err := b.hive.client.sendBeeRaft(msg, r); err != nil &&
-				!isBackoffError(err) {
-
-				glog.Errorf("%v cannot send raft: %v", b, err)
-			}
-		}(msg)
+	if i.Hive == hive {
+		return i
 	}
+	for _, f := range c.Followers {
+		i, err = b.hive.bee(f)
+		if err != nil {
+			glog.Fatalf("%v cannot find bee %v", b, f)
+		}
+		if i.Hive == hive {
+			return i
+		}
+	}
+	glog.Fatalf("%v cannot find fellow on hive %v", b, hive)
+	return
 }
 
 func (b *bee) statePath() string {
@@ -276,18 +284,21 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 	if !newc.AddFollower(bid) {
 		return ErrDuplicateBee
 	}
+	gid := oldc.ID
 	// TODO(soheil): It's important to have a proper order here. Or launch both in
 	// parallel and cancel them on error.
 	up := updateColony{
 		Old: oldc,
 		New: newc,
 	}
-	if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+	if _, err := b.hive.raftProcess(context.TODO(), up); err != nil {
 		glog.Errorf("%v cannot update its colony: %v", b, err)
 		return err
 	}
 
-	if err := b.raftNode().AddNode(context.TODO(), bid, ""); err != nil {
+	if err := b.hive.node.AddNodeToGroup(context.TODO(), hid, gid,
+		bid); err != nil {
+
 		return err
 	}
 
@@ -329,7 +340,7 @@ func (b *bee) startDetached(h DetachedHandler) {
 
 func (b *bee) start() {
 	if !b.proxy && !b.colony().IsNil() && b.app.persistent() {
-		if err := b.startNode(); err != nil {
+		if err := b.createGroup(); err != nil {
 			glog.Errorf("%v cannot start raft: %v", b, err)
 			return
 		}
@@ -475,6 +486,10 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 	}
 }
 
+func (b *bee) group() uint64 {
+	return b.colony().ID
+}
+
 func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 	glog.V(2).Infof("%v handles command %v", b, cc.cmd)
 	var err error
@@ -482,7 +497,7 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 	switch cmd := cc.cmd.Data.(type) {
 	case cmdStop:
 		b.status = beeStatusStopped
-		b.stopNode()
+		b.disableEmit()
 		glog.V(2).Infof("%v stopped", b)
 
 	case cmdStart:
@@ -490,13 +505,13 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		glog.V(2).Infof("%v started", b)
 
 	case cmdSync:
-		_, err = b.raftNode().Process(context.TODO(), noOp{})
+		_, err = b.hive.node.Process(context.TODO(), b.group(), noOp{})
 
 	case cmdRestoreState:
 		err = b.stateL1.Restore(cmd.State)
 
 	case cmdCampaign:
-		err = b.raftNode().Campaign(context.TODO())
+		err = b.hive.node.Campaign(context.TODO(), b.group())
 
 	case cmdHandoff:
 		err = b.handoff(cmd.To)
@@ -512,8 +527,7 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		}
 		b.setColony(cmd.Colony)
 		if b.app.persistent() {
-			err = b.startNode()
-			if err != nil {
+			if err = b.createGroup(); err != nil {
 				break
 			}
 		}
@@ -695,10 +709,6 @@ func (b *bee) processCmd(data interface{}) (interface{}, error) {
 	ch := make(chan cmdResult)
 	b.ctrlCh <- newCmdAndChannel(data, b.hive.ID(), b.app.Name(), b.ID(), ch)
 	return (<-ch).get()
-}
-
-func (b *bee) stepRaft(msg raftpb.Message) error {
-	return b.raftNode().Step(context.TODO(), msg)
 }
 
 func (b *bee) mappedCells() MappedCells {
@@ -984,7 +994,7 @@ func (b *bee) replicate() error {
 		Tx:   tx,
 		Term: b.term(),
 	}
-	if _, err := b.raftNode().Process(ctx, commit); err != nil {
+	if _, err := b.hive.node.Process(ctx, b.group(), commit); err != nil {
 		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
 		return err
 	}
@@ -1023,7 +1033,7 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 	for _, f := range b.colony().Followers {
 		fb, err := b.hive.registry.bee(f)
 		if err != nil {
-			glog.Fatalf("%v cannot find the hive of follower %v", b, fb)
+			glog.Fatalf("%v cannot find the hive of follower %v: %v", b, f, err)
 		}
 		blacklist = append(blacklist, fb.Hive)
 	}
@@ -1094,11 +1104,14 @@ func (b *bee) handoffNonPersistent(to uint64) error {
 		return err
 	}
 
+	oldc := b.colony()
+	newc := oldc.DeepCopy()
+	newc.Leader = to
 	up := updateColony{
-		Old: Colony{Leader: b.ID()},
-		New: Colony{Leader: to},
+		Old: oldc,
+		New: newc,
 	}
-	if _, err := b.hive.node.Process(context.TODO(), up); err != nil {
+	if _, err := b.hive.raftProcess(context.TODO(), up); err != nil {
 		return err
 	}
 
@@ -1111,7 +1124,8 @@ func (b *bee) handoff(to uint64) error {
 		return b.handoffNonPersistent(to)
 	}
 
-	if !b.colony().IsFollower(to) && !b.app.persistent() {
+	c := b.colony()
+	if !c.IsFollower(to) {
 		return fmt.Errorf("%v is not a follower of %v", to, b)
 	}
 
@@ -1128,7 +1142,7 @@ func (b *bee) handoff(to uint64) error {
 
 	time.Sleep(b.hive.config.RaftElectTimeout())
 
-	if _, err := b.hive.node.Process(context.TODO(), noOp{}); err != nil {
+	if _, err := b.hive.node.Process(context.TODO(), c.ID, noOp{}); err != nil {
 		glog.Errorf("%v cannot sync raft: %v", b, err)
 	}
 
@@ -1230,33 +1244,40 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 	case noOp:
 		return nil, nil
 	}
+	glog.Errorf("%v cannot handle %v", b, req)
 	return nil, ErrUnsupportedRequest
 }
 
-func (b *bee) ApplyConfChange(cc raftpb.ConfChange, n raft.NodeInfo) error {
+func (b *bee) ApplyConfChange(cc raftpb.ConfChange, gn raft.GroupNode) error {
+	if gn.Data == nil {
+		return nil
+	}
+
 	b.Lock()
 	defer b.Unlock()
 
 	col := b.beeColony
+	bid := gn.Data.(uint64)
+
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
-		if col.Contains(cc.NodeID) {
+		if col.Contains(bid) {
 			return ErrDuplicateBee
 		}
-		col.AddFollower(cc.NodeID)
+		col.AddFollower(bid)
 	case raftpb.ConfChangeRemoveNode:
-		if !col.Contains(cc.NodeID) {
+		if !col.Contains(bid) {
 			return ErrNoSuchBee
 		}
-		if cc.NodeID == b.beeID {
-			// TODO(soheil): Should we stop the bee here?
+		if bid == b.beeID {
+			// TODO(soheil): should we stop the bee here?
 			glog.Fatalf("bee is alive but removed from raft")
 		}
-		if col.Leader == cc.NodeID {
-			// TODO(soheil): Should we launch a goroutine to campaign here?
+		if col.Leader == bid {
+			// TODO(soheil): should we launch a goroutine to campaign here?
 			col.Leader = 0
 		} else {
-			col.DelFollower(cc.NodeID)
+			col.DelFollower(bid)
 		}
 	}
 	b.beeColony = col

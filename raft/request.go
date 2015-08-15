@@ -8,8 +8,8 @@ import (
 
 // RequestID represents a unique request throughout the cluster.
 type RequestID struct {
-	NodeID uint64
-	Seq    uint64
+	Node uint64
+	Seq  uint64
 }
 
 // Request represents a request for the store.
@@ -34,6 +34,7 @@ type Response struct {
 }
 
 func init() {
+	gob.Register(RequestID{})
 	gob.Register(Request{})
 	gob.Register(Response{})
 }

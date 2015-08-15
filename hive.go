@@ -25,6 +25,10 @@ import (
 	"github.com/kandoo/beehive/raft"
 )
 
+const (
+	hiveGroup = 1
+)
+
 // Hive represents is the main active entity of beehive. It mananges all
 // messages, apps and bees.
 type Hive interface {
@@ -118,7 +122,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 		syncCh: make(chan syncReqAndChan, cfg.DataChBufSize),
 		apps:   make(map[string]*app, 0),
 		qees:   make(map[string][]qeeAndHandler),
-		ticker: time.NewTicker(cfg.RaftTick),
 	}
 
 	h.client = newRPCClientPool(h)
@@ -353,14 +356,15 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{Err: err}
 
 	case cmdNewHiveID:
-		r, err := h.node.Process(context.TODO(), newHiveID{d.Addr})
+		r, err := h.raftProcess(context.TODO(), newHiveID{d.Addr})
 		cc.ch <- cmdResult{
 			Data: r,
 			Err:  err,
 		}
 
 	case cmdAddHive:
-		err := h.node.AddNode(context.TODO(), d.Info.ID, d.Info.Addr)
+		err := h.node.AddNodeToGroup(context.TODO(), d.Hive.ID, hiveGroup,
+			d.Hive.Addr)
 		cc.ch <- cmdResult{
 			Err: err,
 		}
@@ -383,14 +387,19 @@ func (h *hive) processCmd(data interface{}) (interface{}, error) {
 	return (<-ch).get()
 }
 
-func (h *hive) stepRaft(ctx context.Context, msg raftpb.Message) error {
-	return h.node.Step(ctx, msg)
-}
-
 func (h *hive) raftBarrier() error {
-	ctx, _ := context.WithTimeout(context.Background(), 300*h.config.RaftTick)
-	_, err := h.node.Process(ctx, noOp{})
-	return err
+	// TODO(soheil): maybe add this into the configs.
+	for i := 0; i < 10; i++ {
+		ctx, _ := context.WithTimeout(context.Background(), h.config.RaftTick)
+		_, err := h.raftProcess(ctx, noOp{})
+		if err == nil {
+			break
+		}
+		if err != context.DeadlineExceeded {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *hive) registerApp(a *app) {
@@ -454,15 +463,33 @@ func (h *hive) startRaftNode() {
 	if len(h.meta.Peers) != 0 {
 		h.registry.initHives(h.meta.Peers)
 	} else {
-		peers = append(peers, raft.NodeInfo(h.info()).Peer())
+		i := h.info()
+		ni := raft.GroupNode{
+			Group: hiveGroup,
+			Node:  i.ID,
+			Data:  i.Addr,
+		}
+		peers = append(peers, ni.Peer())
 	}
-	h.node = raft.NewNode(h.String(), h.id, peers, h.sendRaft, h.config.StatePath,
-		h.registry, 1024, h.ticker.C, h.config.RaftElectTicks, h.config.RaftHBTicks,
+
+	h.ticker = time.NewTicker(h.config.RaftTick)
+	h.node = raft.StartMultiNode(h.id, h.String(), h.sendRaft, h.ticker.C)
+	err := h.node.CreateGroup(hiveGroup, h.String(), peers, h.config.StatePath,
+		h.registry, 1024, h.config.RaftElectTicks, h.config.RaftHBTicks,
 		h.config.RaftInflights, h.config.RaftMaxMsgSize)
+	if err != nil {
+		glog.Fatalf("cannot create hive group: %v", err)
+	}
+}
+
+func (h *hive) raftProcess(ctx context.Context, req interface{}) (
+	res interface{}, err error) {
+
+	return h.node.Process(ctx, hiveGroup, req)
 }
 
 func (h *hive) delBeeFromRegistry(id uint64) error {
-	_, err := h.node.Process(context.TODO(), delBee(id))
+	_, err := h.raftProcess(context.TODO(), delBee(id))
 	if err != nil {
 		glog.Errorf("%v cannot delete bee %v from registory", h, id)
 	}
@@ -646,14 +673,14 @@ func (h *hive) listen() (err error) {
 	return nil
 }
 
-func (h *hive) sendRaft(msgs []raftpb.Message, r raft.Reporter) {
+func (h *hive) sendRaft(group uint64, msgs []raftpb.Message, r raft.Reporter) {
 	if len(msgs) == 0 {
 		return
 	}
 
 	for _, msg := range msgs {
 		go func(msg raftpb.Message) {
-			if err := h.client.sendRaft(msg, r); err != nil &&
+			if err := h.client.sendRaft(group, msg, r); err != nil &&
 				!isBackoffError(err) {
 
 				glog.Errorf("%v cannot send raft messages: %v", h, err)

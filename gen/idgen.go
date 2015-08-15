@@ -25,6 +25,17 @@ func (g *SeqIDGen) GenID() uint64 {
 	return atomic.AddUint64(&g.id, 1)
 }
 
+// ResetMinTo resets the minimum to be at least id.
+func (g *SeqIDGen) StartFrom(id uint64) {
+	val := atomic.LoadUint64(&g.id)
+	for val < id {
+		if atomic.CompareAndSwapUint64(&g.id, val, id) {
+			break
+		}
+		val = atomic.LoadUint64(&g.id)
+	}
+}
+
 // RandomIDGen generates random IDs.
 type RandomIDGen struct{}
 

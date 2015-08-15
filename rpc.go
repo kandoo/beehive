@@ -1,6 +1,7 @@
 package beehive
 
 import (
+	"encoding/gob"
 	"fmt"
 	"net"
 	"net/rpc"
@@ -87,27 +88,16 @@ func (c *rpcClientPool) stop() {
 	}
 }
 
-func (c *rpcClientPool) sendRaft(msg raftpb.Message, r raft.Reporter) error {
+func (c *rpcClientPool) sendRaft(group uint64, msg raftpb.Message,
+	r raft.Reporter) error {
+
 	client, err := c.hiveClient(msg.To)
 	if err != nil {
-		report(err, msg, r)
+		report(err, group, msg, r)
 		return err
 	}
-	if err = client.sendRaft(msg, r); err != nil {
+	if err = client.sendRaft(group, msg, r); err != nil {
 		c.resetHiveClient(msg.To, client)
-	}
-	return err
-}
-
-func (c *rpcClientPool) sendBeeRaft(msg raftpb.Message, r raft.Reporter) error {
-	client, err := c.beeClient(msg.To)
-	if err != nil {
-		report(err, msg, r)
-		return err
-	}
-
-	if err = client.sendBeeRaft(msg, r); err != nil {
-		c.resetBeeClient(msg.To, client)
 	}
 	return err
 }
@@ -316,27 +306,22 @@ func unreachable(err error) bool {
 	return err != nil
 }
 
-func report(err error, msg raftpb.Message, r raft.Reporter) {
+func report(err error, group uint64, msg raftpb.Message, r raft.Reporter) {
 	if !etcdraft.IsEmptySnap(msg.Snapshot) {
-		r.ReportSnapshot(msg.To, snapStatus(err))
+		r.ReportSnapshot(msg.To, group, snapStatus(err))
 	}
 	if unreachable(err) {
-		r.ReportUnreachable(msg.To)
+		r.ReportUnreachable(msg.To, group)
 	}
 }
 
-func (c *rpcClient) sendRaft(msg raftpb.Message, r raft.Reporter) error {
-	var f bool
-	err := c.Call("rpcServer.ProcessRaft", msg, &f)
-	report(err, msg, r)
-	return err
-}
+func (c *rpcClient) sendRaft(group uint64, msg raftpb.Message,
+	r raft.Reporter) error {
 
-func (c *rpcClient) sendBeeRaft(msg raftpb.Message, r raft.Reporter) error {
 	var f bool
-	err := c.Call("rpcServer.ProcessBeeRaft", msg, &f)
-	report(err, msg, r)
-	return nil
+	err := c.Call("rpcServer.ProcessRaft", GroupMsg{group, msg}, &f)
+	report(err, group, msg, r)
+	return err
 }
 
 func (c *rpcClient) hiveState() (state HiveState, err error) {
@@ -448,43 +433,19 @@ func (s *rpcServer) ProcessCmd(cmds []cmd, res *[]cmdResult) error {
 	return nil
 }
 
-func (s *rpcServer) ProcessRaft(msg raftpb.Message, dummy *bool) (err error) {
-	if msg.To != s.h.ID() {
-		return fmt.Errorf("%v recieves a raft message for %v", s.h, msg.To)
-	}
-
-	glog.V(3).Infof("%v handles a raft message to %v", s.h, msg.To)
-	return s.h.stepRaft(context.TODO(), msg)
+type GroupMsg struct {
+	Group uint64
+	Msg   raftpb.Message
 }
 
-func (s *rpcServer) ProcessBeeRaft(msg raftpb.Message, dummy *bool) error {
-	glog.V(3).Infof("%v handles a bee raft message for %v", s.h, msg.To)
-
-	bi, err := s.h.bee(msg.To)
-	if err != nil {
-		return fmt.Errorf("rpc-server: %v cannot find bee %v", s.h, msg.To)
+func (s *rpcServer) ProcessRaft(gm GroupMsg, dummy *bool) (err error) {
+	if gm.Msg.To != s.h.ID() {
+		return fmt.Errorf("%v recieves a raft message for %v", s.h, gm.Msg.To)
 	}
 
-	a, ok := s.h.app(bi.App)
-	if !ok {
-		return fmt.Errorf("rpc-server: %v cannot find app %v", s.h, bi.App)
-	}
-
-	b, ok := a.qee.beeByID(msg.To)
-	if !ok {
-		return fmt.Errorf("rpc-server: %v cannot find bee %v", s.h, msg.To)
-	}
-
-	if b.proxy || b.detached {
-		return fmt.Errorf("rpc-server: %v not local to %v", b, s.h)
-	}
-
-	node := b.raftNode()
-	if node == nil {
-		return fmt.Errorf("rpc-server: %v's node is not started", b)
-	}
-
-	return b.stepRaft(msg)
+	glog.V(3).Infof("%v handles a raft message to %v group %v", s.h, gm.Msg.To,
+		gm.Group)
+	return s.h.node.Step(context.TODO(), gm.Group, gm.Msg)
 }
 
 func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
@@ -492,4 +453,8 @@ func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
 		s.h.enqueMsg(&msgs[i])
 	}
 	return nil
+}
+
+func init() {
+	gob.Register(GroupMsg{})
 }

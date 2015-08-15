@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
-	"github.com/kandoo/beehive/raft"
 )
 
-type HiveInfo raft.NodeInfo
+type HiveInfo struct {
+	ID   uint64 `json:"id"`
+	Addr string `json:"addr"`
+}
 
 type hiveMeta struct {
 	Hive  HiveInfo
@@ -65,9 +67,13 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 				return
 			}
 
+			if id == Nil {
+				glog.Fatalf("invalid ID from peer")
+			}
+
 			_, err = c.sendCmd(cmd{
 				Data: cmdAddHive{
-					Info: raft.NodeInfo{
+					Hive: HiveInfo{
 						ID:   id.(uint64),
 						Addr: addr,
 					},

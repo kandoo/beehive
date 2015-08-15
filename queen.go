@@ -104,7 +104,7 @@ func (q *qee) addBee(b *bee) {
 }
 
 func (q *qee) allocateBeeID() error {
-	res, err := q.hive.node.Process(context.TODO(), allocateBeeIDs{
+	res, err := q.hive.raftProcess(context.TODO(), allocateBeeIDs{
 		Len: q.hive.config.BatchSize,
 	})
 	if err != nil {
@@ -215,7 +215,7 @@ func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
 }
 
 func (q *qee) registerBee(info BeeInfo) error {
-	_, err := q.hive.node.Process(context.TODO(), addBee(info))
+	_, err := q.hive.raftProcess(context.TODO(), addBee(info))
 	return err
 }
 
@@ -509,7 +509,7 @@ func (q *qee) handlePlacementRes(res placementRes) error {
 			Cells:  res.pCells.MappedCells(),
 		}
 
-		lockRes, err := q.hive.node.Process(context.TODO(), lock)
+		lockRes, err := q.hive.raftProcess(context.TODO(), lock)
 		if err != nil {
 			return err
 		}
@@ -640,7 +640,7 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 		})
 	}
 
-	lockRes, err := q.hive.node.Process(context.TODO(), lockBatch)
+	lockRes, err := q.hive.raftProcess(context.TODO(), lockBatch)
 	if err != nil {
 		glog.Fatalf("error in lock cells: %v", err)
 	}
@@ -746,7 +746,7 @@ func (q *qee) beeByCells(cells MappedCells) (*bee, error) {
 			App:    q.app.Name(),
 			Cells:  cells,
 		}
-		if _, err := q.hive.node.Process(context.TODO(), lock); err != nil {
+		if _, err := q.hive.raftProcess(context.TODO(), lock); err != nil {
 			return nil, err
 		}
 		// TODO(soheil): maybe check whether the leader has changed?

@@ -18,7 +18,7 @@ type StateMachine interface {
 	// Apply applies a request and returns the response.
 	Apply(req interface{}) (interface{}, error)
 	// ApplyConfChange processes a configuration change.
-	ApplyConfChange(cc raftpb.ConfChange, n NodeInfo) error
+	ApplyConfChange(cc raftpb.ConfChange, gn GroupNode) error
 	// ProcessStatusChange is called whenever the leader of the quorum is changed.
 	ProcessStatusChange(event interface{})
 }

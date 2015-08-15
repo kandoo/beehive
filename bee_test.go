@@ -170,20 +170,21 @@ func TestBeeTxTerm(t *testing.T) {
 		break
 	}
 
+	g := b.group()
 	commit := commitTx{
 		Term: b.term(),
 	}
-	if _, err := b.raftNode().Process(context.TODO(), commit); err != nil {
+	if _, err := b.hive.node.Process(context.TODO(), g, commit); err != nil {
 		t.Errorf("did not expect an error in commit: %v", err)
 	}
 
 	commit.Term++
-	if _, err := b.raftNode().Process(context.TODO(), commit); err != nil {
+	if _, err := b.hive.node.Process(context.TODO(), g, commit); err != nil {
 		t.Errorf("did not expect an error in commit: %v", err)
 	}
 
 	commit.Term--
-	_, err := b.raftNode().Process(context.TODO(), commit)
+	_, err := b.hive.node.Process(context.TODO(), g, commit)
 	if err == nil {
 		t.Error("old commit should not be committed")
 	}
@@ -232,7 +233,7 @@ func BenchmarkBeePersistence(b *testing.B) {
 		batchSize: 1024,
 	}
 	removeState(bee.hive.config)
-	bee.startNode()
+	bee.createGroup()
 	bee.becomeLeader()
 	b.StartTimer()
 
@@ -249,6 +250,6 @@ func BenchmarkBeePersistence(b *testing.B) {
 	}
 
 	b.StopTimer()
-	bee.stopNode()
 	time.Sleep(1 * time.Second)
+	bee.processCmd(cmdStop{})
 }
