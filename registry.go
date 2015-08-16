@@ -26,9 +26,7 @@ var (
 type noOp struct{}
 
 // newHiveID is the registry request to create a unique 64-bit hive ID.
-type newHiveID struct {
-	Addr string
-}
+type newHiveID struct{}
 
 // allocateBeeIDs is a registery request to allocate a range of bee IDs.
 type allocateBeeIDs struct {
@@ -67,8 +65,9 @@ type moveBee struct {
 
 // updateColony is a registery request to update a colony.
 type updateColony struct {
-	Old Colony
-	New Colony
+	Term uint64
+	Old  Colony
+	New  Colony
 }
 
 // lockMappedCell locks a mapped cell for a colony.
@@ -150,27 +149,27 @@ func (r *registry) Apply(req interface{}) (interface{}, error) {
 func (r *registry) doApply(req interface{}) (interface{}, error) {
 	glog.V(2).Infof("%v applies: %#v", r, req)
 
-	switch tr := req.(type) {
+	switch req := req.(type) {
 	case noOp:
 		return nil, nil
 	case newHiveID:
-		return r.newHiveID(tr.Addr), nil
+		return r.newHiveID(), nil
 	case allocateBeeIDs:
-		return r.allocBeeIDs(tr)
+		return r.allocBeeIDs(req)
 	case addBee:
-		return nil, r.addBee(BeeInfo(tr))
+		return nil, r.addBee(BeeInfo(req))
 	case delBee:
-		return nil, r.delBee(uint64(tr))
+		return nil, r.delBee(uint64(req))
 	case moveBee:
-		return nil, r.moveBee(tr)
+		return nil, r.moveBee(req)
 	case updateColony:
-		return nil, r.updateColony(tr)
+		return nil, r.updateColony(req)
 	case lockMappedCell:
-		return r.lockCell(tr)
+		return r.lockCell(req)
 	case transferCells:
-		return nil, r.transfer(tr)
+		return nil, r.transfer(req)
 	case batchReq:
-		return r.handleBatch(tr), nil
+		return r.handleBatch(req), nil
 	}
 
 	glog.Errorf("%v cannot handle %v", r, req)
@@ -207,11 +206,8 @@ func (r *registry) ApplyConfChange(cc raftpb.ConfChange, gn raft.GroupNode) (
 	return nil
 }
 
-func (r *registry) newHiveID(addr string) uint64 {
+func (r *registry) newHiveID() uint64 {
 	r.HiveID++
-	if addr != "" {
-		r.addHive(HiveInfo{ID: r.HiveID, Addr: addr})
-	}
 	glog.V(2).Infof("%v allocates new hive ID %v", r, r.HiveID)
 	return r.HiveID
 }
@@ -255,7 +251,7 @@ func (r *registry) addHive(info HiveInfo) error {
 	glog.V(2).Infof("%v sets hive %v's address to %v", r, info.ID, info.Addr)
 	for _, h := range r.Hives {
 		if h.Addr == info.Addr && h.ID != info.ID {
-			glog.Fatalf("%v has duplicate address %v for hives %v and %v", r,
+			return fmt.Errorf("%v has duplicate address %v for hives %v and %v", r,
 				info.Addr, info.ID, h.ID)
 		}
 	}
@@ -316,7 +312,7 @@ func (r *registry) updateColony(up updateColony) error {
 
 	glog.V(2).Infof("%v updates %v with %v", r, up.Old, up.New)
 	b := r.mustFindBee(up.New.Leader)
-	if err := r.Store.updateColony(b.App, up.Old, up.New); err != nil {
+	if err := r.Store.updateColony(b.App, up.Old, up.New, up.Term); err != nil {
 		return err
 	}
 

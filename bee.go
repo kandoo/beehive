@@ -142,21 +142,10 @@ func (b *bee) createGroup() error {
 		return err
 	}
 
-	// This will act like a barrier.
-	for {
-		ctx, ccl := context.WithTimeout(context.Background(),
-			b.hive.config.RaftTick)
-		defer ccl()
-		_, err := b.hive.node.Process(ctx, c.ID, noOp{})
-		if err == nil {
-			break
-		}
-		if err != nil && err != context.DeadlineExceeded {
-			glog.Errorf("%v cannot start raft: %v", b, err)
-			return err
-		}
-		glog.V(2).Infof("%v cannot start raft: retrying", b)
+	if err = b.raftBarrier(); err != nil {
+		return err
 	}
+
 	b.enableEmit()
 	glog.V(2).Infof("%v started its raft node", b)
 	return nil
@@ -217,27 +206,16 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			// FIXME(): add raft term to make sure it's versioned.
 			glog.V(2).Infof("%v is the new leader of %v", b, oldc)
 			up := updateColony{
-				Old: oldc,
-				New: newc,
+				Term: ev.Term,
+				Old:  oldc,
+				New:  newc,
 			}
 
-			t := b.hive.config.RaftTick
 			// TODO(soheil): should we have a max retry?
 			// TODO(soheil): maybe do this in a go-routine.
-			for {
-				ctx, cnl := context.WithTimeout(context.Background(), t)
-				defer cnl()
-				_, err := b.hive.raftProcess(ctx, up)
-				if err == nil {
-					return
-				}
-
-				if err == context.DeadlineExceeded {
-					continue
-				}
-
+			if _, err := b.hive.node.ProposeRetry(hiveGroup, up,
+				b.hive.config.RaftElectTimeout(), -1); err != nil {
 				glog.Errorf("%v cannot update its colony: %v", b, err)
-				return
 			}
 		}()
 		// FIXME(soheil): add health checks here and recruit if needed.
@@ -284,21 +262,27 @@ func (b *bee) addFollower(bid uint64, hid uint64) error {
 	if !newc.AddFollower(bid) {
 		return ErrDuplicateBee
 	}
+
+	t := 10 * b.hive.config.RaftElectTimeout()
+	upctx, upcnl := context.WithTimeout(context.Background(), t)
+	defer upcnl()
+
 	gid := oldc.ID
 	// TODO(soheil): It's important to have a proper order here. Or launch both in
 	// parallel and cancel them on error.
 	up := updateColony{
-		Old: oldc,
-		New: newc,
+		Term: b.term(),
+		Old:  oldc,
+		New:  newc,
 	}
-	if _, err := b.hive.raftProcess(context.TODO(), up); err != nil {
+	if _, err := b.hive.proposeAmongHives(upctx, up); err != nil {
 		glog.Errorf("%v cannot update its colony: %v", b, err)
 		return err
 	}
 
-	if err := b.hive.node.AddNodeToGroup(context.TODO(), hid, gid,
-		bid); err != nil {
-
+	cfgctx, cfgcnl := context.WithTimeout(context.Background(), t)
+	defer cfgcnl()
+	if err := b.hive.node.AddNodeToGroup(cfgctx, hid, gid, bid); err != nil {
 		return err
 	}
 
@@ -505,13 +489,16 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 		glog.V(2).Infof("%v started", b)
 
 	case cmdSync:
-		_, err = b.hive.node.Process(context.TODO(), b.group(), noOp{})
+		err = b.raftBarrier()
 
 	case cmdRestoreState:
 		err = b.stateL1.Restore(cmd.State)
 
 	case cmdCampaign:
-		err = b.hive.node.Campaign(context.TODO(), b.group())
+		ctx, cnl := context.WithTimeout(context.Background(),
+			b.hive.config.RaftElectTimeout())
+		err = b.hive.node.Campaign(ctx, b.group())
+		cnl()
 
 	case cmdHandoff:
 		err = b.handoff(cmd.To)
@@ -987,14 +974,14 @@ func (b *bee) replicate() error {
 		Tx:   stx,
 		Msgs: b.msgBufL1,
 	}
-	ctx, ccl := context.WithTimeout(context.Background(),
+	ctx, cnl := context.WithTimeout(context.Background(),
 		10*b.hive.config.RaftElectTimeout())
-	defer ccl()
+	defer cnl()
 	commit := commitTx{
 		Tx:   tx,
 		Term: b.term(),
 	}
-	if _, err := b.hive.node.Process(ctx, b.group(), commit); err != nil {
+	if _, err := b.hive.node.Propose(ctx, b.group(), commit); err != nil {
 		glog.Errorf("%v cannot replicate the transaction: %v", b, err)
 		return err
 	}
@@ -1108,10 +1095,14 @@ func (b *bee) handoffNonPersistent(to uint64) error {
 	newc := oldc.DeepCopy()
 	newc.Leader = to
 	up := updateColony{
-		Old: oldc,
-		New: newc,
+		Term: b.term(),
+		Old:  oldc,
+		New:  newc,
 	}
-	if _, err := b.hive.raftProcess(context.TODO(), up); err != nil {
+	ctx, cnl := context.WithTimeout(context.Background(),
+		10*b.hive.config.RaftElectTimeout())
+	defer cnl()
+	if _, err := b.hive.proposeAmongHives(ctx, up); err != nil {
 		return err
 	}
 
@@ -1141,8 +1132,8 @@ func (b *bee) handoff(to uint64) error {
 	}()
 
 	time.Sleep(b.hive.config.RaftElectTimeout())
-
-	if _, err := b.hive.node.Process(context.TODO(), c.ID, noOp{}); err != nil {
+	t := b.hive.config.RaftTick
+	if _, err := b.hive.node.ProposeRetry(c.ID, noOp{}, t, 10); err != nil {
 		glog.Errorf("%v cannot sync raft: %v", b, err)
 	}
 
@@ -1150,8 +1141,13 @@ func (b *bee) handoff(to uint64) error {
 		glog.V(2).Infof("%v successfully handed off leadership to %v", b, to)
 		b.becomeFollower()
 	}
-
 	return <-ch
+}
+
+func (b *bee) raftBarrier() error {
+	_, err := b.hive.node.ProposeRetry(b.group(), noOp{}, b.hive.config.RaftTick,
+		-1)
+	return err
 }
 
 func (b *bee) currentState() (dicts *state.Transactional, msgs *[]*msg) {

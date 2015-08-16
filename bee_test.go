@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
-
 	"github.com/kandoo/beehive/bucket"
 	"github.com/kandoo/beehive/state"
 )
@@ -170,21 +168,23 @@ func TestBeeTxTerm(t *testing.T) {
 		break
 	}
 
+	tick := h.Config().RaftTick
+
 	g := b.group()
 	commit := commitTx{
 		Term: b.term(),
 	}
-	if _, err := b.hive.node.Process(context.TODO(), g, commit); err != nil {
+	if _, err := b.hive.node.ProposeRetry(g, commit, tick, -1); err != nil {
 		t.Errorf("did not expect an error in commit: %v", err)
 	}
 
 	commit.Term++
-	if _, err := b.hive.node.Process(context.TODO(), g, commit); err != nil {
+	if _, err := b.hive.node.ProposeRetry(g, commit, tick, -1); err != nil {
 		t.Errorf("did not expect an error in commit: %v", err)
 	}
 
 	commit.Term--
-	_, err := b.hive.node.Process(context.TODO(), g, commit)
+	_, err := b.hive.node.ProposeRetry(g, commit, tick, -1)
 	if err == nil {
 		t.Error("old commit should not be committed")
 	}

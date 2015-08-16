@@ -49,6 +49,8 @@ func (mc MappedCells) LocalBroadcast() bool {
 }
 
 type cellStore struct {
+	// colonyid -> term
+	Colonies map[uint64]uint64
 	// appname -> dict -> key -> colony
 	CellBees map[string]map[string]map[string]Colony
 	// beeid -> dict -> key
@@ -57,6 +59,7 @@ type cellStore struct {
 
 func newCellStore() cellStore {
 	return cellStore{
+		Colonies: make(map[uint64]uint64),
 		CellBees: make(map[string]map[string]map[string]Colony),
 		BeeCells: make(map[uint64]map[string]map[string]struct{}),
 	}
@@ -122,14 +125,23 @@ func (s *cellStore) cells(bee uint64) MappedCells {
 	return c
 }
 
-func (s *cellStore) updateColony(app string, oldc Colony, newc Colony) error {
-	bdicts := s.BeeCells[oldc.Leader]
+func (s *cellStore) updateColony(app string, oldc Colony, newc Colony,
+	term uint64) error {
+
+	if t, ok := s.Colonies[newc.ID]; ok {
+		if term < t {
+			return fmt.Errorf("cellstore: colony is older than %v", t)
+		}
+	}
+	s.Colonies[newc.ID] = term
+
+	bcells := s.BeeCells[oldc.Leader]
 	if oldc.Leader != newc.Leader {
-		s.BeeCells[newc.Leader] = bdicts
+		s.BeeCells[newc.Leader] = bcells
 		delete(s.BeeCells, oldc.Leader)
 	}
 	acells := s.CellBees[app]
-	for d, dict := range bdicts {
+	for d, dict := range bcells {
 		for k := range dict {
 			acells[d][k] = newc
 		}

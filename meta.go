@@ -61,7 +61,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 				return
 			}
 
-			id, err := c.sendCmd(cmd{Data: cmdNewHiveID{Addr: addr}})
+			id, err := c.sendCmd(cmd{Data: cmdNewHiveID{}})
 			if err != nil {
 				glog.Error(err)
 				return

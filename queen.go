@@ -104,16 +104,17 @@ func (q *qee) addBee(b *bee) {
 }
 
 func (q *qee) allocateBeeID() error {
-	res, err := q.hive.raftProcess(context.TODO(), allocateBeeIDs{
+	a := allocateBeeIDs{
 		Len: q.hive.config.BatchSize,
-	})
+	}
+	res, err := q.hive.node.ProposeRetry(hiveGroup, a,
+		q.hive.config.RaftElectTimeout(), -1)
 	if err != nil {
 		return err
 	}
-
-	a := res.(allocateBeeIDResult)
-	q.nextID = a.From
-	q.maxID = a.To
+	ares := res.(allocateBeeIDResult)
+	q.nextID = ares.From
+	q.maxID = ares.To
 	return nil
 }
 
@@ -215,7 +216,9 @@ func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
 }
 
 func (q *qee) registerBee(info BeeInfo) error {
-	_, err := q.hive.raftProcess(context.TODO(), addBee(info))
+	// TODO(soheil): we should not block on this.
+	_, err := q.hive.node.ProposeRetry(hiveGroup, addBee(info),
+		q.hive.config.RaftElectTimeout(), -1)
 	return err
 }
 
@@ -509,7 +512,8 @@ func (q *qee) handlePlacementRes(res placementRes) error {
 			Cells:  res.pCells.MappedCells(),
 		}
 
-		lockRes, err := q.hive.raftProcess(context.TODO(), lock)
+		lockRes, err := q.hive.node.ProposeRetry(hiveGroup, lock,
+			q.hive.config.RaftElectTimeout(), -1)
 		if err != nil {
 			return err
 		}
@@ -640,7 +644,8 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 		})
 	}
 
-	lockRes, err := q.hive.raftProcess(context.TODO(), lockBatch)
+	lockRes, err := q.hive.node.ProposeRetry(hiveGroup, lockBatch,
+		q.hive.config.RaftElectTimeout(), -1)
 	if err != nil {
 		glog.Fatalf("error in lock cells: %v", err)
 	}
@@ -746,7 +751,9 @@ func (q *qee) beeByCells(cells MappedCells) (*bee, error) {
 			App:    q.app.Name(),
 			Cells:  cells,
 		}
-		if _, err := q.hive.raftProcess(context.TODO(), lock); err != nil {
+		if _, err := q.hive.node.ProposeRetry(hiveGroup, lock,
+			q.hive.config.RaftElectTimeout(), -1); err != nil {
+
 			return nil, err
 		}
 		// TODO(soheil): maybe check whether the leader has changed?

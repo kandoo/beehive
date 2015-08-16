@@ -20,7 +20,7 @@ type cmdMigrate struct {
 	Bee uint64
 	To  uint64
 }
-type cmdNewHiveID struct{ Addr string }
+type cmdNewHiveID struct{}
 type cmdPing struct{}
 type cmdReloadBee struct {
 	ID     uint64

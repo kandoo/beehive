@@ -98,6 +98,11 @@ func (c HiveConfig) RaftElectTimeout() time.Duration {
 	return time.Duration(c.RaftElectTicks) * c.RaftTick
 }
 
+// RaftHBTimeout returns the raft heartbeat timeout as RaftTick*RaftHBTicks.
+func (c HiveConfig) RaftHBTimeout() time.Duration {
+	return time.Duration(c.RaftHBTicks) * c.RaftTick
+}
+
 // NewHiveWithConfig creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	if !flag.Parsed() {
@@ -356,7 +361,8 @@ func (h *hive) handleCmd(cc cmdAndChannel) {
 		cc.ch <- cmdResult{Err: err}
 
 	case cmdNewHiveID:
-		r, err := h.raftProcess(context.TODO(), newHiveID{d.Addr})
+		r, err := h.node.ProposeRetry(hiveGroup, newHiveID{},
+			h.config.RaftElectTimeout(), 10)
 		cc.ch <- cmdResult{
 			Data: r,
 			Err:  err,
@@ -388,18 +394,9 @@ func (h *hive) processCmd(data interface{}) (interface{}, error) {
 }
 
 func (h *hive) raftBarrier() error {
-	// TODO(soheil): maybe add this into the configs.
-	for i := 0; i < 10; i++ {
-		ctx, _ := context.WithTimeout(context.Background(), h.config.RaftTick)
-		_, err := h.raftProcess(ctx, noOp{})
-		if err == nil {
-			break
-		}
-		if err != context.DeadlineExceeded {
-			return err
-		}
-	}
-	return nil
+	// TODO(soheil): maybe add a max retry number into the configs.
+	_, err := h.node.ProposeRetry(hiveGroup, noOp{}, h.config.RaftTick, -1)
+	return err
 }
 
 func (h *hive) registerApp(a *app) {
@@ -482,14 +479,15 @@ func (h *hive) startRaftNode() {
 	}
 }
 
-func (h *hive) raftProcess(ctx context.Context, req interface{}) (
+func (h *hive) proposeAmongHives(ctx context.Context, req interface{}) (
 	res interface{}, err error) {
 
-	return h.node.Process(ctx, hiveGroup, req)
+	return h.node.Propose(ctx, hiveGroup, req)
 }
 
 func (h *hive) delBeeFromRegistry(id uint64) error {
-	_, err := h.raftProcess(context.TODO(), delBee(id))
+	_, err := h.node.ProposeRetry(hiveGroup, delBee(id),
+		h.config.RaftElectTimeout(), -1)
 	if err != nil {
 		glog.Errorf("%v cannot delete bee %v from registory", h, id)
 	}
@@ -502,7 +500,7 @@ func (h *hive) reloadState() {
 			glog.V(1).Infof(
 				"%v will not reload detached bee %v (detached=%v, colony=%#v)", h, b.ID,
 				b.Detached, b.Colony)
-			h.delBeeFromRegistry(b.ID)
+			go h.delBeeFromRegistry(b.ID)
 			continue
 		}
 		a, ok := h.app(b.App)

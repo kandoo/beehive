@@ -350,8 +350,9 @@ func (n *Node) genID() RequestID {
 	}
 }
 
-// Process processes the request and returns the response. This method blocks.
-func (n *Node) Process(ctx context.Context, group uint64, req interface{}) (
+// Propose proposes the request and returns the response. This method blocks and
+// returns either when the ctx is cancelled or the raft node returns a response.
+func (n *Node) Propose(ctx context.Context, group uint64, req interface{}) (
 	res interface{}, err error) {
 
 	r := Request{
@@ -377,6 +378,39 @@ func (n *Node) Process(ctx context.Context, group uint64, req interface{}) (
 	case <-n.done:
 		return nil, ErrStopped
 	}
+}
+
+// ProposeRetry proposes the request to the given group. It retires maxRetries
+// times using the given timeout. If maxRetries is -1 it will keep proposing the
+// request until it retrieves a response.
+func (n *Node) ProposeRetry(group uint64, req interface{},
+	timeout time.Duration, maxRetries int) (res interface{}, err error) {
+
+	for {
+		ctx, ccl := context.WithTimeout(context.Background(), timeout)
+		defer ccl()
+
+		if n.Status(group) == nil {
+			// wait with the hope that the group will be created.
+			time.Sleep(timeout)
+		} else {
+			res, err = n.Propose(ctx, group, req)
+			if err != context.DeadlineExceeded {
+				return
+			}
+		}
+
+		if maxRetries < 0 {
+			continue
+		}
+
+		maxRetries--
+		if maxRetries == 0 {
+			break
+		}
+	}
+
+	return nil, context.DeadlineExceeded
 }
 
 func (n *Node) AddNodeToGroup(ctx context.Context, node, group uint64,
