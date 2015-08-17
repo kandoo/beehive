@@ -120,7 +120,13 @@ func OpenStorage(node uint64, dir string, stateMachine StateMachine) (
 
 	raftStorage.SetHardState(st)
 	raftStorage.Append(ents)
-	lastEntIdx = ents[len(ents)-1].Index
+	if len(ents) != 0 {
+		lastEntIdx = ents[len(ents)-1].Index
+	} else if ss != nil {
+		lastEntIdx = ss.Metadata.Index
+	} else {
+		lastEntIdx = 0
+	}
 
 	diskStorage = &storage{w, s}
 	return
