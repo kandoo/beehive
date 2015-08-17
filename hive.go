@@ -395,7 +395,8 @@ func (h *hive) processCmd(data interface{}) (interface{}, error) {
 
 func (h *hive) raftBarrier() error {
 	// TODO(soheil): maybe add a max retry number into the configs.
-	_, err := h.node.ProposeRetry(hiveGroup, noOp{}, h.config.RaftTick, -1)
+	_, err := h.node.ProposeRetry(hiveGroup, noOp{}, h.config.RaftElectTimeout(),
+		-1)
 	return err
 }
 
@@ -489,7 +490,7 @@ func (h *hive) delBeeFromRegistry(id uint64) error {
 	_, err := h.node.ProposeRetry(hiveGroup, delBee(id),
 		h.config.RaftElectTimeout(), -1)
 	if err != nil {
-		glog.Errorf("%v cannot delete bee %v from registory", h, id)
+		glog.Errorf("%v cannot delete bee %v from registory: %v", h, id, err)
 	}
 	return err
 }

@@ -1148,8 +1148,8 @@ func (b *bee) handoff(to uint64) error {
 		ch <- err
 	}()
 
-	time.Sleep(b.hive.config.RaftElectTimeout())
-	t := b.hive.config.RaftTick
+	t := b.hive.config.RaftElectTimeout()
+	time.Sleep(t)
 	if _, err := b.hive.node.ProposeRetry(c.ID, noOp{}, t, 10); err != nil {
 		glog.Errorf("%v cannot sync raft: %v", b, err)
 	}
@@ -1162,8 +1162,8 @@ func (b *bee) handoff(to uint64) error {
 }
 
 func (b *bee) raftBarrier() error {
-	_, err := b.hive.node.ProposeRetry(b.group(), noOp{}, b.hive.config.RaftTick,
-		-1)
+	_, err := b.hive.node.ProposeRetry(b.group(), noOp{},
+		b.hive.config.RaftElectTimeout(), -1)
 	return err
 }
 

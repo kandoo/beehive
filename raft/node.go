@@ -85,6 +85,10 @@ type groupState struct {
 	confState raftpb.ConfState
 }
 
+func (gs groupState) String() string {
+	return fmt.Sprintf("group %v (%v)", gs.id, gs.name)
+}
+
 type groupRequestType int
 
 const (
@@ -101,8 +105,6 @@ type groupRequest struct {
 }
 
 type Node struct {
-	sync.RWMutex
-
 	id   uint64
 	name string
 	node etcdraft.MultiNode
@@ -116,6 +118,9 @@ type Node struct {
 
 	send SendFunc
 
+	pmu           sync.Mutex
+	pendingElects map[uint64][]chan struct{}
+
 	ticker <-chan time.Time
 	stop   chan struct{}
 	done   chan struct{}
@@ -126,17 +131,18 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 
 	mn := etcdraft.StartMultiNode(id)
 	node = &Node{
-		id:       id,
-		name:     name,
-		node:     mn,
-		gen:      gen.NewSeqIDGen(1),
-		groups:   make(map[uint64]*groupState),
-		groupc:   make(chan groupRequest),
-		advancec: make(chan map[uint64]etcdraft.Ready),
-		send:     send,
-		ticker:   ticker,
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
+		id:            id,
+		name:          name,
+		node:          mn,
+		gen:           gen.NewSeqIDGen(1),
+		groups:        make(map[uint64]*groupState),
+		groupc:        make(chan groupRequest),
+		advancec:      make(chan map[uint64]etcdraft.Ready),
+		send:          send,
+		pendingElects: make(map[uint64][]chan struct{}),
+		ticker:        ticker,
+		stop:          make(chan struct{}),
+		done:          make(chan struct{}),
 	}
 	node.line.init()
 	go node.start()
@@ -199,6 +205,10 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 				})
 				gs.leader = newLead
 			}
+
+			if newLead != 0 {
+				n.notifyElection(g)
+			}
 		}
 
 		// Apply snapshot to storage if it is more updated than current snapi.
@@ -209,7 +219,7 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 			}
 			gs.raftStorage.ApplySnapshot(rd.Snapshot)
 			gs.snapi = rd.Snapshot.Metadata.Index
-			glog.Infof("saved incoming snapshot at index %d", gs.snapi)
+			glog.Infof("%v saved incoming snapshot at index %d", n, gs.snapi)
 		}
 
 		if err := gs.diskStorage.Save(rd.HardState, rd.Entries); err != nil {
@@ -227,7 +237,7 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 			}
 			// FIXME(soheil): update the nodes and notify the application?
 			gs.appliedi = rd.Snapshot.Metadata.Index
-			glog.Infof("recovered from incoming snapshot at index %d", gs.snapi)
+			glog.Infof("%v recovered from incoming snapshot at index %d", n, gs.snapi)
 		}
 
 		if len(rd.CommittedEntries) != 0 {
@@ -252,8 +262,8 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 		}
 
 		if gs.appliedi-gs.snapi > gs.snapCount {
-			glog.Infof("start to snapshot (applied: %d, lastsnap: %d)", gs.appliedi,
-				gs.snapi)
+			glog.Infof("%v start to snapshot (applied: %d, lastsnap: %d)", n,
+				gs.appliedi, gs.snapi)
 			gs.snapshot()
 		}
 	}
@@ -350,6 +360,30 @@ func (n *Node) genID() RequestID {
 	}
 }
 
+func (n *Node) waitElection(ctx context.Context, group uint64) {
+	ch := make(chan struct{})
+	n.pmu.Lock()
+	n.pendingElects[group] = append(n.pendingElects[group], ch)
+	n.pmu.Unlock()
+	select {
+	case <-ch:
+	case <-ctx.Done():
+	case <-n.done:
+	}
+}
+
+func (n *Node) notifyElection(group uint64) {
+	n.pmu.Lock()
+	chs := n.pendingElects[group]
+	if len(chs) != 0 {
+		for _, ch := range chs {
+			close(ch)
+		}
+	}
+	delete(n.pendingElects, group)
+	n.pmu.Unlock()
+}
+
 // Propose proposes the request and returns the response. This method blocks and
 // returns either when the ctx is cancelled or the raft node returns a response.
 func (n *Node) Propose(ctx context.Context, group uint64, req interface{}) (
@@ -390,9 +424,9 @@ func (n *Node) ProposeRetry(group uint64, req interface{},
 		ctx, ccl := context.WithTimeout(context.Background(), timeout)
 		defer ccl()
 
-		if n.Status(group) == nil {
+		if status := n.Status(group); status == nil || status.SoftState.Lead == 0 {
 			// wait with the hope that the group will be created.
-			time.Sleep(timeout)
+			n.waitElection(ctx, group)
 		} else {
 			res, err = n.Propose(ctx, group, req)
 			if err != context.DeadlineExceeded {
@@ -618,7 +652,7 @@ func (gs *groupState) snapshot() {
 		if err := gs.diskStorage.SaveSnap(snap); err != nil {
 			glog.Fatalf("save snapshot error: %v", err)
 		}
-		glog.Infof("saved snapshot at index %d", snap.Metadata.Index)
+		glog.Infof("%v saved snapshot at index %d", gs, snap.Metadata.Index)
 
 		// keep some in memory log entries for slow followers.
 		compacti := uint64(1)
@@ -633,7 +667,7 @@ func (gs *groupState) snapshot() {
 			}
 			glog.Fatalf("unexpected compaction error %v", err)
 		}
-		glog.Infof("compacted raft log at %d", compacti)
+		glog.Infof("%v compacted raft log at %d", gs, compacti)
 	}()
 
 	gs.snapi = gs.appliedi
