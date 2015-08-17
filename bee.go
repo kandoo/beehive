@@ -88,16 +88,29 @@ func (b *bee) String() string {
 
 func (b *bee) colony() Colony {
 	b.Lock()
-	defer b.Unlock()
-
-	return b.beeColony.DeepCopy()
+	c := b.beeColony.DeepCopy()
+	b.Unlock()
+	return c
 }
 
 func (b *bee) setColony(c Colony) {
 	b.Lock()
-	defer b.Unlock()
-
 	b.beeColony = c
+	b.Unlock()
+}
+
+func (b *bee) isColonyNil() bool {
+	b.Lock()
+	n := b.beeColony.IsNil()
+	b.Unlock()
+	return n
+}
+
+func (b *bee) isFollower(bid uint64) bool {
+	b.Lock()
+	f := b.beeColony.IsFollower(bid)
+	b.Unlock()
+	return f
 }
 
 func (b *bee) term() uint64 {
@@ -323,7 +336,7 @@ func (b *bee) startDetached(h DetachedHandler) {
 }
 
 func (b *bee) start() {
-	if !b.proxy && !b.colony().IsNil() && b.app.persistent() {
+	if !b.proxy && !b.isColonyNil() && b.app.persistent() {
 		if err := b.createGroup(); err != nil {
 			glog.Errorf("%v cannot start raft: %v", b, err)
 			return
@@ -471,7 +484,10 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 }
 
 func (b *bee) group() uint64 {
-	return b.colony().ID
+	b.Lock()
+	g := b.beeColony.ID
+	b.Unlock()
+	return g
 }
 
 func (b *bee) handleCmdLocal(cc cmdAndChannel) {
@@ -508,7 +524,7 @@ func (b *bee) handleCmdLocal(cc cmdAndChannel) {
 			err = fmt.Errorf("%v is not in this colony %v", b, cmd.Colony)
 			break
 		}
-		if !b.colony().IsNil() {
+		if !b.isColonyNil() {
 			err = fmt.Errorf("%v is already in colony %v", b, b.colony())
 			break
 		}
@@ -1017,18 +1033,19 @@ func (b *bee) doRecruitFollowers() (recruited int) {
 	}
 
 	blacklist := []uint64{b.hive.ID()}
-	for _, f := range b.colony().Followers {
+	for _, f := range c.Followers {
 		fb, err := b.hive.registry.bee(f)
 		if err != nil {
 			glog.Fatalf("%v cannot find the hive of follower %v: %v", b, f, err)
 		}
 		blacklist = append(blacklist, fb.Hive)
 	}
+
 	for r != 1 {
 		hives := b.hive.replStrategy.selectHives(blacklist, r-1)
 		if len(hives) == 0 {
 			glog.Warningf("can only find %v hives to create followers for %v",
-				len(b.colony().Followers), b)
+				len(c.Followers), b)
 			break
 		}
 
@@ -1137,7 +1154,7 @@ func (b *bee) handoff(to uint64) error {
 		glog.Errorf("%v cannot sync raft: %v", b, err)
 	}
 
-	if b.colony().IsFollower(b.ID()) {
+	if b.isFollower(b.ID()) {
 		glog.V(2).Infof("%v successfully handed off leadership to %v", b, to)
 		b.becomeFollower()
 	}
