@@ -489,6 +489,9 @@ func (h *hive) proposeAmongHives(ctx context.Context, req interface{}) (
 func (h *hive) delBeeFromRegistry(id uint64) error {
 	_, err := h.node.ProposeRetry(hiveGroup, delBee(id),
 		h.config.RaftElectTimeout(), -1)
+	if err == ErrNoSuchBee {
+		err = nil
+	}
 	if err != nil {
 		glog.Errorf("%v cannot delete bee %v from registory: %v", h, id, err)
 	}
