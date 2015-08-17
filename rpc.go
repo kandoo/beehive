@@ -425,7 +425,8 @@ func (s *rpcServer) ProcessCmd(cmds []cmd, res *[]cmdResult) error {
 				return nil
 
 			case <-time.After(10 * time.Second):
-				glog.Errorf("%v is blocked on %v (chan size=%d)", s.h, cmds[i], len(ch))
+				glog.Errorf("%v is blocked on %v (chan %p size=%d)", s.h, cmds[i], ch,
+					len(ch))
 			}
 		}
 	}
