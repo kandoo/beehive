@@ -650,6 +650,7 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 		glog.Fatalf("error in lock cells: %v", err)
 	}
 
+	var wg sync.WaitGroup
 	for i, r := range lockRes.(batchRes) {
 		if !r.Err.IsNil() {
 			glog.Fatalf("cannot lock the cells TODO: %v", r.Err)
@@ -661,31 +662,35 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 			continue
 		}
 
-		res := r.Res
-		cells := lock.Cells
-		pc := pendingC[cells[0]]
-
-		if res.(Colony).Leader == lock.Colony.Leader {
-			if pc.bee == nil {
+		wg.Add(1)
+		go func(res interface{}, lock lockMappedCell) {
+			cells := lock.Cells
+			pc := pendingC[cells[0]]
+			if res.(Colony).Leader == lock.Colony.Leader {
+				if pc.bee == nil {
+					var err error
+					if pc.bee, err = q.newLocalBeeWithID(pc.beeID, true); err != nil {
+						glog.Fatalf("%v cannot create local bee %v", err)
+					}
+				}
+				pc.bee.processCmd(cmdAddMappedCells{Cells: cells})
+			} else {
+				// TODO(soheil): maybe, we can find by id.
 				var err error
-				if pc.bee, err = q.newLocalBeeWithID(pc.beeID, true); err != nil {
-					glog.Fatalf("%v cannot create local bee %v", err)
+				if pc.bee, err = q.beeByCells(cells); err != nil {
+					glog.Fatalf("neither can lock a cell nor can find its bee")
 				}
 			}
-			pc.bee.processCmd(cmdAddMappedCells{Cells: cells})
-		} else {
-			// TODO(soheil): maybe, we can find by id.
-			var err error
-			if pc.bee, err = q.beeByCells(cells); err != nil {
-				glog.Fatalf("neither can lock a cell nor can find its bee")
-			}
-		}
 
-		for _, mh := range pc.msgs {
-			glog.V(2).Infof("%v enques message to bee %v: %v", q, pc.bee, mh.msg)
-			pc.bee.enqueMsg(mh)
-		}
+			for _, mh := range pc.msgs {
+				glog.V(2).Infof("%v enques message to bee %v: %v", q, pc.bee, mh.msg)
+				pc.bee.enqueMsg(mh)
+			}
+			wg.Done()
+		}(r.Res, lock)
 	}
+
+	wg.Wait()
 }
 
 func (q *qee) newRemoteBee(pc *pendingCells, hive uint64) {

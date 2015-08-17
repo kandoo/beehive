@@ -61,7 +61,6 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 	b.StopTimer()
 
 	done := make(chan struct{})
-
 	handler := qeeBenchHandler{
 		last: strconv.Itoa(b.N - 1),
 		done: done,
@@ -95,11 +94,15 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 
 	a, _ := hives[0].(*hive).app("qeeBenchApp")
 	qee := a.qee
+	batch := int(DefaultCfg.BatchSize)
 
 	b.StartTimer()
 
-	batch := int(DefaultCfg.BatchSize)
-	for i := 0; i < b.N/batch; i++ {
+	if b.N < batch {
+		return
+	}
+
+	for i := 0; i <= b.N/batch; i++ {
 		from := i * batch
 		to := from + batch
 		if b.N < to {
@@ -109,7 +112,6 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 	}
 
 	b.StopTimer()
-
 	<-done
 }
 
