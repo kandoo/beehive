@@ -20,7 +20,7 @@ func (l *line) wait(r RequestID) chan Response {
 		return ch
 	}
 
-	ch := make(chan Response)
+	ch := make(chan Response, 1)
 	l.list[r] = ch
 	return ch
 }
