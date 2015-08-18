@@ -264,29 +264,45 @@ func (p *rpcClientPool) resetBeeClient(bee uint64, prevClient *rpcClient) (
 }
 
 type rpcClient struct {
-	*rpc.Client
+	cmd  *rpc.Client
+	msg  *rpc.Client
+	raft *rpc.Client
 }
 
 func newRPCClient(addr string) (client *rpcClient, err error) {
-	conn, err := net.DialTimeout("tcp", addr, maxWait)
+	client = &rpcClient{}
+
+	cmdConn, err := net.DialTimeout("tcp", addr, maxWait)
 	if err != nil {
 		return nil, err
 	}
+	client.cmd = rpc.NewClient(cmdConn)
 
-	client = &rpcClient{
-		Client: rpc.NewClient(conn),
+	raftConn, err := net.DialTimeout("tcp", addr, maxWait)
+	if err != nil {
+		client.raft = client.cmd
+	} else {
+		client.raft = rpc.NewClient(raftConn)
 	}
+
+	msgConn, err := net.DialTimeout("tcp", addr, maxWait)
+	if err != nil {
+		client.msg = client.cmd
+	} else {
+		client.msg = rpc.NewClient(msgConn)
+	}
+
 	return client, nil
 }
 
 func (c *rpcClient) sendMsg(msgs []msg) error {
 	var f struct{}
-	return c.Call("rpcServer.EnqueMsg", msgs, &f)
+	return c.msg.Call("rpcServer.EnqueMsg", msgs, &f)
 }
 
 func (c *rpcClient) sendCmd(command cmd) (res interface{}, err error) {
 	r := make([]cmdResult, 1)
-	err = c.Call("rpcServer.ProcessCmd", []cmd{command}, &r)
+	err = c.cmd.Call("rpcServer.ProcessCmd", []cmd{command}, &r)
 	if err != nil {
 		return
 	}
@@ -319,13 +335,13 @@ func (c *rpcClient) sendRaft(group uint64, msg raftpb.Message,
 	r raft.Reporter) error {
 
 	var f bool
-	err := c.Call("rpcServer.ProcessRaft", GroupMsg{group, msg}, &f)
+	err := c.raft.Call("rpcServer.ProcessRaft", GroupMsg{group, msg}, &f)
 	report(err, group, msg, r)
 	return err
 }
 
 func (c *rpcClient) hiveState() (state HiveState, err error) {
-	err = c.Call("rpcServer.HiveState", struct{}{}, &state)
+	err = c.cmd.Call("rpcServer.HiveState", struct{}{}, &state)
 	return
 }
 
@@ -339,7 +355,9 @@ func getHiveState(addr string) (state HiveState, err error) {
 }
 
 func (c *rpcClient) stop() {
-	c.Client.Close()
+	c.cmd.Close()
+	c.msg.Close()
+	c.raft.Close()
 }
 
 type rpcServer struct {
