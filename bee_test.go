@@ -17,9 +17,10 @@ func TestDeferReply(t *testing.T) {
 
 	ch := make(chan struct{})
 	pingf := func(msg Msg, ctx RcvContext) error {
-		ctx.Emit(ping{})
 		if msg.IsUnicast() {
 			close(ch)
+		} else {
+			ctx.Emit(ping{})
 		}
 		return nil
 	}
