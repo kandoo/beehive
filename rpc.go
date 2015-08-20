@@ -88,6 +88,19 @@ func (c *rpcClientPool) stop() {
 	}
 }
 
+func (c *rpcClientPool) shouldReset(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if err == rpc.ErrShutdown {
+		return true
+	}
+
+	nerr, ok := err.(net.Error)
+	return ok && !nerr.Temporary()
+}
+
 func (c *rpcClientPool) sendRaft(group uint64, msg raftpb.Message,
 	r raft.Reporter) error {
 
@@ -96,7 +109,8 @@ func (c *rpcClientPool) sendRaft(group uint64, msg raftpb.Message,
 		report(err, group, msg, r)
 		return err
 	}
-	if err = client.sendRaft(group, msg, r); err != nil {
+
+	if err = client.sendRaft(group, msg, r); c.shouldReset(err) {
 		c.resetHiveClient(msg.To, client)
 	}
 	return err
@@ -119,7 +133,7 @@ func (c *rpcClientPool) sendMsg(msgs []msg) (err error) {
 			continue
 		}
 
-		if berr = client.sendMsg(bmsgs); berr != nil {
+		if berr = client.sendMsg(bmsgs); c.shouldReset(berr) {
 			c.resetBeeClient(b, client)
 			err = berr
 		}
@@ -134,7 +148,7 @@ func (c *rpcClientPool) sendCmd(cmd cmd) (res interface{}, err error) {
 		return nil, err
 	}
 
-	if res, err = client.sendCmd(cmd); err != nil {
+	if res, err = client.sendCmd(cmd); c.shouldReset(err) {
 		c.resetHiveClient(cmd.Hive, client)
 	}
 	return
