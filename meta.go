@@ -56,6 +56,7 @@ func hiveIDFromPeers(addr string, paddrs []string) uint64 {
 		glog.Infof("requesting hive ID from %v", paddr)
 		go func(paddr string) {
 			c, err := newRPCClient(paddr)
+			defer c.stop()
 			if err != nil {
 				glog.Error(err)
 				return
