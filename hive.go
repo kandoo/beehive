@@ -395,8 +395,8 @@ func (h *hive) processCmd(data interface{}) (interface{}, error) {
 
 func (h *hive) raftBarrier() error {
 	// TODO(soheil): maybe add a max retry number into the configs.
-	_, err := h.node.ProposeRetry(hiveGroup, noOp{}, h.config.RaftElectTimeout(),
-		-1)
+	_, err := h.node.ProposeRetry(hiveGroup, noOp{},
+		10*h.config.RaftElectTimeout(), -1)
 	return err
 }
 

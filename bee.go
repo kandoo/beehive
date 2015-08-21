@@ -226,8 +226,9 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 
 			// TODO(soheil): should we have a max retry?
 			// TODO(soheil): maybe do this in a go-routine.
-			if _, err := b.hive.node.ProposeRetry(hiveGroup, up,
-				b.hive.config.RaftElectTimeout(), -1); err != nil {
+			_, err := b.hive.node.ProposeRetry(hiveGroup, up,
+				b.hive.config.RaftElectTimeout(), -1)
+			if err != nil {
 				glog.Errorf("%v cannot update its colony: %v", b, err)
 			}
 		}()
@@ -1163,7 +1164,7 @@ func (b *bee) handoff(to uint64) error {
 
 func (b *bee) raftBarrier() error {
 	_, err := b.hive.node.ProposeRetry(b.group(), noOp{},
-		b.hive.config.RaftElectTimeout(), -1)
+		10*b.hive.config.RaftElectTimeout(), -1)
 	return err
 }
 
