@@ -477,8 +477,8 @@ func (s *rpcServer) ProcessRaft(gm GroupMsg, dummy *bool) (err error) {
 		return fmt.Errorf("%v recieves a raft message for %v", s.h, gm.Msg.To)
 	}
 
-	glog.V(3).Infof("%v handles a raft message to %v group %v", s.h, gm.Msg.To,
-		gm.Group)
+	glog.V(3).Infof("%v handles a %v message from %v for group %v",
+		s.h, gm.Msg.Type, gm.Msg.From, gm.Group)
 	return s.h.node.Step(context.TODO(), gm.Group, gm.Msg)
 }
 
