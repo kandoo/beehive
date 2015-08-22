@@ -23,6 +23,7 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
+	"github.com/kandoo/beehive/randtime"
 )
 
 const (
@@ -81,6 +82,7 @@ type HiveConfig struct {
 
 	RegLockTimeout time.Duration // when to retry to lock an entry in a registry.
 	RaftTick       time.Duration // the raft tick interval.
+	RaftTickDelta  time.Duration // the maximum random delta added to the tick.
 	RaftHBTicks    int           // number of raft ticks that fires a heartbeat.
 	RaftElectTicks int           // number of raft ticks that fires election.
 	RaftInflights  int           // maximum number of inflights to a node.
@@ -95,12 +97,12 @@ type HiveConfig struct {
 // RaftElectTimeout returns the raft election timeout as
 // RaftTick*RaftElectTicks.
 func (c HiveConfig) RaftElectTimeout() time.Duration {
-	return time.Duration(c.RaftElectTicks) * c.RaftTick
+	return time.Duration(c.RaftElectTicks) * (c.RaftTick + c.RaftTickDelta)
 }
 
 // RaftHBTimeout returns the raft heartbeat timeout as RaftTick*RaftHBTicks.
 func (c HiveConfig) RaftHBTimeout() time.Duration {
-	return time.Duration(c.RaftHBTicks) * c.RaftTick
+	return time.Duration(c.RaftHBTicks) * (c.RaftTick + c.RaftTickDelta)
 }
 
 // NewHiveWithConfig creates a new hive based on the given configuration.
@@ -181,6 +183,8 @@ func init() {
 		10*time.Millisecond, "timeout to retry locking an entry in the registry")
 	flag.DurationVar(&DefaultCfg.RaftTick, "rafttick", 100*time.Millisecond,
 		"raft tick period")
+	flag.DurationVar(&DefaultCfg.RaftTickDelta, "deltarafttick",
+		0*time.Millisecond, "max random duration added to the raft tick per tick")
 	flag.IntVar(&DefaultCfg.RaftElectTicks, "raftelectionticks", 5,
 		"number of raft ticks to start an election (ie, election timeout)")
 	flag.IntVar(&DefaultCfg.RaftHBTicks, "rafthbticks", 1,
@@ -237,7 +241,7 @@ type hive struct {
 
 	node     *raft.Node
 	registry *registry
-	ticker   *time.Ticker
+	ticker   *randtime.Ticker
 	client   *rpcClientPool
 
 	replStrategy replicationStrategy
@@ -470,7 +474,7 @@ func (h *hive) startRaftNode() {
 		peers = append(peers, ni.Peer())
 	}
 
-	h.ticker = time.NewTicker(h.config.RaftTick)
+	h.ticker = randtime.NewTicker(h.config.RaftTick, h.config.RaftTickDelta)
 	h.node = raft.StartMultiNode(h.id, h.String(), h.sendRaft, h.ticker.C)
 	err := h.node.CreateGroup(hiveGroup, h.String(), peers, h.config.StatePath,
 		h.registry, 1024, h.config.RaftElectTicks, h.config.RaftHBTicks,
@@ -547,7 +551,6 @@ func (h *hive) Start() error {
 			h.handleCmd(cmd)
 		}
 	}
-
 	return nil
 }
 
