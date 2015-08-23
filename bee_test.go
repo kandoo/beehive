@@ -67,7 +67,7 @@ func TestInRate(t *testing.T) {
 	h := NewHiveWithConfig(cfg)
 
 	type rateTestMsg struct{}
-	ch := make(chan time.Time)
+	ch := make(chan time.Time, 1)
 	rcvf := func(msg Msg, ctx RcvContext) error {
 		ch <- time.Now()
 		return nil
@@ -87,7 +87,7 @@ func TestInRate(t *testing.T) {
 
 	t1 := <-ch
 	t2 := <-ch
-	if t2.Sub(t1) < 999*time.Millisecond {
+	if t2.Sub(t1) < 900*time.Millisecond {
 		t.Errorf("the incoming message rate is higher than 1 tps: t1=%v t2=%v", t1,
 			t2)
 	}
@@ -134,11 +134,12 @@ func TestOutRate(t *testing.T) {
 
 	h.Emit(outRateTestStart{})
 
-	t1 := <-ch
-	t2 := <-ch
+	start := time.Now()
+	<-ch
+	end := <-ch
 
-	if t2.Sub(t1) < 999*time.Millisecond {
-		t.Errorf("output rate is higher than 1 tps: t1=%v t2=%v", t1, t2)
+	if end.Sub(start) < 999*time.Millisecond {
+		t.Errorf("output rate is higher than 1 tps: t1=%v t2=%v", start, end)
 	}
 }
 
