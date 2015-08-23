@@ -7,8 +7,6 @@ import (
 
 func TestMsgChannelQueue(t *testing.T) {
 	ch := newMsgChannel(7)
-	ch.chout = nil
-	ch.chin = nil
 	ch.enque(msgAndHandler{msg: &msg{}})
 	if _, ok := ch.deque(); !ok {
 		t.Errorf("cannot deque")
