@@ -17,7 +17,6 @@ import (
 	"time"
 
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/soheilhy/cmux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
@@ -678,18 +677,18 @@ func (h *hive) listen() (err error) {
 	return nil
 }
 
-func (h *hive) sendRaft(group uint64, msgs []raftpb.Message, r raft.Reporter) {
-	if len(msgs) == 0 {
+func (h *hive) sendRaft(node uint64, gms []raft.GroupMessages,
+	r raft.Reporter) {
+
+	if len(gms) == 0 {
 		return
 	}
 
-	for _, msg := range msgs {
-		go func(msg raftpb.Message) {
-			if err := h.client.sendRaft(group, msg, r); err != nil &&
-				!isBackoffError(err) {
+	go func() {
+		if err := h.client.sendRaft(node, gms, r); err != nil &&
+			!isBackoffError(err) {
 
-				glog.Errorf("%v cannot send raft messages: %v", h, err)
-			}
-		}(msg)
-	}
+			glog.Errorf("%v cannot send raft messages: %v", h, err)
+		}
+	}()
 }

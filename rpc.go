@@ -1,7 +1,6 @@
 package beehive
 
 import (
-	"encoding/gob"
 	"fmt"
 	"net"
 	"net/rpc"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
-	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	bhgob "github.com/kandoo/beehive/gob"
@@ -101,17 +99,17 @@ func (c *rpcClientPool) shouldReset(err error) bool {
 	return ok && !nerr.Temporary()
 }
 
-func (c *rpcClientPool) sendRaft(group uint64, msg raftpb.Message,
+func (c *rpcClientPool) sendRaft(node uint64, gms []raft.GroupMessages,
 	r raft.Reporter) error {
 
-	client, err := c.hiveClient(msg.To)
+	client, err := c.hiveClient(node)
 	if err != nil {
-		report(err, group, msg, r)
+		report(err, node, gms, r)
 		return err
 	}
 
-	if err = client.sendRaft(group, msg, r); c.shouldReset(err) {
-		c.resetHiveClient(msg.To, client)
+	if err = client.sendRaft(node, gms, r); c.shouldReset(err) {
+		c.resetHiveClient(node, client)
 	}
 	return err
 }
@@ -336,21 +334,26 @@ func unreachable(err error) bool {
 	return err != nil
 }
 
-func report(err error, group uint64, msg raftpb.Message, r raft.Reporter) {
-	if !etcdraft.IsEmptySnap(msg.Snapshot) {
-		r.ReportSnapshot(msg.To, group, snapStatus(err))
-	}
-	if unreachable(err) {
-		r.ReportUnreachable(msg.To, group)
+func report(err error, node uint64, gms []raft.GroupMessages, r raft.Reporter) {
+	for _, gm := range gms {
+		if unreachable(err) {
+			r.ReportUnreachable(node, gm.Group)
+		}
+
+		for _, msg := range gm.Messages {
+			if etcdraft.IsEmptySnap(msg.Snapshot) {
+				r.ReportSnapshot(node, gm.Group, snapStatus(err))
+			}
+		}
 	}
 }
 
-func (c *rpcClient) sendRaft(group uint64, msg raftpb.Message,
+func (c *rpcClient) sendRaft(node uint64, gms []raft.GroupMessages,
 	r raft.Reporter) error {
 
-	var f bool
-	err := c.raft.Call("rpcServer.ProcessRaft", GroupMsg{group, msg}, &f)
-	report(err, group, msg, r)
+	var dummy bool
+	err := c.raft.Call("rpcServer.ProcessRaft", gms, &dummy)
+	report(err, node, gms, r)
 	return err
 }
 
@@ -467,19 +470,25 @@ func (s *rpcServer) ProcessCmd(cmds []cmd, res *[]cmdResult) error {
 	return nil
 }
 
-type GroupMsg struct {
-	Group uint64
-	Msg   raftpb.Message
-}
+func (s *rpcServer) ProcessRaft(gms []raft.GroupMessages, dummy *bool) (
+	err error) {
 
-func (s *rpcServer) ProcessRaft(gm GroupMsg, dummy *bool) (err error) {
-	if gm.Msg.To != s.h.ID() {
-		return fmt.Errorf("%v recieves a raft message for %v", s.h, gm.Msg.To)
+	for _, gm := range gms {
+		for _, msg := range gm.Messages {
+			if msg.To != s.h.ID() {
+				glog.Fatalf("%v recieves a raft message for %v", s.h, msg.To)
+			}
+
+			glog.V(3).Infof("%v handles a %v message from %v for group %v",
+				s.h, msg.Type, msg.From, gm.Group)
+			if serr := s.h.node.Step(context.TODO(), gm.Group, msg); serr != nil {
+				glog.Errorf("error in stepping %v: %v", s.h, serr)
+				// TODO(soheil): should we return all errors?
+				err = serr
+			}
+		}
 	}
-
-	glog.V(3).Infof("%v handles a %v message from %v for group %v",
-		s.h, gm.Msg.Type, gm.Msg.From, gm.Group)
-	return s.h.node.Step(context.TODO(), gm.Group, gm.Msg)
+	return err
 }
 
 func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
@@ -487,8 +496,4 @@ func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
 		s.h.enqueMsg(&msgs[i])
 	}
 	return nil
-}
-
-func init() {
-	gob.Register(GroupMsg{})
 }
