@@ -965,23 +965,30 @@ func (b *bee) resetTx(dicts *state.Transactional, msgs *[]*msg) {
 
 func (b *bee) replicate() error {
 	glog.V(2).Infof("%v replicates transaction", b)
+	b.Lock()
 
 	if b.stateL2 != nil {
 		err := b.commitTxL2()
 		b.stateL2 = nil
 		if err != nil && err != state.ErrNoTx {
+			b.Unlock()
 			return err
 		}
 	}
 
 	if b.stateL1.TxStatus() != state.TxOpen {
+		b.Unlock()
 		return state.ErrNoTx
 	}
 
 	stx := b.stateL1.Tx()
 	if len(stx.Ops) == 0 {
-		return b.commitTxL1()
+		err := b.commitTxL1()
+		b.Unlock()
+		return err
 	}
+
+	b.Unlock()
 
 	if err := b.maybeRecruitFollowers(); err != nil {
 		return err
