@@ -183,6 +183,9 @@ func (r *registry) String() string {
 func (r *registry) ApplyConfChange(cc raftpb.ConfChange, gn raft.GroupNode) (
 	err error) {
 
+	r.m.Lock()
+	defer r.m.Unlock()
+
 	glog.V(2).Infof("%v applies conf change %#v for %v", r, cc, gn.Node)
 	switch cc.Type {
 	case raftpb.ConfChangeAddNode:
