@@ -104,6 +104,8 @@ func (c HiveConfig) RaftHBTimeout() time.Duration {
 	return time.Duration(c.RaftHBTicks) * (c.RaftTick + c.RaftTickDelta)
 }
 
+var raftOnce sync.Once
+
 // NewHiveWithConfig creates a new hive based on the given configuration.
 func NewHiveWithConfig(cfg HiveConfig) Hive {
 	if !flag.Parsed() {
@@ -111,8 +113,10 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	}
 
 	if !glog.V(1) {
-		etcdraft.SetLogger(&etcdraft.DefaultLogger{
-			Logger: log.New(ioutil.Discard, "", 0),
+		raftOnce.Do(func() {
+			etcdraft.SetLogger(&etcdraft.DefaultLogger{
+				Logger: log.New(ioutil.Discard, "", 0),
+			})
 		})
 	}
 
