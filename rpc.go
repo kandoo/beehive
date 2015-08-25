@@ -364,11 +364,10 @@ func (c *rpcClient) hiveState() (state HiveState, err error) {
 
 func getHiveState(addr string) (state HiveState, err error) {
 	client, err := newRPCClient(addr)
-	defer client.stop()
 	if err != nil {
 		return
 	}
-
+	defer client.stop()
 	return client.hiveState()
 }
 
