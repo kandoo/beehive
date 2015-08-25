@@ -681,15 +681,9 @@ func (h *hive) listen() (err error) {
 	return nil
 }
 
-func (h *hive) sendRaft(node uint64, gms []raft.GroupMessages,
-	r raft.Reporter) {
-
-	if len(gms) == 0 {
-		return
-	}
-
+func (h *hive) sendRaft(batch *raft.Batch, r raft.Reporter) {
 	go func() {
-		if err := h.client.sendRaft(node, gms, r); err != nil &&
+		if err := h.client.sendRaft(batch, r); err != nil &&
 			!isBackoffError(err) {
 
 			glog.Errorf("%v cannot send raft messages: %v", h, err)

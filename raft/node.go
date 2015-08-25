@@ -40,17 +40,32 @@ type Reporter interface {
 	ReportSnapshot(id, group uint64, status etcdraft.SnapshotStatus)
 }
 
-// GroupMessages wraps the messages to be sent to a group.
-type GroupMessages struct {
-	Group    uint64
-	Messages []raftpb.Message
+// Priority represents the priority of a message sent
+type Priority int
+
+const (
+	Low Priority = iota
+	Normal
+	High
+)
+
+// Batch represents a batch of messages from one node to another with
+// a specific priority.
+type Batch struct {
+	From     uint64                      // Source node.
+	To       uint64                      // Destination node.
+	Priority Priority                    // Priority of this batch.
+	Messages map[uint64][]raftpb.Message // List of messages of each group.
 }
 
 // SendFunc sent a batch of messages to a group.
-type SendFunc func(node uint64, gms []GroupMessages, r Reporter)
+//
+// The sender should send messages in a way that messages of a higher priority
+// are not blocked by messages of a lower priority on network channels.
+type SendFunc func(batch *Batch, reporter Reporter)
 
-// GroupNode stores the ID, the group and an application-defined data for a
-// a node in a raft group.
+// GroupNode stores the ID, the group and an application-defined data
+// for a node in a raft group.
 type GroupNode struct {
 	Group uint64      // Group's ID.
 	Node  uint64      // Node's ID.
@@ -78,6 +93,11 @@ func (i GroupNode) MustEncode() []byte {
 	return b
 }
 
+type readySaved struct {
+	ready etcdraft.Ready
+	saved chan struct{}
+}
+
 type group struct {
 	node *Node
 
@@ -91,25 +111,28 @@ type group struct {
 	leader    uint64
 	confState raftpb.ConfState
 
+	savec   chan readySaved
+	saved   uint64
 	applyc  chan etcdraft.Ready
 	applied uint64
 	snapmu  sync.RWMutex
 	snapped uint64
 
-	stopc chan struct{}
-	donec chan struct{}
+	stopc       chan struct{}
+	saverDone   chan struct{}
+	applierDone chan struct{}
 }
 
 func (g *group) String() string {
 	return fmt.Sprintf("group %v (%v)", g.id, g.name)
 }
 
-func (g *group) start() {
-	defer close(g.donec)
+func (g *group) startSaver() {
+	defer close(g.saverDone)
 	for {
 		select {
-		case ents := <-g.applyc:
-			if err := g.apply(ents); err != nil {
+		case rdsv := <-g.savec:
+			if err := g.save(rdsv); err != nil {
 				if err != ErrStopped {
 					glog.Errorf("%v cannot apply entries: %v", g, err)
 				}
@@ -123,15 +146,104 @@ func (g *group) start() {
 			return
 		}
 	}
+}
 
+func (g *group) startApplier() {
+	defer close(g.applierDone)
+	for {
+		select {
+		case rd := <-g.applyc:
+			if err := g.apply(rd); err != nil {
+				if err != ErrStopped {
+					glog.Errorf("%v cannot apply entries: %v", g, err)
+				}
+				return
+			}
+
+		case <-g.node.done:
+			return
+
+		case <-g.stopc:
+			return
+		}
+	}
 }
 
 func (g *group) stop() {
 	select {
 	case g.stopc <- struct{}{}:
-	case <-g.donec:
+	case <-g.saverDone:
+	case <-g.applierDone:
 	}
-	<-g.donec
+	<-g.saverDone
+	<-g.applierDone
+}
+
+func (g *group) save(rdsv readySaved) error {
+	if rdsv.ready.SoftState != nil && rdsv.ready.SoftState.Lead != 0 {
+		g.node.notifyElection(g.id)
+	}
+
+	// Apply snapshot to storage if it is more updated than current snapped.
+	if !etcdraft.IsEmptySnap(rdsv.ready.Snapshot) {
+		if err := g.diskStorage.SaveSnap(rdsv.ready.Snapshot); err != nil {
+			glog.Fatalf("err in save snapshot: %v", err)
+		}
+		g.raftStorage.ApplySnapshot(rdsv.ready.Snapshot)
+		glog.Infof("%v saved incoming snapshot at index %d", g,
+			rdsv.ready.Snapshot.Metadata.Index)
+	}
+
+	err := g.diskStorage.Save(rdsv.ready.HardState, rdsv.ready.Entries)
+	if err != nil {
+		glog.Fatalf("err in raft storage save: %v", err)
+	}
+	g.raftStorage.Append(rdsv.ready.Entries)
+
+	// Apply config changes in the node as soon as possible
+	// before applying other entries in the state machine.
+	for _, e := range rdsv.ready.CommittedEntries {
+		if e.Type != raftpb.EntryConfChange {
+			continue
+		}
+		if e.Index <= g.saved {
+			continue
+		}
+		g.saved = e.Index
+
+		var cc raftpb.ConfChange
+		pbutil.MustUnmarshal(&cc, e.Data)
+		glog.V(2).Infof("%v applies conf change %v: %#v", g, e.Index, cc)
+
+		if err := g.validConfChange(cc); err != nil {
+			glog.Errorf("%v received an invalid conf change for node %v: %v",
+				g, cc.NodeID, err)
+			cc.NodeID = etcdraft.None
+			g.node.node.ApplyConfChange(g.id, cc)
+			continue
+		}
+
+		cch := make(chan struct{})
+		go func() {
+			g.confState = *g.node.node.ApplyConfChange(g.id, cc)
+			close(cch)
+		}()
+
+		select {
+		case <-g.node.done:
+			return ErrStopped
+		case <-cch:
+		}
+	}
+
+	rdsv.saved <- struct{}{}
+
+	select {
+	case g.applyc <- rdsv.ready:
+	case <-g.node.done:
+	}
+
+	return nil
 }
 
 func (g *group) apply(ready etcdraft.Ready) error {
@@ -144,10 +256,6 @@ func (g *group) apply(ready etcdraft.Ready) error {
 				Term: ready.HardState.Term,
 			})
 			g.leader = newLead
-		}
-
-		if newLead != 0 {
-			g.node.notifyElection(g.id)
 		}
 	}
 
@@ -170,7 +278,6 @@ func (g *group) apply(ready etcdraft.Ready) error {
 		return nil
 	}
 
-	glog.V(3).Infof("%v receives raft update", g)
 	firsti := es[0].Index
 	if firsti > g.applied+1 {
 		glog.Fatalf(
@@ -178,12 +285,10 @@ func (g *group) apply(ready etcdraft.Ready) error {
 			firsti, g.applied)
 	}
 
-	if len(es) == 0 {
-		return nil
-	}
+	glog.V(3).Infof("%v receives raft update %v %v", g, es, ready.Entries)
 
 	for _, e := range es {
-		if g.applied > e.Index {
+		if e.Index <= g.applied {
 			continue
 		}
 
@@ -273,26 +378,6 @@ func (g *group) applyConfChange(e raftpb.Entry) error {
 	var cc raftpb.ConfChange
 	pbutil.MustUnmarshal(&cc, e.Data)
 	glog.V(2).Infof("%v applies conf change %v: %#v", g, e.Index, cc)
-
-	if err := g.validConfChange(cc); err != nil {
-		glog.Errorf("%v received an invalid conf change for node %v: %v",
-			g, cc.NodeID, err)
-		cc.NodeID = etcdraft.None
-		g.node.node.ApplyConfChange(g.id, cc)
-		return err
-	}
-
-	cch := make(chan struct{})
-	go func() {
-		g.confState = *g.node.node.ApplyConfChange(g.id, cc)
-		close(cch)
-	}()
-
-	select {
-	case <-g.node.done:
-		return ErrStopped
-	case <-cch:
-	}
 
 	if len(cc.Context) == 0 {
 		g.stateMachine.ApplyConfChange(cc, GroupNode{})
@@ -388,9 +473,9 @@ type Node struct {
 	line line
 	gen  *gen.SeqIDGen
 
-	groups map[uint64]*group
-	groupc chan groupRequest
-
+	groups   map[uint64]*group
+	groupc   chan groupRequest
+	applyc   chan map[uint64]etcdraft.Ready
 	advancec chan map[uint64]etcdraft.Ready
 
 	send SendFunc
@@ -414,6 +499,7 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 		gen:           gen.NewSeqIDGen(1),
 		groups:        make(map[uint64]*group),
 		groupc:        make(chan groupRequest),
+		applyc:        make(chan map[uint64]etcdraft.Ready),
 		advancec:      make(chan map[uint64]etcdraft.Ready),
 		send:          send,
 		pendingElects: make(map[uint64][]chan struct{}),
@@ -423,7 +509,19 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 	}
 	node.line.init()
 	go node.start()
+	go node.startApplier()
 	return
+}
+
+func (n *Node) startApplier() {
+	for {
+		select {
+		case rd := <-n.applyc:
+			n.handleReadies(rd)
+		case <-n.done:
+			return
+		}
+	}
 }
 
 func (n *Node) start() {
@@ -452,7 +550,7 @@ func (n *Node) start() {
 		case rd := <-readyc:
 			groupc = nil
 			readyc = nil
-			go n.handleReadies(rd)
+			n.applyc <- rd
 
 		case rd := <-n.advancec:
 			readyc = n.node.Ready()
@@ -465,52 +563,62 @@ func (n *Node) start() {
 	}
 }
 
+type nodeBatch map[uint64]*Batch
+
+func (nb nodeBatch) batch(node uint64) *Batch {
+	b, ok := nb[node]
+	if !ok {
+		b = &Batch{
+			Messages: make(map[uint64][]raftpb.Message),
+		}
+		nb[node] = b
+	}
+	return b
+}
+
+// isBefore returns whether lhs is before rhs.
+func isBefore(lhs, rhs raftpb.Message) bool {
+	return lhs.Type != rhs.Type || lhs.Term < rhs.Term || lhs.Index < rhs.Index
+}
+
 func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
-	normMsgs := make(map[uint64]map[uint64][]raftpb.Message)
-	snapMsgs := make(map[uint64]map[uint64][]raftpb.Message)
+	beatBatch := make(nodeBatch)
+	normBatch := make(nodeBatch)
+	snapBatch := make(nodeBatch)
 
 	saved := make(chan struct{}, len(readies))
 	for gid, rd := range readies {
-		go func(gid uint64, rd etcdraft.Ready) {
-			g, ok := n.groups[gid]
-			if !ok {
-				glog.Fatalf("cannot find group %v", g)
-			}
+		g, ok := n.groups[gid]
+		if !ok {
+			glog.Fatalf("cannot find group %v", g)
+		}
+		g.savec <- readySaved{
+			ready: rd,
+			saved: saved,
+		}
+	}
 
-			// Apply snapshot to storage if it is more updated than current snapped.
-			if !etcdraft.IsEmptySnap(rd.Snapshot) {
-				if err := g.diskStorage.SaveSnap(rd.Snapshot); err != nil {
-					glog.Fatalf("err in save snapshot: %v", err)
-				}
-				g.raftStorage.ApplySnapshot(rd.Snapshot)
-				glog.Infof("%v saved incoming snapshot at index %d", n,
-					rd.Snapshot.Metadata.Index)
-			}
-
-			if err := g.diskStorage.Save(rd.HardState, rd.Entries); err != nil {
-				glog.Fatalf("err in raft storage save: %v", err)
-			}
-			g.raftStorage.Append(rd.Entries)
-
-			saved <- struct{}{}
-
-			select {
-			case g.applyc <- rd:
-			case <-n.done:
-			}
-		}(gid, rd)
-
+	for gid, rd := range readies {
+		hbeatDone := make(map[uint64]bool)
 		for _, m := range rd.Messages {
-			nMsgs := normMsgs
+			hbeat := !hbeatDone[m.To]
+			if hbeat {
+				if m.Type == raftpb.MsgHeartbeat || m.Type == raftpb.MsgHeartbeatResp {
+					batch := beatBatch.batch(m.To)
+					// Only one heartbeat/response message should suffice.
+					batch.Messages[gid] = []raftpb.Message{m}
+					continue
+				}
+				hbeatDone[m.To] = true
+			}
+
+			var batch *Batch
 			if !etcdraft.IsEmptySnap(m.Snapshot) {
-				nMsgs = snapMsgs
+				batch = snapBatch.batch(m.To)
+			} else {
+				batch = normBatch.batch(m.To)
 			}
-			gMsgs, ok := nMsgs[m.To]
-			if !ok {
-				gMsgs = make(map[uint64][]raftpb.Message)
-				nMsgs[m.To] = gMsgs
-			}
-			gMsgs[gid] = append(gMsgs[gid], m)
+			batch.Messages[gid] = append(batch.Messages[gid], m)
 		}
 	}
 
@@ -522,26 +630,32 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 		}
 	}
 
-	for nid, gMsgs := range normMsgs {
-		gms := make([]GroupMessages, 0, len(gMsgs))
-		for gid, msgs := range gMsgs {
-			gms = append(gms, GroupMessages{Group: gid, Messages: msgs})
-		}
-		n.send(nid, gms, n.node)
+	for nid, batch := range beatBatch {
+		batch.From = n.id
+		batch.To = nid
+		batch.Priority = High
+		n.send(batch, n.node)
 	}
 
-	for nid, gMsgs := range snapMsgs {
-		gms := make([]GroupMessages, 0, len(gMsgs))
-		for gid, msgs := range gMsgs {
-			gms = append(gms, GroupMessages{Group: gid, Messages: msgs})
-		}
-		n.send(nid, gms, n.node)
+	for nid, batch := range normBatch {
+		batch.From = n.id
+		batch.To = nid
+		batch.Priority = Normal
+		n.send(batch, n.node)
+	}
+
+	for nid, batch := range snapBatch {
+		batch.From = n.id
+		batch.To = nid
+		batch.Priority = Low
+		n.send(batch, n.node)
 	}
 
 	select {
 	case n.advancec <- readies:
 	case <-n.done:
 	}
+
 }
 
 func (n *Node) CreateGroup(id uint64, name string, peers []etcdraft.Peer,
@@ -582,12 +696,14 @@ func (n *Node) CreateGroup(id uint64, name string, peers []etcdraft.Peer,
 		raftStorage:  rs,
 		diskStorage:  ds,
 		applyc:       make(chan etcdraft.Ready, snapCount),
+		savec:        make(chan readySaved, 1),
 		snapCount:    snapCount,
 		snapped:      snap.Metadata.Index,
 		applied:      snap.Metadata.Index,
 		confState:    snap.Metadata.ConfState,
 		stopc:        make(chan struct{}),
-		donec:        make(chan struct{}),
+		applierDone:  make(chan struct{}),
+		saverDone:    make(chan struct{}),
 	}
 	ch := make(chan error, 1)
 	n.groupc <- groupRequest{
@@ -612,7 +728,8 @@ func (n *Node) handleGroupRequest(req groupRequest) {
 		n.groups[req.group.id] = req.group
 		err := n.node.CreateGroup(req.group.id, req.config, req.peers)
 		if err == nil {
-			go req.group.start()
+			go req.group.startSaver()
+			go req.group.startApplier()
 		} else {
 			delete(n.groups, req.group.id)
 		}
@@ -626,14 +743,17 @@ func (n *Node) handleGroupRequest(req groupRequest) {
 
 		g, ok := n.groups[req.group.id]
 		if !ok {
+			req.ch <- ErrNoSuchGroup
 			return
 		}
 
 		g.stop()
 		delete(n.groups, req.group.id)
-	}
+		req.ch <- nil
 
-	req.ch <- nil
+	default:
+		req.ch <- nil
+	}
 }
 
 func (n *Node) genID() RequestID {
@@ -825,6 +945,20 @@ func (n *Node) Step(ctx context.Context, group uint64, msg raftpb.Message) (
 	return n.node.Step(ctx, group, msg)
 }
 
+// StepBatch steps all messages in the batch.
+func (n *Node) StepBatch(ctx context.Context, batch Batch) {
+	for g, msgs := range batch.Messages {
+		for _, m := range msgs {
+			if err := n.Step(ctx, g, m); err != nil {
+				glog.Errorf("cannot step group %v: %v", g, err)
+				if err == context.DeadlineExceeded {
+					return
+				}
+			}
+		}
+	}
+}
+
 // Status returns the latest status of the group. Returns nil if the group
 // does not exists.
 func (n *Node) Status(group uint64) *etcdraft.Status {
@@ -832,6 +966,7 @@ func (n *Node) Status(group uint64) *etcdraft.Status {
 }
 
 func init() {
+	gob.Register(Batch{})
 	gob.Register(GroupNode{})
 	gob.Register(RequestID{})
 	gob.Register(Request{})

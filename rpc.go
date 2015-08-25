@@ -99,17 +99,15 @@ func (c *rpcClientPool) shouldReset(err error) bool {
 	return ok && !nerr.Temporary()
 }
 
-func (c *rpcClientPool) sendRaft(node uint64, gms []raft.GroupMessages,
-	r raft.Reporter) error {
-
-	client, err := c.hiveClient(node)
+func (c *rpcClientPool) sendRaft(batch *raft.Batch, r raft.Reporter) error {
+	client, err := c.hiveClient(batch.To)
 	if err != nil {
-		report(err, node, gms, r)
+		report(err, batch, r)
 		return err
 	}
 
-	if err = client.sendRaft(node, gms, r); c.shouldReset(err) {
-		c.resetHiveClient(node, client)
+	if err = client.sendRaft(batch, r); c.shouldReset(err) {
+		c.resetHiveClient(batch.To, client)
 	}
 	return err
 }
@@ -334,26 +332,24 @@ func unreachable(err error) bool {
 	return err != nil
 }
 
-func report(err error, node uint64, gms []raft.GroupMessages, r raft.Reporter) {
-	for _, gm := range gms {
+func report(err error, batch *raft.Batch, r raft.Reporter) {
+	for g, msgs := range batch.Messages {
 		if unreachable(err) {
-			r.ReportUnreachable(node, gm.Group)
+			r.ReportUnreachable(batch.To, g)
 		}
 
-		for _, msg := range gm.Messages {
-			if etcdraft.IsEmptySnap(msg.Snapshot) {
-				r.ReportSnapshot(node, gm.Group, snapStatus(err))
+		for _, msg := range msgs {
+			if !etcdraft.IsEmptySnap(msg.Snapshot) {
+				r.ReportSnapshot(batch.To, g, snapStatus(err))
 			}
 		}
 	}
 }
 
-func (c *rpcClient) sendRaft(node uint64, gms []raft.GroupMessages,
-	r raft.Reporter) error {
-
+func (c *rpcClient) sendRaft(batch *raft.Batch, r raft.Reporter) error {
 	var dummy bool
-	err := c.raft.Call("rpcServer.ProcessRaft", gms, &dummy)
-	report(err, node, gms, r)
+	err := c.raft.Call("rpcServer.ProcessRaft", batch, &dummy)
+	report(err, batch, r)
 	return err
 }
 
@@ -469,25 +465,14 @@ func (s *rpcServer) ProcessCmd(cmds []cmd, res *[]cmdResult) error {
 	return nil
 }
 
-func (s *rpcServer) ProcessRaft(gms []raft.GroupMessages, dummy *bool) (
-	err error) {
-
-	for _, gm := range gms {
-		for _, msg := range gm.Messages {
-			if msg.To != s.h.ID() {
-				glog.Fatalf("%v recieves a raft message for %v", s.h, msg.To)
-			}
-
-			glog.V(3).Infof("%v handles a %v message from %v for group %v",
-				s.h, msg.Type, msg.From, gm.Group)
-			if serr := s.h.node.Step(context.TODO(), gm.Group, msg); serr != nil {
-				glog.Errorf("error in stepping %v: %v", s.h, serr)
-				// TODO(soheil): should we return all errors?
-				err = serr
-			}
-		}
+func (s *rpcServer) ProcessRaft(batch raft.Batch, dummy *bool) (err error) {
+	if batch.To != s.h.ID() {
+		glog.Fatalf("%v recieves a raft message for %v", s.h, msg.To)
 	}
-	return err
+
+	glog.V(3).Infof("%v handles a batch from %v", s.h, batch.From)
+	s.h.node.StepBatch(context.TODO(), batch)
+	return nil
 }
 
 func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {
