@@ -481,6 +481,7 @@ type MultiNode struct {
 
 	groups   map[uint64]*group
 	groupc   chan groupRequest
+	recvc    chan Batch
 	applyc   chan map[uint64]etcdraft.Ready
 	advancec chan map[uint64]etcdraft.Ready
 
@@ -505,6 +506,7 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 		gen:           gen.NewSeqIDGen(1),
 		groups:        make(map[uint64]*group),
 		groupc:        make(chan groupRequest),
+		recvc:         make(chan Batch, 16),
 		applyc:        make(chan map[uint64]etcdraft.Ready),
 		advancec:      make(chan map[uint64]etcdraft.Ready),
 		send:          send,
@@ -550,6 +552,20 @@ func (n *MultiNode) start() {
 		case <-n.ticker:
 			n.node.Tick()
 
+		case batch := <-n.recvc:
+			ch := time.After(1 * time.Millisecond)
+			n.handleBatch(batch)
+		loop:
+			for {
+				select {
+				case batch := <-n.recvc:
+					n.handleBatch(batch)
+				case <-ch:
+				default:
+					break loop
+				}
+			}
+
 		case req := <-groupc:
 			n.handleGroupRequest(req)
 
@@ -565,6 +581,25 @@ func (n *MultiNode) start() {
 
 		case <-n.stop:
 			return
+		}
+	}
+}
+
+func (n *MultiNode) handleBatch(batch Batch) {
+	for g, msgs := range batch.Messages {
+		if _, ok := n.groups[g]; !ok {
+			glog.Errorf("group %v is not created on %v", g, n)
+			continue
+		}
+		for _, m := range msgs {
+			ctx, ccl := context.WithTimeout(context.Background(), 30*time.Millisecond)
+			if err := n.node.Step(ctx, g, m); err != nil {
+				glog.Errorf("cannot step group %v: %v", g, err)
+				if err == context.DeadlineExceeded {
+					continue
+				}
+			}
+			ccl()
 		}
 	}
 }
@@ -975,27 +1010,14 @@ func (n *MultiNode) Campaign(ctx context.Context, group uint64) error {
 	return n.node.Campaign(ctx, group)
 }
 
-// Step steps the raft node for the given group using msg.
-func (n *MultiNode) Step(ctx context.Context, group uint64, msg raftpb.Message) (
-	err error) {
-
-	if !n.Exists(ctx, group) {
-		return fmt.Errorf("raft node: group %v is not created on %v", group, n)
-	}
-	return n.node.Step(ctx, group, msg)
-}
-
 // StepBatch steps all messages in the batch.
-func (n *MultiNode) StepBatch(ctx context.Context, batch Batch) {
-	for g, msgs := range batch.Messages {
-		for _, m := range msgs {
-			if err := n.Step(ctx, g, m); err != nil {
-				glog.Errorf("cannot step group %v: %v", g, err)
-				if err == context.DeadlineExceeded {
-					return
-				}
-			}
-		}
+func (n *MultiNode) StepBatch(ctx context.Context, batch Batch) error {
+	// TODO(soheil): maybe pass the context along with the batch to the node?
+	select {
+	case n.recvc <- batch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
