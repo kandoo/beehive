@@ -277,6 +277,7 @@ type rpcClient struct {
 	cmd  *rpc.Client
 	msg  *rpc.Client
 	raft *rpc.Client
+	prio *rpc.Client
 }
 
 func newRPCClient(addr string) (client *rpcClient, err error) {
@@ -293,6 +294,13 @@ func newRPCClient(addr string) (client *rpcClient, err error) {
 		client.raft = client.cmd
 	} else {
 		client.raft = rpc.NewClient(raftConn)
+	}
+
+	prioConn, err := net.DialTimeout("tcp", addr, maxWait)
+	if err != nil {
+		client.prio = client.raft
+	} else {
+		client.prio = rpc.NewClient(prioConn)
 	}
 
 	msgConn, err := net.DialTimeout("tcp", addr, maxWait)
@@ -346,9 +354,13 @@ func report(err error, batch *raft.Batch, r raft.Reporter) {
 	}
 }
 
-func (c *rpcClient) sendRaft(batch *raft.Batch, r raft.Reporter) error {
+func (c *rpcClient) sendRaft(batch *raft.Batch, r raft.Reporter) (err error) {
 	var dummy bool
-	err := c.raft.Call("rpcServer.ProcessRaft", batch, &dummy)
+	if batch.Priority == raft.High {
+		err = c.prio.Call("rpcServer.ProcessRaft", batch, &dummy)
+	} else {
+		err = c.raft.Call("rpcServer.ProcessRaft", batch, &dummy)
+	}
 	report(err, batch, r)
 	return err
 }
@@ -371,6 +383,7 @@ func (c *rpcClient) stop() {
 	c.cmd.Close()
 	c.msg.Close()
 	c.raft.Close()
+	c.prio.Close()
 }
 
 type rpcServer struct {
