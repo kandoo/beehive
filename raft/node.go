@@ -99,7 +99,7 @@ type readySaved struct {
 }
 
 type group struct {
-	node *Node
+	node *MultiNode
 
 	id           uint64
 	name         string
@@ -472,7 +472,7 @@ type groupResponse struct {
 	err   error
 }
 
-type Node struct {
+type MultiNode struct {
 	id   uint64
 	name string
 	node etcdraft.MultiNode
@@ -495,10 +495,10 @@ type Node struct {
 }
 
 func StartMultiNode(id uint64, name string, send SendFunc,
-	ticker <-chan time.Time) (node *Node) {
+	ticker <-chan time.Time) (node *MultiNode) {
 
 	mn := etcdraft.StartMultiNode(id)
-	node = &Node{
+	node = &MultiNode{
 		id:            id,
 		name:          name,
 		node:          mn,
@@ -519,7 +519,7 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 	return
 }
 
-func (n *Node) startApplier() {
+func (n *MultiNode) startApplier() {
 	for {
 		select {
 		case rd := <-n.applyc:
@@ -530,7 +530,7 @@ func (n *Node) startApplier() {
 	}
 }
 
-func (n *Node) start() {
+func (n *MultiNode) start() {
 	glog.V(2).Infof("%v started", n)
 
 	defer func() {
@@ -587,7 +587,7 @@ func isBefore(lhs, rhs raftpb.Message) bool {
 	return lhs.Type != rhs.Type || lhs.Term < rhs.Term || lhs.Index < rhs.Index
 }
 
-func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
+func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 	beatBatch := make(nodeBatch)
 	normBatch := make(nodeBatch)
 	snapBatch := make(nodeBatch)
@@ -664,7 +664,7 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 
 }
 
-func (n *Node) CreateGroup(ctx context.Context, id uint64, name string,
+func (n *MultiNode) CreateGroup(ctx context.Context, id uint64, name string,
 	peers []etcdraft.Peer, datadir string, stateMachine StateMachine,
 	snapCount uint64, electionTicks, heartbeatTicks, maxInFlights int,
 	maxMsgSize uint64) error {
@@ -730,7 +730,7 @@ func (n *Node) CreateGroup(ctx context.Context, id uint64, name string,
 	}
 }
 
-func (n *Node) handleGroupRequest(req groupRequest) {
+func (n *MultiNode) handleGroupRequest(req groupRequest) {
 	_, ok := n.groups[req.group.id]
 	res := groupResponse{
 		group: req.group.id,
@@ -780,14 +780,14 @@ func (n *Node) handleGroupRequest(req groupRequest) {
 	req.ch <- res
 }
 
-func (n *Node) genID() RequestID {
+func (n *MultiNode) genID() RequestID {
 	return RequestID{
 		Node: n.id,
 		Seq:  n.gen.GenID(),
 	}
 }
 
-func (n *Node) waitElection(ctx context.Context, group uint64) {
+func (n *MultiNode) waitElection(ctx context.Context, group uint64) {
 	ch := make(chan struct{})
 	n.pmu.Lock()
 	n.pendingElects[group] = append(n.pendingElects[group], ch)
@@ -799,7 +799,7 @@ func (n *Node) waitElection(ctx context.Context, group uint64) {
 	}
 }
 
-func (n *Node) notifyElection(group uint64) {
+func (n *MultiNode) notifyElection(group uint64) {
 	n.pmu.Lock()
 	chs := n.pendingElects[group]
 	if len(chs) != 0 {
@@ -813,7 +813,7 @@ func (n *Node) notifyElection(group uint64) {
 
 // Propose proposes the request and returns the response. This method blocks and
 // returns either when the ctx is cancelled or the raft node returns a response.
-func (n *Node) Propose(ctx context.Context, group uint64, req interface{}) (
+func (n *MultiNode) Propose(ctx context.Context, group uint64, req interface{}) (
 	res interface{}, err error) {
 
 	r := Request{
@@ -844,7 +844,7 @@ func (n *Node) Propose(ctx context.Context, group uint64, req interface{}) (
 // ProposeRetry proposes the request to the given group. It retires maxRetries
 // times using the given timeout. If maxRetries is -1 it will keep proposing the
 // request until it retrieves a response.
-func (n *Node) ProposeRetry(group uint64, req interface{},
+func (n *MultiNode) ProposeRetry(group uint64, req interface{},
 	timeout time.Duration, maxRetries int) (res interface{}, err error) {
 
 	for {
@@ -873,7 +873,7 @@ func (n *Node) ProposeRetry(group uint64, req interface{},
 	return nil, context.DeadlineExceeded
 }
 
-func (n *Node) AddNodeToGroup(ctx context.Context, node, group uint64,
+func (n *MultiNode) AddNodeToGroup(ctx context.Context, node, group uint64,
 	data interface{}) error {
 
 	cc := raftpb.ConfChange{
@@ -889,7 +889,7 @@ func (n *Node) AddNodeToGroup(ctx context.Context, node, group uint64,
 	return n.processConfChange(ctx, group, cc, gn)
 }
 
-func (n *Node) RemoveNodeFromGroup(ctx context.Context, node, group uint64,
+func (n *MultiNode) RemoveNodeFromGroup(ctx context.Context, node, group uint64,
 	data interface{}) error {
 
 	cc := raftpb.ConfChange{
@@ -905,7 +905,7 @@ func (n *Node) RemoveNodeFromGroup(ctx context.Context, node, group uint64,
 	return n.processConfChange(ctx, group, cc, gn)
 }
 
-func (n *Node) processConfChange(ctx context.Context, group uint64,
+func (n *MultiNode) processConfChange(ctx context.Context, group uint64,
 	cc raftpb.ConfChange, gn GroupNode) error {
 
 	r := Request{
@@ -935,11 +935,11 @@ func (n *Node) processConfChange(ctx context.Context, group uint64,
 	}
 }
 
-func (n *Node) String() string {
+func (n *MultiNode) String() string {
 	return fmt.Sprintf("node %v (%v)", n.id, n.name)
 }
 
-func (n *Node) Stop() {
+func (n *MultiNode) Stop() {
 	select {
 	case n.stop <- struct{}{}:
 	case <-n.done:
@@ -950,7 +950,7 @@ func (n *Node) Stop() {
 	}
 }
 
-func (n *Node) Exists(ctx context.Context, gid uint64) (ok bool) {
+func (n *MultiNode) Exists(ctx context.Context, gid uint64) (ok bool) {
 	ch := make(chan groupResponse, 1)
 	n.groupc <- groupRequest{
 		reqType: groupRequestStatus,
@@ -968,7 +968,7 @@ func (n *Node) Exists(ctx context.Context, gid uint64) (ok bool) {
 }
 
 // Campaign instructs the node to campign for the given group.
-func (n *Node) Campaign(ctx context.Context, group uint64) error {
+func (n *MultiNode) Campaign(ctx context.Context, group uint64) error {
 	if !n.Exists(ctx, group) {
 		return fmt.Errorf("raft node: group %v is not created on %v", group, n)
 	}
@@ -976,7 +976,7 @@ func (n *Node) Campaign(ctx context.Context, group uint64) error {
 }
 
 // Step steps the raft node for the given group using msg.
-func (n *Node) Step(ctx context.Context, group uint64, msg raftpb.Message) (
+func (n *MultiNode) Step(ctx context.Context, group uint64, msg raftpb.Message) (
 	err error) {
 
 	if !n.Exists(ctx, group) {
@@ -986,7 +986,7 @@ func (n *Node) Step(ctx context.Context, group uint64, msg raftpb.Message) (
 }
 
 // StepBatch steps all messages in the batch.
-func (n *Node) StepBatch(ctx context.Context, batch Batch) {
+func (n *MultiNode) StepBatch(ctx context.Context, batch Batch) {
 	for g, msgs := range batch.Messages {
 		for _, m := range msgs {
 			if err := n.Step(ctx, g, m); err != nil {
@@ -1001,7 +1001,7 @@ func (n *Node) StepBatch(ctx context.Context, batch Batch) {
 
 // Status returns the latest status of the group. Returns nil if the group
 // does not exists.
-func (n *Node) Status(group uint64) *etcdraft.Status {
+func (n *MultiNode) Status(group uint64) *etcdraft.Status {
 	return n.node.Status(group)
 }
 

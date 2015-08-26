@@ -242,7 +242,7 @@ type hive struct {
 	httpServer *httpServer
 	listener   net.Listener
 
-	node     *raft.Node
+	node     *raft.MultiNode
 	registry *registry
 	ticker   *randtime.Ticker
 	client   *rpcClientPool
