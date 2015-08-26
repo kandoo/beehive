@@ -456,6 +456,7 @@ type groupRequestType int
 const (
 	groupRequestCreate groupRequestType = iota + 1
 	groupRequestRemove
+	groupRequestStatus
 )
 
 type groupRequest struct {
@@ -463,7 +464,12 @@ type groupRequest struct {
 	group   *group
 	config  *etcdraft.Config
 	peers   []etcdraft.Peer
-	ch      chan error
+	ch      chan groupResponse
+}
+
+type groupResponse struct {
+	group uint64
+	err   error
 }
 
 type Node struct {
@@ -658,9 +664,10 @@ func (n *Node) handleReadies(readies map[uint64]etcdraft.Ready) {
 
 }
 
-func (n *Node) CreateGroup(id uint64, name string, peers []etcdraft.Peer,
-	datadir string, stateMachine StateMachine, snapCount uint64,
-	electionTicks, heartbeatTicks, maxInFlights int, maxMsgSize uint64) error {
+func (n *Node) CreateGroup(ctx context.Context, id uint64, name string,
+	peers []etcdraft.Peer, datadir string, stateMachine StateMachine,
+	snapCount uint64, electionTicks, heartbeatTicks, maxInFlights int,
+	maxMsgSize uint64) error {
 
 	glog.V(2).Infof("creating a new group %v (%v) on node %v (%v) with peers %v",
 		id, name, n.id, n.name, peers)
@@ -705,7 +712,7 @@ func (n *Node) CreateGroup(id uint64, name string, peers []etcdraft.Peer,
 		applierDone:  make(chan struct{}),
 		saverDone:    make(chan struct{}),
 	}
-	ch := make(chan error, 1)
+	ch := make(chan groupResponse, 1)
 	n.groupc <- groupRequest{
 		reqType: groupRequestCreate,
 		group:   g,
@@ -713,16 +720,27 @@ func (n *Node) CreateGroup(id uint64, name string, peers []etcdraft.Peer,
 		peers:   peers,
 		ch:      ch,
 	}
-	return <-ch
+	select {
+	case res := <-ch:
+		return res.err
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-n.done:
+		return ErrStopped
+	}
 }
 
 func (n *Node) handleGroupRequest(req groupRequest) {
 	_, ok := n.groups[req.group.id]
+	res := groupResponse{
+		group: req.group.id,
+	}
+
 	switch req.reqType {
 	case groupRequestCreate:
 		if ok {
-			req.ch <- ErrGroupExists
-			return
+			res.err = ErrGroupExists
+			break
 		}
 
 		n.groups[req.group.id] = req.group
@@ -733,27 +751,33 @@ func (n *Node) handleGroupRequest(req groupRequest) {
 		} else {
 			delete(n.groups, req.group.id)
 		}
-		req.ch <- err
 
 	case groupRequestRemove:
 		if !ok {
-			req.ch <- ErrNoSuchGroup
-			return
+			res.err = ErrNoSuchGroup
+			break
 		}
 
 		g, ok := n.groups[req.group.id]
 		if !ok {
-			req.ch <- ErrNoSuchGroup
-			return
+			res.err = ErrNoSuchGroup
+			break
 		}
 
 		g.stop()
 		delete(n.groups, req.group.id)
-		req.ch <- nil
+
+	case groupRequestStatus:
+		// TODO(soheil): add softstate to the response.
+		if _, ok := n.groups[req.group.id]; !ok {
+			res.err = ErrNoSuchGroup
+		}
 
 	default:
-		req.ch <- nil
+		glog.Fatalf("invalid group request: %v", req.reqType)
 	}
+
+	req.ch <- res
 }
 
 func (n *Node) genID() RequestID {
@@ -826,7 +850,6 @@ func (n *Node) ProposeRetry(group uint64, req interface{},
 	for {
 		ctx, ccl := context.WithTimeout(context.Background(), timeout)
 		defer ccl()
-
 		if status := n.Status(group); status == nil || status.SoftState.Lead == 0 {
 			// wait with the hope that the group will be created.
 			n.waitElection(ctx, group)
@@ -927,9 +950,26 @@ func (n *Node) Stop() {
 	}
 }
 
+func (n *Node) Exists(ctx context.Context, gid uint64) (ok bool) {
+	ch := make(chan groupResponse, 1)
+	n.groupc <- groupRequest{
+		reqType: groupRequestStatus,
+		group:   &group{id: gid},
+		ch:      ch,
+	}
+	select {
+	case res := <-ch:
+		return res.err == nil
+	case <-ctx.Done():
+		return false
+	case <-n.done:
+		return false
+	}
+}
+
 // Campaign instructs the node to campign for the given group.
 func (n *Node) Campaign(ctx context.Context, group uint64) error {
-	if n.node.Status(group) == nil {
+	if !n.Exists(ctx, group) {
 		return fmt.Errorf("raft node: group %v is not created on %v", group, n)
 	}
 	return n.node.Campaign(ctx, group)
@@ -939,7 +979,7 @@ func (n *Node) Campaign(ctx context.Context, group uint64) error {
 func (n *Node) Step(ctx context.Context, group uint64, msg raftpb.Message) (
 	err error) {
 
-	if n.node.Status(group) == nil {
+	if !n.Exists(ctx, group) {
 		return fmt.Errorf("raft node: group %v is not created on %v", group, n)
 	}
 	return n.node.Step(ctx, group, msg)

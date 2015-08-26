@@ -479,8 +479,9 @@ func (h *hive) startRaftNode() {
 
 	h.ticker = randtime.NewTicker(h.config.RaftTick, h.config.RaftTickDelta)
 	h.node = raft.StartMultiNode(h.id, h.String(), h.sendRaft, h.ticker.C)
-	err := h.node.CreateGroup(hiveGroup, h.String(), peers, h.config.StatePath,
-		h.registry, 1024, h.config.RaftElectTicks, h.config.RaftHBTicks,
+	err := h.node.CreateGroup(context.TODO(), hiveGroup, h.String(), peers,
+		h.config.StatePath, h.registry, 1024,
+		h.config.RaftElectTicks, h.config.RaftHBTicks,
 		h.config.RaftInflights, h.config.RaftMaxMsgSize)
 	if err != nil {
 		glog.Fatalf("cannot create hive group: %v", err)

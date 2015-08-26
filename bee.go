@@ -148,8 +148,9 @@ func (b *bee) createGroup() error {
 	if c.IsNil() || c.ID == Nil {
 		return fmt.Errorf("%v is in no colony", b)
 	}
-	err := b.hive.node.CreateGroup(c.ID, b.String(), b.peers(), b.statePath(), b,
-		1024, b.hive.config.RaftElectTicks, b.hive.config.RaftHBTicks,
+	err := b.hive.node.CreateGroup(context.TODO(), c.ID, b.String(), b.peers(),
+		b.statePath(), b, 1024,
+		b.hive.config.RaftElectTicks, b.hive.config.RaftHBTicks,
 		b.hive.config.RaftInflights, b.hive.config.RaftMaxMsgSize)
 	if err != nil {
 		return err
