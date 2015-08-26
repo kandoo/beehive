@@ -358,13 +358,13 @@ func (b *bee) start() {
 
 	for b.status == beeStatusStarted {
 		select {
-		case d := <-dataCh:
-			batch = append(batch, d)
+		case mh := <-dataCh:
+			batch = append(batch, mh)
 		loop:
 			for uint(len(batch)) < b.batchSize {
 				select {
-				case d = <-dataCh:
-					batch = append(batch, d)
+				case mh = <-dataCh:
+					batch = append(batch, mh)
 				default:
 					break loop
 				}
@@ -376,7 +376,7 @@ func (b *bee) start() {
 			}
 
 			b.handleMsg(batch)
-			batch = batch[0:0]
+			batch = clearBatch(batch)
 
 		case c := <-b.ctrlCh:
 			b.handleCmd(c)
@@ -389,11 +389,18 @@ func (b *bee) start() {
 
 			if dataCh == nil && b.inBucket.Get(uint64(len(batch))) {
 				b.handleMsg(batch)
-				batch = batch[0:0]
+				batch = clearBatch(batch)
 				dataCh = b.dataCh.out()
 			}
 		}
 	}
+}
+
+func clearBatch(batch []msgAndHandler) []msgAndHandler {
+	for i := range batch {
+		batch[i].msg = nil
+	}
+	return batch[0:0]
 }
 
 func (b *bee) recoverFromError(mh msgAndHandler, err interface{},
