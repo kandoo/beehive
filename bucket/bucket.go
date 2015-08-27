@@ -2,17 +2,18 @@
 package bucket
 
 import (
-	"sync/atomic"
+	"sync"
 	"time"
 )
 
 // Represents a token bucket. It is not thread safe.
 type Bucket struct {
+	sync.Mutex
 	tokens     uint64
 	max        uint64
 	quantum    uint64
 	resolution time.Duration
-	ticker     *time.Ticker
+	timestamp  time.Time
 }
 
 // Rate represents the rate of token generation per second.
@@ -27,46 +28,76 @@ const (
 	Unlimited      = 0
 )
 
-const (
-	// DefaultResolution is the default ticker resolution for the bucket ticker.
-	DefaultResolution time.Duration = 1 * time.Millisecond
-)
-
 // NewBucket creates a new bucket with the given rate and the maximum bucket
-// size. Resolution is the resolution of the bucket ticker. Use the
-// DefaultResolution if unsure.
+// size.
 //
 // If rate is Unlimited, it returns a nil pointer and it is safe to call all
 // Bucket methods on that nil pointer:
 //
 //    b := bucket.NewBucket(Unlimited)
-//    b.Put(10)
+//    b.Has(10)
 //    b.Get(10)
 //
-func New(rate Rate, max uint64, resolution time.Duration) (bucket *Bucket) {
+func New(rate Rate, max uint64) (bucket *Bucket) {
 	if rate == Unlimited {
 		return nil
 	}
 
+	if max == 0 {
+		max = ^uint64(0)
+	}
+
 	bucket = &Bucket{
-		tokens: 0,
-		max:    max,
+		tokens:     0,
+		max:        max,
+		quantum:    uint64(rate),
+		resolution: time.Second,
+		timestamp:  time.Now(),
+	}
+	bucket.minimizeResolution()
+	return bucket
+}
+
+func gcd(a, b uint64) uint64 {
+	if a < b {
+		return gcd(b, a)
 	}
 
-	r := uint64(rate)
-	d := uint64(time.Second / resolution)
+	if b == 0 {
+		return a
+	}
 
-	if r <= d {
-		bucket.resolution = time.Second / time.Duration(r)
-		bucket.quantum = 1
+	if b == 1 {
+		return 1
+	}
+
+	return gcd(b, a%b)
+}
+
+func (b *Bucket) minimizeResolution() {
+	d := gcd(b.quantum, uint64(b.resolution))
+	b.quantum /= d
+	b.resolution /= time.Duration(d)
+}
+
+func (b *Bucket) has(tokens uint64) bool {
+	return tokens <= b.tokens
+}
+
+func (b *Bucket) fill() {
+	n := time.Now()
+	d := n.Sub(b.timestamp)
+	if d < b.resolution {
+		return
+	}
+
+	t := b.tokens + uint64(d/b.resolution)*b.quantum
+	if t < b.max {
+		b.tokens = t
 	} else {
-		bucket.resolution = resolution
-		// TODO(soheil): We have a rounding error, if rate is not divisible by
-		// the resolution.
-		bucket.quantum = r / d
+		b.tokens = b.max
 	}
-
-	return
+	b.timestamp = n
 }
 
 // Unlimited returns whether the bucket is unlimited.
@@ -82,82 +113,74 @@ func (b *Bucket) Max() uint64 {
 	return b.max
 }
 
-// Has returns whether the bucket has at least t tocken.
-func (b *Bucket) Has(t uint64) bool {
-	if b.Unlimited() {
-		return true
-	}
-
-	return t <= atomic.LoadUint64(&b.tokens)
-}
-
-// Put adds t tokens to the bucket.
-func (b *Bucket) Put(t uint64) {
+// Reset reset the bucket to an empty bucket and starts adding tokens from now.
+func (b *Bucket) Reset() {
 	if b.Unlimited() {
 		return
 	}
 
-	// We let the tokens go beyond max, and we cap it in Get.
-	atomic.AddUint64(&b.tokens, t)
+	b.Lock()
+	b.timestamp = time.Now()
+	b.tokens = 0
+	b.Unlock()
 }
 
-// Get allocates t tockens from the buffer if available, or otherwise
-// returns false.
-func (b *Bucket) Get(t uint64) bool {
+// Has returns whether the bucket has at least t tocken.
+func (b *Bucket) Has(tokens uint64) (has bool) {
 	if b.Unlimited() {
 		return true
 	}
 
-	if b.max < t {
+	b.Lock()
+	b.fill()
+	has = b.has(tokens)
+	b.Unlock()
+	return
+}
+
+// When returns the minimum time to wait before enough tokens are available.
+func (b *Bucket) When(tokens uint64) (dur time.Duration) {
+	if b.Unlimited() || b.max < tokens {
+		return 0
+	}
+
+	if b.Has(tokens) {
+		return 0
+	}
+
+	b.Lock()
+	if b.has(tokens) {
+		b.Unlock()
+		return 0
+	}
+
+	t := tokens - b.tokens
+	dur = time.Duration(t / b.quantum)
+	if t%b.quantum != 0 {
+		dur++
+	}
+	dur *= b.resolution
+	b.Unlock()
+	return dur
+}
+
+// Get allocates t tockens from the buffer if available, or otherwise
+// returns false.
+func (b *Bucket) Get(tokens uint64) (ok bool) {
+	if b.Unlimited() {
+		return true
+	}
+
+	if b.max < tokens {
 		panic("bucket: request is more than max tokens")
 	}
 
-	for {
-		oldt := atomic.LoadUint64(&b.tokens)
-		if oldt < t {
-			return false
-		}
-
-		var newt uint64
-		if oldt <= b.max {
-			newt = oldt - t
-		} else {
-			newt = b.max - t
-		}
-
-		if atomic.CompareAndSwapUint64(&b.tokens, oldt, newt) {
-			return true
-		}
+	b.Lock()
+	b.fill()
+	if tokens <= b.tokens {
+		ok = true
+		b.tokens -= tokens
 	}
-}
-
-// Tick is called upon each tick received from the bucket ticker.
-func (b *Bucket) Tick() {
-	b.Put(b.quantum)
-}
-
-// Ticker returns the bucket ticker.
-//
-// For each tick of this ticker, the client should call bucket.Tick(). Also it
-// is the client's responsibility to stop the ticker.
-//
-// If the bucket is unlimited the ticker will never tick (ie, it is stopped).
-func (b *Bucket) Ticker() *time.Ticker {
-	if b.Unlimited() {
-		t := time.NewTicker(DefaultResolution)
-		t.Stop()
-		// drain the timer.
-		for {
-			select {
-			case <-t.C:
-			default:
-				return t
-			}
-		}
-	}
-
-	if b.ticker == nil {
-		b.ticker = time.NewTicker(b.resolution)
-	}
-	return b.ticker
+	b.Unlock()
+	return
 }

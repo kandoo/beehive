@@ -860,18 +860,16 @@ func (q *qee) isLocalBee(info BeeInfo) bool {
 func (q *qee) defaultLocalBee(id uint64) *bee {
 	var inb *bucket.Bucket
 	if q.app.rate.inRate == 0 {
-		inb = bucket.New(bucket.Unlimited, 0, bucket.DefaultResolution)
+		inb = bucket.New(bucket.Unlimited, 0)
 	} else {
-		inb = bucket.New(q.app.rate.inRate, q.app.rate.inMaxTokens,
-			bucket.DefaultResolution)
+		inb = bucket.New(q.app.rate.inRate, q.app.rate.inMaxTokens)
 	}
 
 	var outb *bucket.Bucket
 	if q.app.rate.outRate == 0 {
-		outb = bucket.New(bucket.Unlimited, 0, bucket.DefaultResolution)
+		outb = bucket.New(bucket.Unlimited, 0)
 	} else {
-		outb = bucket.New(q.app.rate.outRate, q.app.rate.outMaxTokens,
-			bucket.DefaultResolution)
+		outb = bucket.New(q.app.rate.outRate, q.app.rate.outMaxTokens)
 	}
 
 	var batch uint
@@ -885,6 +883,7 @@ func (q *qee) defaultLocalBee(id uint64) *bee {
 		qee:       q,
 		beeID:     id,
 		dataCh:    newMsgChannel(q.hive.config.DataChBufSize),
+		outCh:     make(chan []*msg, cap(q.ctrlCh)),
 		ctrlCh:    make(chan cmdAndChannel, cap(q.ctrlCh)),
 		hive:      q.hive,
 		app:       q.app,

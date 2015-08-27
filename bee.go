@@ -48,6 +48,7 @@ type bee struct {
 	cells     map[CellKey]bool
 
 	dataCh    *msgChannel
+	outCh     chan []*msg
 	ctrlCh    chan cmdAndChannel
 	handleMsg func(mhs []msgAndHandler)
 	handleCmd func(cc cmdAndChannel)
@@ -351,10 +352,16 @@ func (b *bee) start() {
 	dataCh := b.dataCh.out()
 	batch := make([]msgAndHandler, 0, b.batchSize)
 
-	inT := b.inBucket.Ticker()
-	defer inT.Stop()
-	outT := b.outBucket.Ticker()
-	defer outT.Stop()
+	outCh := b.outCh
+	var outM []*msg
+	if b.outBucket.Unlimited() {
+		outM = nil
+	}
+
+	b.inBucket.Reset()
+	b.outBucket.Reset()
+	var inT <-chan time.Time
+	var outT <-chan time.Time
 
 	for b.status == beeStatusStarted {
 		select {
@@ -370,28 +377,45 @@ func (b *bee) start() {
 				}
 			}
 
-			if !b.inBucket.Get(uint64(len(batch))) {
+			t := uint64(len(batch))
+			if !b.inBucket.Get(t) {
 				dataCh = nil
+				inT = time.After(b.inBucket.When(t))
 				break
 			}
 
 			b.handleMsg(batch)
 			batch = clearBatch(batch)
 
+		case <-inT:
+			if !b.inBucket.Get(uint64(len(batch))) {
+				glog.Fatalf("cannot get tokens after the wait")
+			}
+			b.handleMsg(batch)
+			batch = clearBatch(batch)
+			dataCh = b.dataCh.out()
+			inT = nil
+
+		case outM = <-outCh:
+			l := uint64(len(outM))
+			if b.outBucket.Get(l) {
+				b.doEmit(outM)
+				break
+			}
+			outT = time.After(b.outBucket.When(uint64(len(outM))))
+			outCh = nil
+
+		case <-outT:
+			if !b.outBucket.Get(uint64(len(outM))) {
+				glog.Fatalf("cannot get tokens after wait")
+			}
+			b.doEmit(outM)
+			outCh = b.outCh
+			outM = nil
+			outT = nil
+
 		case c := <-b.ctrlCh:
 			b.handleCmd(c)
-
-		case <-outT.C:
-			b.outBucket.Tick()
-
-		case <-inT.C:
-			b.inBucket.Tick()
-
-			if dataCh == nil && b.inBucket.Get(uint64(len(batch))) {
-				b.handleMsg(batch)
-				batch = clearBatch(batch)
-				dataCh = b.dataCh.out()
-			}
 		}
 	}
 }
@@ -470,7 +494,7 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 			} else if len(b.msgBufL1) == 0 && b.stateL2.HasEmptyTx() {
 				// If there is no pending L1 message and there is no state change,
 				// emit the buffered messages in L2 as a shortcut.
-				b.doEmit(b.msgBufL2)
+				b.throttle(b.msgBufL2)
 				b.resetTx(b.stateL2, &b.msgBufL2)
 			} else {
 				err = b.commitTxL2()
@@ -797,42 +821,38 @@ func (b *bee) Emit(msgData interface{}) {
 }
 
 func (b *bee) doEmit(msgs []*msg) {
-	len := uint64(len(msgs))
-	max := b.outBucket.Max()
+	for i := range msgs {
+		b.hive.enqueMsg(msgs[i])
+	}
+}
 
-	if len <= max {
-		if !b.outBucket.Get(len) {
-			t := b.outBucket.Ticker()
-			for {
-				<-t.C
-				b.outBucket.Tick()
-				if b.outBucket.Get(len) {
-					break
-				}
-			}
-		}
-
-		for i := range msgs {
-			b.hive.enqueMsg(msgs[i])
-		}
-
+func (b *bee) throttle(msgs []*msg) {
+	if b.outBucket.Unlimited() {
+		b.doEmit(msgs)
 		return
 	}
 
-	// If the number of messages is larger than the maximum bucket capacity.
-	for i := uint64(0); i < len; i += max {
-		if i+max <= len {
-			b.doEmit(msgs[i : i+max])
-		} else {
-			b.doEmit(msgs[i:len])
+	max := b.outBucket.Max()
+	len := uint64(len(msgs))
+	for {
+		if len == 0 {
+			return
 		}
+		if len <= max {
+			b.outCh <- msgs
+			return
+		}
+
+		b.outCh <- msgs[:max]
+		msgs = msgs[max:]
+		len -= max
 	}
 }
 
 func (b *bee) bufferOrEmit(m *msg) {
 	dicts, msgs := b.currentState()
 	if dicts.TxStatus() != state.TxOpen {
-		b.doEmit([]*msg{m})
+		b.throttle([]*msg{m})
 		return
 	}
 
@@ -926,9 +946,9 @@ func (b *bee) commitTxBothLayers() (err error) {
 		goto reset
 	}
 
-	b.doEmit(b.msgBufL1)
+	b.throttle(b.msgBufL1)
 	if hasL2 {
-		b.doEmit(b.msgBufL2)
+		b.throttle(b.msgBufL2)
 	}
 
 reset:
@@ -946,7 +966,7 @@ func (b *bee) commitTxL1() (err error) {
 	}
 
 	if err = b.stateL1.CommitTx(); err == nil {
-		b.doEmit(b.msgBufL1)
+		b.throttle(b.msgBufL1)
 	}
 	b.resetTx(b.stateL1, &b.msgBufL1)
 	return
@@ -1266,7 +1286,7 @@ func (b *bee) Apply(req interface{}) (interface{}, error) {
 				msg.MsgFrom = b.beeID
 				glog.V(2).Infof("%v emits %#v", b, msg)
 			}
-			b.doEmit(r.Tx.Msgs)
+			b.throttle(r.Tx.Msgs)
 		}
 		return nil, nil
 
