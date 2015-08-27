@@ -640,17 +640,12 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 	}
 
 	for gid, rd := range readies {
-		hbeatDone := make(map[uint64]bool)
 		for _, m := range rd.Messages {
-			hbeat := !hbeatDone[m.To]
-			if hbeat {
-				if m.Type == raftpb.MsgHeartbeat || m.Type == raftpb.MsgHeartbeatResp {
-					batch := beatBatch.batch(m.To)
-					// Only one heartbeat/response message should suffice.
-					batch.Messages[gid] = []raftpb.Message{m}
-					continue
-				}
-				hbeatDone[m.To] = true
+			if m.Type == raftpb.MsgHeartbeat || m.Type == raftpb.MsgHeartbeatResp {
+				batch := beatBatch.batch(m.To)
+				// Only one heartbeat/response message should suffice.
+				batch.Messages[gid] = []raftpb.Message{m}
+				continue
 			}
 
 			var batch *Batch
