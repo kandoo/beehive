@@ -205,7 +205,6 @@ func main() {
 		if lastTput != 0 && ratio <= 0.1 {
 			break
 		}
-		break
 		n *= 2
 		fmt.Println(n, tput-lastTput, dur, reqs, tput)
 		lastTput = tput
