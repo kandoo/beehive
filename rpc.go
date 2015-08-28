@@ -484,8 +484,11 @@ func (s *rpcServer) ProcessRaft(batch raft.Batch, dummy *bool) (err error) {
 	}
 
 	glog.V(3).Infof("%v handles a batch from %v", s.h, batch.From)
-	s.h.node.StepBatch(context.TODO(), batch)
-	return nil
+	ctx, cnl := context.WithTimeout(context.Background(),
+		s.h.config.RaftHBTimeout())
+	err = s.h.node.StepBatch(ctx, batch, 2*s.h.config.RaftHBTimeout())
+	cnl()
+	return
 }
 
 func (s *rpcServer) EnqueMsg(msgs []msg, dummy *struct{}) error {

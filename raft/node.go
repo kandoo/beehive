@@ -472,6 +472,8 @@ type groupResponse struct {
 	err   error
 }
 
+// MultiNode represents a node that participates in multiple
+// raft consensus groups.
 type MultiNode struct {
 	id   uint64
 	name string
@@ -481,7 +483,7 @@ type MultiNode struct {
 
 	groups   map[uint64]*group
 	groupc   chan groupRequest
-	recvc    chan Batch
+	recvc    chan batchTimeout
 	applyc   chan map[uint64]etcdraft.Ready
 	advancec chan map[uint64]etcdraft.Ready
 
@@ -495,6 +497,9 @@ type MultiNode struct {
 	done   chan struct{}
 }
 
+// StartMultiNode starts a MultiNode with the given id and name. Send function
+// is used send all messags of this node. The ticker is used for all groups.
+// You can fine tune the hearbeat and election timeouts in the group configs.
 func StartMultiNode(id uint64, name string, send SendFunc,
 	ticker <-chan time.Time) (node *MultiNode) {
 
@@ -506,7 +511,7 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 		gen:           gen.NewSeqIDGen(1),
 		groups:        make(map[uint64]*group),
 		groupc:        make(chan groupRequest),
-		recvc:         make(chan Batch, 16),
+		recvc:         make(chan batchTimeout, 16),
 		applyc:        make(chan map[uint64]etcdraft.Ready),
 		advancec:      make(chan map[uint64]etcdraft.Ready),
 		send:          send,
@@ -552,14 +557,14 @@ func (n *MultiNode) start() {
 		case <-n.ticker:
 			n.node.Tick()
 
-		case batch := <-n.recvc:
+		case bt := <-n.recvc:
 			ch := time.After(1 * time.Millisecond)
-			n.handleBatch(batch)
+			n.handleBatch(bt)
 		loop:
 			for {
 				select {
-				case batch := <-n.recvc:
-					n.handleBatch(batch)
+				case bt := <-n.recvc:
+					n.handleBatch(bt)
 				case <-ch:
 				default:
 					break loop
@@ -585,23 +590,23 @@ func (n *MultiNode) start() {
 	}
 }
 
-func (n *MultiNode) handleBatch(batch Batch) {
-	for g, msgs := range batch.Messages {
+func (n *MultiNode) handleBatch(bt batchTimeout) {
+	ctx, cnl := context.WithTimeout(context.Background(), bt.timeout)
+	for g, msgs := range bt.batch.Messages {
 		if _, ok := n.groups[g]; !ok {
 			glog.Errorf("group %v is not created on %v", g, n)
 			continue
 		}
 		for _, m := range msgs {
-			ctx, ccl := context.WithTimeout(context.Background(), 30*time.Millisecond)
 			if err := n.node.Step(ctx, g, m); err != nil {
 				glog.Errorf("cannot step group %v: %v", g, err)
-				if err == context.DeadlineExceeded {
-					continue
+				if err == context.DeadlineExceeded || err == context.Canceled {
+					return
 				}
 			}
-			ccl()
 		}
 	}
+	cnl()
 }
 
 type nodeBatch map[uint64]*Batch
@@ -1005,11 +1010,23 @@ func (n *MultiNode) Campaign(ctx context.Context, group uint64) error {
 	return n.node.Campaign(ctx, group)
 }
 
-// StepBatch steps all messages in the batch.
-func (n *MultiNode) StepBatch(ctx context.Context, batch Batch) error {
-	// TODO(soheil): maybe pass the context along with the batch to the node?
+type batchTimeout struct {
+	timeout time.Duration
+	batch   Batch
+}
+
+// StepBatch steps all messages in the batch. Context is used for enqueuing the
+// batch and timeout is used as the maximum wait time when stepping messages
+// in the batch.
+func (n *MultiNode) StepBatch(ctx context.Context, batch Batch,
+	timeout time.Duration) error {
+
+	bt := batchTimeout{
+		batch:   batch,
+		timeout: timeout,
+	}
 	select {
-	case n.recvc <- batch:
+	case n.recvc <- bt:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
