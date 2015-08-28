@@ -20,6 +20,7 @@ import (
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/soheilhy/args"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/kandoo/beehive/bucket"
 )
 
 const (
@@ -585,7 +586,6 @@ func (h *AckHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case Acked:
 		fmt.Fprintf(w, "task %v acknowledged\n", id)
 	}
-
 }
 
 const (
@@ -875,14 +875,25 @@ func (h *ConnHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	return h.w.Flush()
 }
 
+var repl = args.NewInt(args.Flag("taskq.repl", 3,
+	"replication factor of taskq"))
 var addr = args.NewString(args.Flag("taskq.addr", ":7979",
 	"listening address of taskq server"))
+var rate = args.NewUint64(args.Flag("taskq.maxrate", uint64(bucket.Unlimited),
+	"maximum message rate of each client"))
 
 // Option represents taskq server options.
 type Option args.V
 
+// ReplicationFactor is an option represeting the replication factor of taskq.
+func ReplicationFactor(f int) Option { return Option(repl(f)) }
+
 // Address is an option representing a taskq address.
 func Address(a string) Option { return Option(addr(a)) }
+
+// MaxRate is an option represeting the maximum rate of messages a client
+// can send per second.
+func MaxRate(r uint64) Option { return Option(rate(r)) }
 
 // RegisterTaskQ registers the taskq application and all its handler in the
 // hive.
@@ -896,25 +907,27 @@ func RegisterTaskQ(h beehive.Hive, opts ...Option) error {
 		return err
 	}
 
-	a := h.NewApp("taskq", beehive.Persistent(3))
-	a.Handle(Enque{}, EnQHandler{})
-	a.Handle(Deque{}, DeQHandler{})
-	a.Handle(Ack{}, AckHandler{})
-	a.Handle(Timeout{}, TimeoutHandler{
+	r := rate.Get(opts)
+	taskq := h.NewApp("taskq", beehive.Persistent(repl.Get(opts)),
+		beehive.LimitOutRate(bucket.Rate(r), 2*r))
+	taskq.Handle(Enque{}, EnQHandler{})
+	taskq.Handle(Deque{}, DeQHandler{})
+	taskq.Handle(Ack{}, AckHandler{})
+	taskq.Handle(Timeout{}, TimeoutHandler{
 		ExpDur: 60 * time.Second,
 	})
 
 	ah := &AckHTTPHandler{Hive: h}
-	a.HandleHTTP("/{queue}/tasks/{id:[0-9]+}", ah).Methods("DELETE")
+	taskq.HandleHTTP("/{queue}/tasks/{id:[0-9]+}", ah).Methods("DELETE")
 	dh := &DeQHTTPHandler{Hive: h}
-	a.HandleHTTP("/{queue}/tasks/deque", dh).Methods("POST")
+	taskq.HandleHTTP("/{queue}/tasks/deque", dh).Methods("POST")
 	eh := &EnQHTTPHandler{Hive: h}
-	a.HandleHTTP("/{queue}/tasks", eh).Methods("POST")
+	taskq.HandleHTTP("/{queue}/tasks", eh).Methods("POST")
 
-	a.Detached(beehive.NewTimer(30*time.Second, func() {
+	taskq.Detached(beehive.NewTimer(30*time.Second, func() {
 		h.Emit(Timeout(time.Now()))
 	}))
-	a.Detached(proto)
+	taskq.Detached(proto)
 
 	return nil
 }
