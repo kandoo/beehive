@@ -2,8 +2,10 @@ package main
 
 import (
 	"flag"
+	"math/rand"
 	"os"
 	"runtime/pprof"
+	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 
@@ -24,6 +26,8 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
+
+	rand.Seed(time.Now().UnixNano())
 
 	h := beehive.NewHive()
 	if err := server.RegisterTaskQ(h); err != nil {
