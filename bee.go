@@ -191,7 +191,7 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 		oldc := b.colony()
 		oldi, err := b.hive.bee(oldc.Leader)
 		if err != nil {
-			glog.Fatalf("%v cannot find leader: %v", err)
+			glog.Fatalf("%v cannot find leader: %v", b, err)
 		}
 		if oldi.Hive == ev.New {
 			glog.V(2).Infof("%v has no need to change %v", b, oldc)
