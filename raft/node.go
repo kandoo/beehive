@@ -180,6 +180,7 @@ func (g *group) stop() {
 }
 
 func (g *group) save(rdsv readySaved) error {
+	glog.V(3).Infof("%v saving state", g)
 	if rdsv.ready.SoftState != nil && rdsv.ready.SoftState.Lead != 0 {
 		g.node.notifyElection(g.id)
 	}
@@ -198,7 +199,10 @@ func (g *group) save(rdsv readySaved) error {
 	if err != nil {
 		glog.Fatalf("err in raft storage save: %v", err)
 	}
+	glog.V(3).Infof("%v saved state on disk", g)
+
 	g.raftStorage.Append(rdsv.ready.Entries)
+	glog.V(3).Infof("%v appended entries in storage", g)
 
 	// Apply config changes in the node as soon as possible
 	// before applying other entries in the state machine.
@@ -236,6 +240,7 @@ func (g *group) save(rdsv readySaved) error {
 		}
 	}
 
+	glog.V(3).Infof("%v successfully saved ready", g)
 	rdsv.saved <- struct{}{}
 
 	select {
@@ -628,6 +633,8 @@ func isBefore(lhs, rhs raftpb.Message) bool {
 }
 
 func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
+	glog.V(3).Infof("%v handles a ready", n)
+
 	beatBatch := make(nodeBatch)
 	normBatch := make(nodeBatch)
 	snapBatch := make(nodeBatch)
@@ -671,7 +678,10 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 		}
 	}
 
+	glog.V(3).Infof("%v saved the readies for all groups", n)
+
 	for nid, batch := range beatBatch {
+		glog.V(3).Infof("%v sends high priority batch to %v", n, nid)
 		batch.From = n.id
 		batch.To = nid
 		batch.Priority = High
@@ -679,6 +689,7 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 	}
 
 	for nid, batch := range normBatch {
+		glog.V(3).Infof("%v sends normal priority batch to %v", n, nid)
 		batch.From = n.id
 		batch.To = nid
 		batch.Priority = Normal
@@ -686,6 +697,7 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 	}
 
 	for nid, batch := range snapBatch {
+		glog.V(3).Infof("%v sends low priority batch to %v", n, nid)
 		batch.From = n.id
 		batch.To = nid
 		batch.Priority = Low
