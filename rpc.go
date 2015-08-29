@@ -274,14 +274,22 @@ func (p *rpcClientPool) resetBeeClient(bee uint64, prevClient *rpcClient) (
 }
 
 type rpcClient struct {
+	addr string
+
 	cmd  *rpc.Client
 	msg  *rpc.Client
 	raft *rpc.Client
 	prio *rpc.Client
 }
 
+func (c rpcClient) String() string {
+	return fmt.Sprintf("rpc client to %s", c.addr)
+}
+
 func newRPCClient(addr string) (client *rpcClient, err error) {
-	client = &rpcClient{}
+	client = &rpcClient{
+		addr: addr,
+	}
 
 	cmdConn, err := net.DialTimeout("tcp", addr, maxWait)
 	if err != nil {
@@ -315,12 +323,14 @@ func newRPCClient(addr string) (client *rpcClient, err error) {
 
 func (c *rpcClient) sendMsg(msgs []msg) error {
 	var f struct{}
+	glog.V(3).Infof("%v sends %v messages", c, len(msgs))
 	return c.msg.Call("rpcServer.EnqueMsg", msgs, &f)
 }
 
-func (c *rpcClient) sendCmd(command cmd) (res interface{}, err error) {
+func (c *rpcClient) sendCmd(cm cmd) (res interface{}, err error) {
+	glog.V(3).Infof("%v sends %v", c, cm)
 	r := make([]cmdResult, 1)
-	err = c.cmd.Call("rpcServer.ProcessCmd", []cmd{command}, &r)
+	err = c.cmd.Call("rpcServer.ProcessCmd", []cmd{cm}, &r)
 	if err != nil {
 		return
 	}
@@ -355,6 +365,7 @@ func report(err error, batch *raft.Batch, r raft.Reporter) {
 }
 
 func (c *rpcClient) sendRaft(batch *raft.Batch, r raft.Reporter) (err error) {
+	glog.V(3).Infof("%v sends a raft batch", c)
 	var dummy bool
 	if batch.Priority == raft.High {
 		err = c.prio.Call("rpcServer.ProcessRaft", batch, &dummy)
