@@ -699,15 +699,24 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 
 }
 
-func (n *MultiNode) CreateGroup(ctx context.Context, id uint64, name string,
-	peers []etcdraft.Peer, datadir string, stateMachine StateMachine,
-	snapCount uint64, electionTicks, heartbeatTicks, maxInFlights int,
-	maxMsgSize uint64) error {
+type GroupConfig struct {
+	ID             uint64
+	Name           string
+	StateMachine   StateMachine
+	Peers          []etcdraft.Peer
+	DataDir        string
+	SnapCount      uint64
+	ElectionTicks  int
+	HeartbeatTicks int
+	MaxInFlights   int
+	MaxMsgSize     uint64
+}
 
+func (n *MultiNode) CreateGroup(ctx context.Context, cfg GroupConfig) error {
 	glog.V(2).Infof("creating a new group %v (%v) on node %v (%v) with peers %v",
-		id, name, n.id, n.name, peers)
+		cfg.ID, cfg.Name, n.id, n.name, cfg.Peers)
 
-	rs, ds, _, lei, _, err := OpenStorage(id, datadir, stateMachine)
+	rs, ds, _, lei, _, err := OpenStorage(cfg.ID, cfg.DataDir, cfg.StateMachine)
 	if err != nil {
 		glog.Fatalf("cannot open storage: %v", err)
 	}
@@ -718,28 +727,28 @@ func (n *MultiNode) CreateGroup(ctx context.Context, id uint64, name string,
 		return err
 	}
 
-	n.gen.StartFrom((lei + snapCount) << 8) // To avoid conflicts.
+	n.gen.StartFrom((lei + cfg.SnapCount) << 8) // To avoid conflicts.
 
 	c := &etcdraft.Config{
-		ID:              id,
-		ElectionTick:    electionTicks,
-		HeartbeatTick:   heartbeatTicks,
+		ID:              cfg.ID,
+		ElectionTick:    cfg.ElectionTicks,
+		HeartbeatTick:   cfg.HeartbeatTicks,
 		Storage:         rs,
-		MaxSizePerMsg:   maxMsgSize,
-		MaxInflightMsgs: maxInFlights,
+		MaxSizePerMsg:   cfg.MaxMsgSize,
+		MaxInflightMsgs: cfg.MaxInFlights,
 		// TODO(soheil): Figure this one out:
 		//               Applied: lsi,
 	}
 	g := &group{
 		node:         n,
-		id:           id,
-		name:         name,
-		stateMachine: stateMachine,
+		id:           cfg.ID,
+		name:         cfg.Name,
+		stateMachine: cfg.StateMachine,
 		raftStorage:  rs,
 		diskStorage:  ds,
-		applyc:       make(chan etcdraft.Ready, snapCount),
+		applyc:       make(chan etcdraft.Ready, cfg.SnapCount),
 		savec:        make(chan readySaved, 1),
-		snapCount:    snapCount,
+		snapCount:    cfg.SnapCount,
 		snapped:      snap.Metadata.Index,
 		applied:      snap.Metadata.Index,
 		confState:    snap.Metadata.ConfState,
@@ -752,7 +761,7 @@ func (n *MultiNode) CreateGroup(ctx context.Context, id uint64, name string,
 		reqType: groupRequestCreate,
 		group:   g,
 		config:  c,
-		peers:   peers,
+		peers:   cfg.Peers,
 		ch:      ch,
 	}
 	select {
