@@ -76,6 +76,7 @@ type HiveConfig struct {
 	BatchSize     uint // number of messages to batch.
 	SyncPoolSize  uint // number of sync go-routines.
 
+	Pprof          bool // whether to enable pprof web handlers.
 	Instrument     bool // whether to instrument apps on the hive.
 	OptimizeThresh uint // when to notify the optimizer (in msg/s).
 
@@ -137,7 +138,7 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h.client = newRPCClientPool(h)
 	h.registry = newRegistry(h.String())
 	h.replStrategy = newRndReplication(h)
-	h.httpServer = newServer(h, h.config.Addr)
+	h.httpServer = newServer(h)
 
 	if h.config.Instrument {
 		h.collector = newAppStatCollector(h)
@@ -176,6 +177,8 @@ func init() {
 		"number of messages to batch per transaction")
 	flag.UintVar(&DefaultCfg.SyncPoolSize, "sync", 16,
 		"number of sync go-routines")
+	flag.BoolVar(&DefaultCfg.Pprof, "pprof", false,
+		"whether to install pprof on /debug/pprof")
 	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
 		"whether to insturment apps")
 	flag.UintVar(&DefaultCfg.OptimizeThresh, "optthresh", 10,

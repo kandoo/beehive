@@ -341,10 +341,9 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 }
 
 func TestAppHTTP(t *testing.T) {
-	h := hive{}
 	cfg := newHiveConfigForTest()
-	addr := cfg.Addr
-	h.httpServer = newServer(&h, addr)
+	h := hive{config: cfg}
+	h.httpServer = newServer(&h)
 	a := &app{
 		name: "testapp",
 		hive: &h,
@@ -352,7 +351,7 @@ func TestAppHTTP(t *testing.T) {
 	a.HandleHTTPFunc("/test", func(w http.ResponseWriter, r *http.Request) {})
 	go h.httpServer.ListenAndServe()
 	time.Sleep(1 * time.Second)
-	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", addr))
+	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", cfg.Addr))
 	if err != nil {
 		t.Error(err)
 	}

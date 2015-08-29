@@ -523,11 +523,9 @@ func genPage(title, script, style, body string) []byte {
 	return b.Bytes()
 }
 
-type webHandler struct {
-	h *hive
-}
+type webHandler struct{}
 
-func (h *webHandler) install(r *mux.Router) {
+func (w webHandler) install(r *mux.Router) {
 	for _, p := range webPages {
 		p.page = genPage(p.title, p.script, p.style, p.body)
 		r.HandleFunc(p.url, p.handle)

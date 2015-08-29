@@ -34,20 +34,24 @@ type httpServer struct {
 }
 
 // newServer creates a new server for the hive.
-func newServer(h *hive, addr string) *httpServer {
+func newServer(h *hive) *httpServer {
 	r := mux.NewRouter()
 	s := &httpServer{
 		Server: http.Server{
-			Addr:    addr,
+			Addr:    h.config.Addr,
 			Handler: r,
 		},
 		router: r,
 		hive:   h,
 	}
-	handlerV1 := v1Handler{srv: s}
-	handlerV1.install(r)
-	webHandler := webHandler{h: h}
-	webHandler.install(r)
+	v1 := v1Handler{srv: s}
+	v1.install(r)
+	w := webHandler{}
+	w.install(r)
+	if h.config.Pprof {
+		p := pprofHandler{}
+		p.install(r)
+	}
 	return s
 }
 
