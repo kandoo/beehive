@@ -648,7 +648,7 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 	}
 
 	lockRes, err := q.hive.node.ProposeRetry(hiveGroup, lockBatch,
-		q.hive.config.RaftElectTimeout(), -1)
+		2*q.hive.config.RaftElectTimeout(), -1)
 	if err != nil {
 		glog.Fatalf("error in lock cells: %v", err)
 	}
