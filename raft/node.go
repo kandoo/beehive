@@ -477,6 +477,11 @@ type groupResponse struct {
 	err   error
 }
 
+type multiMessage struct {
+	group uint64
+	msg   raftpb.Message
+}
+
 // MultiNode represents a node that participates in multiple
 // raft consensus groups.
 type MultiNode struct {
@@ -489,6 +494,7 @@ type MultiNode struct {
 	groups   map[uint64]*group
 	groupc   chan groupRequest
 	recvc    chan batchTimeout
+	propc    chan multiMessage
 	applyc   chan map[uint64]etcdraft.Ready
 	advancec chan map[uint64]etcdraft.Ready
 
@@ -517,6 +523,7 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 		groups:        make(map[uint64]*group),
 		groupc:        make(chan groupRequest),
 		recvc:         make(chan batchTimeout, 16),
+		propc:         make(chan multiMessage),
 		applyc:        make(chan map[uint64]etcdraft.Ready),
 		advancec:      make(chan map[uint64]etcdraft.Ready),
 		send:          send,
@@ -565,14 +572,30 @@ func (n *MultiNode) start() {
 		case bt := <-n.recvc:
 			ch := time.After(1 * time.Millisecond)
 			n.handleBatch(bt)
-		loop:
+		loopr:
 			for {
 				select {
 				case bt := <-n.recvc:
 					n.handleBatch(bt)
 				case <-ch:
+					break loopr
 				default:
-					break loop
+					break loopr
+				}
+			}
+
+		case mm := <-n.propc:
+			ch := time.After(1 * time.Millisecond)
+			n.node.Step(context.TODO(), mm.group, mm.msg)
+		loopp:
+			for {
+				select {
+				case mm := <-n.propc:
+					n.node.Step(context.TODO(), mm.group, mm.msg)
+				case <-ch:
+					break loopp
+				default:
+					break loopp
 				}
 			}
 
@@ -604,7 +627,7 @@ func (n *MultiNode) handleBatch(bt batchTimeout) {
 		}
 		for _, m := range msgs {
 			if err := n.node.Step(ctx, g, m); err != nil {
-				glog.Errorf("cannot step group %v: %v", g, err)
+				glog.Errorf("%v cannot step group %v: %v", n, g, err)
 				if err == context.DeadlineExceeded || err == context.Canceled {
 					return
 				}
@@ -884,7 +907,20 @@ func (n *MultiNode) Propose(ctx context.Context, group uint64, req interface{}) 
 
 	glog.V(2).Infof("%v waits on raft request %v: %#v", n, r.ID, req)
 	ch := n.line.wait(r.ID)
-	n.node.Propose(ctx, group, b)
+	mm := multiMessage{group,
+		raftpb.Message{
+			Type:    raftpb.MsgProp,
+			Entries: []raftpb.Entry{{Data: b}},
+		}}
+	select {
+	case n.propc <- mm:
+	case <-ctx.Done():
+		n.line.cancel(r.ID)
+		return nil, ctx.Err()
+	case <-n.done:
+		return nil, ErrStopped
+	}
+
 	select {
 	case res := <-ch:
 		glog.V(2).Infof("%v wakes up for raft request %v", n, r.ID)
@@ -979,7 +1015,26 @@ func (n *MultiNode) processConfChange(ctx context.Context, group uint64,
 	}
 
 	ch := n.line.wait(r.ID)
-	n.node.ProposeConfChange(ctx, group, cc)
+
+	d, err := cc.Marshal()
+	if err != nil {
+		return err
+	}
+	select {
+	case n.propc <- multiMessage{
+		group: group,
+		msg: raftpb.Message{
+			Type:    raftpb.MsgProp,
+			Entries: []raftpb.Entry{{Type: raftpb.EntryConfChange, Data: d}},
+		},
+	}:
+	case <-ctx.Done():
+		n.line.cancel(r.ID)
+		return ctx.Err()
+	case <-n.done:
+		return ErrStopped
+	}
+
 	select {
 	case res := <-ch:
 		return res.Err
