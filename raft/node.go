@@ -557,16 +557,22 @@ type MultiNode struct {
 	done   chan struct{}
 }
 
+// Config represents the configuration of a MultiNode.
+type Config struct {
+	ID     uint64           // Node ID.
+	Name   string           // Node name.
+	Send   SendFunc         // Network send function.
+	Ticker <-chan time.Time // Ticker of the node.
+}
+
 // StartMultiNode starts a MultiNode with the given id and name. Send function
 // is used send all messags of this node. The ticker is used for all groups.
 // You can fine tune the hearbeat and election timeouts in the group configs.
-func StartMultiNode(id uint64, name string, send SendFunc,
-	ticker <-chan time.Time) (node *MultiNode) {
-
-	mn := etcdraft.StartMultiNode(id)
+func StartMultiNode(cfg Config) (node *MultiNode) {
+	mn := etcdraft.StartMultiNode(cfg.ID)
 	node = &MultiNode{
-		id:            id,
-		name:          name,
+		id:            cfg.ID,
+		name:          cfg.Name,
 		node:          mn,
 		gen:           gen.NewSeqIDGen(1),
 		groups:        make(map[uint64]*group),
@@ -575,9 +581,9 @@ func StartMultiNode(id uint64, name string, send SendFunc,
 		propc:         make(chan multiMessage),
 		applyc:        make(chan map[uint64]etcdraft.Ready),
 		advancec:      make(chan map[uint64]etcdraft.Ready),
-		send:          send,
+		send:          cfg.Send,
 		pendingElects: make(map[uint64][]chan struct{}),
-		ticker:        ticker,
+		ticker:        cfg.Ticker,
 		stop:          make(chan struct{}),
 		done:          make(chan struct{}),
 	}

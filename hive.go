@@ -484,9 +484,16 @@ func (h *hive) startRaftNode() {
 	}
 
 	h.ticker = randtime.NewTicker(h.config.RaftTick, h.config.RaftTickDelta)
-	h.node = raft.StartMultiNode(h.id, h.String(), h.sendRaft, h.ticker.C)
 
-	cfg := raft.GroupConfig{
+	ncfg := raft.Config{
+		ID:     h.id,
+		Name:   h.String(),
+		Send:   h.sendRaft,
+		Ticker: h.ticker.C,
+	}
+	h.node = raft.StartMultiNode(ncfg)
+
+	gcfg := raft.GroupConfig{
 		ID:             hiveGroup,
 		Name:           h.String(),
 		StateMachine:   h.registry,
@@ -499,7 +506,7 @@ func (h *hive) startRaftNode() {
 		MaxInFlights:   h.config.RaftInflights,
 		MaxMsgSize:     h.config.RaftMaxMsgSize,
 	}
-	if err := h.node.CreateGroup(context.TODO(), cfg); err != nil {
+	if err := h.node.CreateGroup(context.TODO(), gcfg); err != nil {
 		glog.Fatalf("cannot create hive group: %v", err)
 	}
 }
