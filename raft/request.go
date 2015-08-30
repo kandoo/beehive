@@ -1,10 +1,6 @@
 package raft
 
-import (
-	"encoding/gob"
-
-	bhgob "github.com/kandoo/beehive/gob"
-)
+import "encoding/gob"
 
 // RequestID represents a unique request throughout the cluster.
 type RequestID struct {
@@ -14,16 +10,7 @@ type RequestID struct {
 
 // Request represents a request for the store.
 type Request struct {
-	ID   RequestID
 	Data interface{}
-}
-
-func (r *Request) Decode(b []byte) error {
-	return bhgob.Decode(r, b)
-}
-
-func (r *Request) Encode() ([]byte, error) {
-	return bhgob.Encode(r)
 }
 
 // Response represents a response to a request.

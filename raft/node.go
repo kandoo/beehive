@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"bytes"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -361,20 +362,45 @@ func (g *group) applyEntry(e raftpb.Entry) error {
 		return nil
 	}
 
-	var req Request
-	if err := req.Decode(e.Data); err != nil {
-		glog.Fatalf("raftserver: cannot decode entry data %v", err)
+	id, req, err := g.node.decReq(e.Data)
+	if err != nil {
+		glog.Fatalf("%v cannot decode request: %v", g, err)
 	}
-
-	res := Response{
-		ID: req.ID,
-	}
-
+	res := Response{ID: id}
 	if req.Data != nil {
 		res.Data, res.Err = g.stateMachine.Apply(req.Data)
 	}
 	g.node.line.call(res)
 	return nil
+}
+
+func (n *MultiNode) decReq(data []byte) (id RequestID, req Request, err error) {
+
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&id); err != nil {
+		return id, req, err
+	}
+
+	var ok bool
+	if id.Node == n.id {
+		req, ok = n.line.get(id)
+	}
+	if !ok {
+		err = dec.Decode(&req)
+	}
+	return id, req, nil
+}
+
+func (n *MultiNode) encReq(id RequestID, req Request) ([]byte, error) {
+	var w bytes.Buffer
+	enc := gob.NewEncoder(&w)
+	if err := enc.Encode(id); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(req); err != nil {
+		return nil, err
+	}
+	return w.Bytes(), nil
 }
 
 func containsNode(nodes []uint64, node uint64) bool {
@@ -418,30 +444,24 @@ func (g *group) applyConfChange(e raftpb.Entry) error {
 		return nil
 	}
 
-	var req Request
-	if err := req.Decode(cc.Context); err != nil {
-		// It should be either a node info or a request.
-		glog.Fatalf("cannot decode context (%v)", err)
-	}
-	if gn, ok := req.Data.(GroupNode); ok {
-		res := Response{
-			ID: req.ID,
+	if id, req, err := g.node.decReq(cc.Context); err == nil {
+		if gn, ok := req.Data.(GroupNode); ok {
+			res := Response{ID: id}
+			res.Err = g.stateMachine.ApplyConfChange(cc, gn)
+			g.node.line.call(res)
+			return nil
 		}
-		res.Err = g.stateMachine.ApplyConfChange(cc, gn)
-		g.node.line.call(res)
-		return nil
 	}
 
 	var gn GroupNode
-	if err := bhgob.Decode(&gn, cc.Context); err == nil {
-		if gn.Node != cc.NodeID {
-			glog.Fatalf("invalid config change: %v != %v", gn.Node, cc.NodeID)
-		}
-		g.stateMachine.ApplyConfChange(cc, gn)
-		return nil
+	if err := bhgob.Decode(&gn, cc.Context); err != nil {
+		glog.Fatalf("%v cannot decode config change: %v", g, err)
 	}
 
-	glog.Fatalf("cannot decode config change")
+	if gn.Node != cc.NodeID {
+		glog.Fatalf("invalid config change: %v != %v", gn.Node, cc.NodeID)
+	}
+	g.stateMachine.ApplyConfChange(cc, gn)
 	return nil
 }
 
@@ -703,7 +723,6 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 		if !ok {
 			glog.Fatalf("cannot find group %v", g)
 		}
-
 		g.savec <- readySaved{
 			ready: rd,
 			saved: saved,
@@ -778,7 +797,7 @@ type GroupConfig struct {
 	Peers          []etcdraft.Peer // Peers of this group.
 	DataDir        string          // Where to save raft state.
 	SnapCount      uint64          // How many entries to include in a snapshot.
-	SyncTime       time.Duration   // The frequency of Fsync.
+	SyncTime       time.Duration   // The frequency of fsyncs.
 	ElectionTicks  int             // Number of ticks to fire an election.
 	HeartbeatTicks int             // Number of ticks to fire heartbeats.
 	MaxInFlights   int             // Maximum number of inflight messages.
@@ -931,30 +950,30 @@ func (n *MultiNode) notifyElection(group uint64) {
 
 // Propose proposes the request and returns the response. This method blocks and
 // returns either when the ctx is cancelled or the raft node returns a response.
-func (n *MultiNode) Propose(ctx context.Context, group uint64, req interface{}) (
-	res interface{}, err error) {
+func (n *MultiNode) Propose(ctx context.Context, group uint64,
+	req interface{}) (res interface{}, err error) {
 
+	id := n.genID()
 	r := Request{
-		ID:   n.genID(),
 		Data: req,
 	}
 
-	b, err := r.Encode()
+	d, err := n.encReq(id, r)
 	if err != nil {
 		return nil, err
 	}
 
-	glog.V(2).Infof("%v waits on raft request %v: %#v", n, r.ID, req)
-	ch := n.line.wait(r.ID)
+	glog.V(2).Infof("%v waits on raft request %v", n, id)
+	ch := n.line.wait(id, r)
 	mm := multiMessage{group,
 		raftpb.Message{
 			Type:    raftpb.MsgProp,
-			Entries: []raftpb.Entry{{Data: b}},
+			Entries: []raftpb.Entry{{Data: d}},
 		}}
 	select {
 	case n.propc <- mm:
 	case <-ctx.Done():
-		n.line.cancel(r.ID)
+		n.line.cancel(id)
 		return nil, ctx.Err()
 	case <-n.done:
 		return nil, ErrStopped
@@ -962,10 +981,10 @@ func (n *MultiNode) Propose(ctx context.Context, group uint64, req interface{}) 
 
 	select {
 	case res := <-ch:
-		glog.V(2).Infof("%v wakes up for raft request %v", n, r.ID)
+		glog.V(2).Infof("%v wakes up for raft request %v", n, id)
 		return res.Data, res.Err
 	case <-ctx.Done():
-		n.line.cancel(r.ID)
+		n.line.cancel(id)
 		return nil, ctx.Err()
 	case <-n.done:
 		return nil, ErrStopped
@@ -1039,21 +1058,20 @@ func (n *MultiNode) RemoveNodeFromGroup(ctx context.Context, node, group uint64,
 func (n *MultiNode) processConfChange(ctx context.Context, group uint64,
 	cc raftpb.ConfChange, gn GroupNode) error {
 
-	r := Request{
-		ID:   n.genID(),
-		Data: gn,
-	}
-	var err error
-	cc.Context, err = r.Encode()
-	if err != nil {
-		return err
-	}
-
 	if group == 0 || gn.Node == 0 || gn.Group != group {
 		glog.Fatalf("invalid group node: %v", gn)
 	}
 
-	ch := n.line.wait(r.ID)
+	id := n.genID()
+	req := Request{Data: gn}
+
+	var err error
+	cc.Context, err = n.encReq(id, req)
+	if err != nil {
+		return err
+	}
+
+	ch := n.line.wait(id, req)
 
 	d, err := cc.Marshal()
 	if err != nil {
@@ -1068,7 +1086,7 @@ func (n *MultiNode) processConfChange(ctx context.Context, group uint64,
 		},
 	}:
 	case <-ctx.Done():
-		n.line.cancel(r.ID)
+		n.line.cancel(id)
 		return ctx.Err()
 	case <-n.done:
 		return ErrStopped
@@ -1078,7 +1096,7 @@ func (n *MultiNode) processConfChange(ctx context.Context, group uint64,
 	case res := <-ch:
 		return res.Err
 	case <-ctx.Done():
-		n.line.cancel(r.ID)
+		n.line.cancel(id)
 		return ctx.Err()
 	case <-n.done:
 		return ErrStopped

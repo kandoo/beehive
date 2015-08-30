@@ -1031,9 +1031,11 @@ func (b *bee) replicate() error {
 		return err
 	}
 
+	msgs := make([]*msg, len(b.msgBufL1))
+	copy(msgs, b.msgBufL1)
 	tx := tx{
 		Tx:   stx,
-		Msgs: b.msgBufL1,
+		Msgs: msgs,
 	}
 	ctx, cnl := context.WithTimeout(context.Background(),
 		10*b.hive.config.RaftElectTimeout())
