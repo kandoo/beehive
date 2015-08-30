@@ -156,6 +156,7 @@ func (b *bee) createGroup() error {
 		Peers:          b.peers(),
 		DataDir:        b.statePath(),
 		SnapCount:      1024,
+		SyncTime:       b.hive.config.RaftSyncTime,
 		ElectionTicks:  b.hive.config.RaftElectTicks,
 		HeartbeatTicks: b.hive.config.RaftHBTicks,
 		MaxInFlights:   b.hive.config.RaftInflights,

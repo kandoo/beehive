@@ -106,6 +106,7 @@ type group struct {
 	stateMachine StateMachine
 	raftStorage  *etcdraft.MemoryStorage
 	diskStorage  DiskStorage
+	syncTime     time.Duration
 	snapCount    uint64
 
 	leader    uint64
@@ -128,7 +129,13 @@ func (g *group) String() string {
 }
 
 func (g *group) startSaver() {
-	defer close(g.saverDone)
+	defer func() {
+		if err := g.diskStorage.Close(); err != nil {
+			glog.Errorf("%v cannot close disk storage: %v", g, err)
+		}
+		close(g.saverDone)
+	}()
+	var sync <-chan time.Time
 	for {
 		select {
 		case rdsv := <-g.savec:
@@ -138,6 +145,19 @@ func (g *group) startSaver() {
 				}
 				return
 			}
+			if g.syncTime == 0 {
+				if err := g.sync(); err != nil {
+					return
+				}
+			} else if sync == nil {
+				sync = time.After(g.syncTime)
+			}
+
+		case <-sync:
+			if err := g.sync(); err != nil {
+				return
+			}
+			sync = nil
 
 		case <-g.node.done:
 			return
@@ -146,6 +166,15 @@ func (g *group) startSaver() {
 			return
 		}
 	}
+}
+
+func (g *group) sync() error {
+	glog.V(2).Infof("%v syncing disk storage", g)
+	if err := g.diskStorage.Sync(); err != nil {
+		glog.Errorf("%v cannot sync disk storage: %v", g, err)
+		return err
+	}
+	return nil
 }
 
 func (g *group) startApplier() {
@@ -554,11 +583,6 @@ func (n *MultiNode) start() {
 
 	defer func() {
 		n.node.Stop()
-		for _, g := range n.groups {
-			if err := g.diskStorage.Close(); err != nil {
-				glog.Fatalf("error in closing storage of group %v: %v", g.id, err)
-			}
-		}
 		close(n.done)
 	}()
 
@@ -746,17 +770,19 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 
 }
 
+// GroupConfig represents the configuration of a raft group.
 type GroupConfig struct {
-	ID             uint64
-	Name           string
-	StateMachine   StateMachine
-	Peers          []etcdraft.Peer
-	DataDir        string
-	SnapCount      uint64
-	ElectionTicks  int
-	HeartbeatTicks int
-	MaxInFlights   int
-	MaxMsgSize     uint64
+	ID             uint64          // Group ID.
+	Name           string          // Group name.
+	StateMachine   StateMachine    // Group state machine.
+	Peers          []etcdraft.Peer // Peers of this group.
+	DataDir        string          // Where to save raft state.
+	SnapCount      uint64          // How many entries to include in a snapshot.
+	SyncTime       time.Duration   // The frequency of Fsync.
+	ElectionTicks  int             // Number of ticks to fire an election.
+	HeartbeatTicks int             // Number of ticks to fire heartbeats.
+	MaxInFlights   int             // Maximum number of inflight messages.
+	MaxMsgSize     uint64          // Maximum number of entries in a message.
 }
 
 func (n *MultiNode) CreateGroup(ctx context.Context, cfg GroupConfig) error {
@@ -795,6 +821,7 @@ func (n *MultiNode) CreateGroup(ctx context.Context, cfg GroupConfig) error {
 		diskStorage:  ds,
 		applyc:       make(chan etcdraft.Ready, cfg.SnapCount),
 		savec:        make(chan readySaved, 1),
+		syncTime:     cfg.SyncTime,
 		snapCount:    cfg.SnapCount,
 		snapped:      snap.Metadata.Index,
 		applied:      snap.Metadata.Index,

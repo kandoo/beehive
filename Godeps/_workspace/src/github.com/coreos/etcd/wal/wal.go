@@ -23,7 +23,6 @@ import (
 	"path"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/fileutil"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
@@ -388,10 +387,16 @@ func (w *WAL) sync() error {
 			return err
 		}
 	}
-	start := time.Now()
-	err := w.f.Sync()
-	syncDurations.Observe(float64(time.Since(start).Nanoseconds() / int64(time.Microsecond)))
-	return err
+	return nil
+}
+
+func (w *WAL) Sync() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.sync(); err != nil {
+		return err
+	}
+	return w.f.Sync()
 }
 
 // ReleaseLockTo releases the locks, which has smaller index than the given index

@@ -23,7 +23,9 @@ type DiskStorage interface {
 	Save(st raftpb.HardState, ents []raftpb.Entry) error
 	// SaveSnap function saves snapshot to the underlying stable storage.
 	SaveSnap(snap raftpb.Snapshot) error
-	// Close closes the Storage and performs finalization.
+	// Sync syncs the data written with the disk.
+	Sync() error
+	// Close closes the storage and performs finalization.
 	Close() error
 }
 

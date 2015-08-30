@@ -83,6 +83,7 @@ type HiveConfig struct {
 	RegLockTimeout time.Duration // when to retry to lock an entry in a registry.
 	RaftTick       time.Duration // the raft tick interval.
 	RaftTickDelta  time.Duration // the maximum random delta added to the tick.
+	RaftSyncTime   time.Duration // the frequency of Fsync.
 	RaftHBTicks    int           // number of raft ticks that fires a heartbeat.
 	RaftElectTicks int           // number of raft ticks that fires election.
 	RaftInflights  int           // maximum number of inflights to a node.
@@ -191,6 +192,8 @@ func init() {
 		"raft tick period")
 	flag.DurationVar(&DefaultCfg.RaftTickDelta, "deltarafttick",
 		0*time.Millisecond, "max random duration added to the raft tick per tick")
+	flag.DurationVar(&DefaultCfg.RaftSyncTime, "raftsync", 1*time.Second,
+		"the frequency of raft fsync. 0 means always sync immidiately")
 	flag.IntVar(&DefaultCfg.RaftElectTicks, "raftelectionticks", 5,
 		"number of raft ticks to start an election (ie, election timeout)")
 	flag.IntVar(&DefaultCfg.RaftHBTicks, "rafthbticks", 1,
@@ -490,6 +493,7 @@ func (h *hive) startRaftNode() {
 		Peers:          peers,
 		DataDir:        h.config.StatePath,
 		SnapCount:      1024,
+		SyncTime:       h.config.RaftSyncTime,
 		ElectionTicks:  h.config.RaftElectTicks,
 		HeartbeatTicks: h.config.RaftHBTicks,
 		MaxInFlights:   h.config.RaftInflights,
