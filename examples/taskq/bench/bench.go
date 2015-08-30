@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"time"
 
@@ -98,8 +98,8 @@ func closeClients(clients []*client.Client) {
 	}
 }
 
-func launch(c *client.Client, w workload, start chan struct{},
-	resch chan result) {
+func launchWorker(c *client.Client, w workload, timeout time.Duration,
+	start chan struct{}, resch chan result) {
 
 	<-start
 
@@ -108,6 +108,7 @@ func launch(c *client.Client, w workload, start chan struct{},
 	reqEnd := make(map[server.Request]time.Time)
 
 	var minStart time.Time
+	done := make(chan struct{})
 	go func() {
 		for i, e := range w.enqs {
 			now := time.Now()
@@ -117,19 +118,33 @@ func launch(c *client.Client, w workload, start chan struct{},
 			req, _ := c.DoEnQ(string(e.Queue), e.Body, call)
 			reqStart[req] = now
 		}
+		close(done)
 	}()
 
 	res := result{
-		reqs: uint64(len(w.enqs)),
+		// TODO(soheil): implement deques as well.
+		size: uint64(len(w.enqs)), //+ len(w.deqs),
 	}
-	for _ = range w.enqs {
-		response := <-call
-		if response.Error != nil {
-			res.reqs--
-			continue
+	var to <-chan time.Time
+	if timeout != 0 {
+		to = time.After(timeout)
+	}
+
+loop:
+	for i := 0; i < len(w.enqs); i++ {
+		select {
+		case response := <-call:
+			if response.Error != nil {
+				continue
+			}
+			reqEnd[response.Request] = time.Now()
+			res.reqs++
+		case <-to:
+			break loop
 		}
-		reqEnd[response.Request] = time.Now()
 	}
+
+	<-done
 
 	var maxEnd time.Time
 	for req, end := range reqEnd {
@@ -139,11 +154,83 @@ func launch(c *client.Client, w workload, start chan struct{},
 		d := end.Sub(reqStart[req])
 		res.enqDurs = append(res.enqDurs, d)
 	}
-
 	res.start = minStart
 	res.end = maxEnd
-
 	resch <- res
+}
+
+func run(clients []*client.Client, workers, queues, tasks, size int,
+	timeout time.Duration, shared, enq bool) []result {
+
+	workloads := genWorkload(workers, queues, tasks, size, shared, enq)
+	startc := make(chan struct{})
+	resc := make(chan result)
+	for w := 0; w < workers; w++ {
+		go launchWorker(clients[w], workloads[w], timeout, startc, resc)
+	}
+	close(startc)
+
+	res := make([]result, workers)
+	for w := 0; w < workers; w++ {
+		res[w] = <-resc
+	}
+	return res
+}
+
+func warmup(clients []*client.Client, workers, queues, size int,
+	shared, enq bool) []result {
+
+	return run(clients, workers, queues, 1, size, 0, shared, enq)
+}
+
+func metrics(res []result) (dur, reqs, tput uint64, lats []uint64) {
+	var start time.Time
+	var end time.Time
+	for w := 0; w < *workers; w++ {
+		if end.IsZero() || res[w].end.After(end) {
+			end = res[w].end
+		}
+		if start.IsZero() || res[w].start.Before(start) {
+			start = res[w].start
+		}
+		lats = append(lats, uint64(res[w].end.Sub(res[w].start)))
+		reqs += res[w].reqs
+	}
+	dur = uint64(end.Sub(start))
+	tput = reqs * 1e9 / dur
+	return dur, reqs, tput, lats
+}
+
+type byval []uint64
+
+func (s byval) Len() int           { return len(s) }
+func (s byval) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s byval) Less(i, j int) bool { return s[i] < s[j] }
+
+func avg(s []uint64) (a uint64) {
+	if len(s) == 0 {
+		return 0
+	}
+
+	for _, i := range s {
+		a += i
+	}
+	return a / uint64(len(s))
+}
+
+func prc(s []uint64, p int) (n uint64) {
+	if p > 100 {
+		p = 100
+	}
+	return s[len(s)*p/100-1]
+}
+
+func converged(prevt, currt uint64) bool {
+	if prevt == 0 {
+		return false
+	}
+
+	return prevt > currt || float64(prevt-currt)/float64(prevt) < 0.1
 }
 
 func main() {
@@ -172,43 +259,44 @@ func main() {
 	}
 	defer closeClients(clients)
 
-	n := 1
+	fmt.Printf("warming up... ")
+	warmup(clients, *workers, *queues, *size, *shared, *enqOnly)
+	fmt.Printf("[ok]\n")
+
+	n := 2
 	var lastTput uint64
 	for {
-		workloads := genWorkload(*workers, *queues, n, *size, *shared, *enqOnly)
-		startch := make(chan struct{})
-		resch := make(chan result)
-		for w := 0; w < *workers; w++ {
-			go launch(clients[w], workloads[w], startch, resch)
-		}
-		close(startch)
-
-		var reqs uint64
-		var start time.Time
-		var end time.Time
-		res := make([]result, *workers)
-		for w := 0; w < *workers; w++ {
-			res[w] = <-resch
-			if end.IsZero() || res[w].end.After(end) {
-				end = res[w].end
-			}
-			if start.IsZero() || res[w].start.Before(start) {
-				start = res[w].start
-			}
-			reqs += res[w].reqs
-		}
-
-		dur := uint64(end.Sub(start))
-		tput := reqs * 1e9 / dur
-		ratio := math.Abs(float64(tput-lastTput) / float64(lastTput))
-
-		if lastTput != 0 && ratio <= 0.1 {
+		fmt.Printf("trying %d ", n)
+		res := run(clients, *workers, *queues, n, *size, 30*time.Second, *shared,
+			*enqOnly)
+		_, _, tput, _ := metrics(res)
+		if converged(lastTput, tput) {
+			fmt.Println("[no]")
 			break
 		}
+
+		fmt.Println("[ok]")
 		n *= 2
-		fmt.Println(n, tput-lastTput, dur, reqs, tput)
 		lastTput = tput
 	}
 
-	fmt.Println(lastTput)
+	n /= 2
+	var tputs []uint64
+	var lats []uint64
+	for i := 0; i < 16; i++ {
+		res := run(clients, *workers, *queues, n, *size, 30*time.Second, *shared,
+			*enqOnly)
+		_, _, tput, lat := metrics(res)
+		tputs = append(tputs, tput)
+		lats = append(lats, lat...)
+	}
+
+	sort.Sort(byval(tputs))
+	sort.Sort(byval(lats))
+
+	fmt.Printf("throughput avg=%v median=%v max=%v min=%v\n", avg(tputs),
+		prc(tputs, 50), tputs[len(tputs)-1], tputs[0])
+	fmt.Printf("latency avg=%v median=%v max=%v min=%v\n",
+		time.Duration(avg(lats)), time.Duration(prc(lats, 50)),
+		time.Duration(lats[len(lats)-1]), time.Duration(lats[0]))
 }
