@@ -655,6 +655,12 @@ func isBefore(lhs, rhs raftpb.Message) bool {
 	return lhs.Type != rhs.Type || lhs.Term < rhs.Term || lhs.Index < rhs.Index
 }
 
+func shouldSave(rd etcdraft.Ready) bool {
+	return rd.SoftState != nil || !etcdraft.IsEmptyHardState(rd.HardState) ||
+		!etcdraft.IsEmptySnap(rd.Snapshot) || len(rd.Entries) > 0 ||
+		len(rd.CommittedEntries) > 0
+}
+
 func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 	glog.V(3).Infof("%v handles a ready", n)
 
@@ -664,10 +670,16 @@ func (n *MultiNode) handleReadies(readies map[uint64]etcdraft.Ready) {
 
 	saved := make(chan struct{}, len(readies))
 	for gid, rd := range readies {
+		if !shouldSave(rd) {
+			saved <- struct{}{}
+			continue
+		}
+
 		g, ok := n.groups[gid]
 		if !ok {
 			glog.Fatalf("cannot find group %v", g)
 		}
+
 		g.savec <- readySaved{
 			ready: rd,
 			saved: saved,
