@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/kandoo/beehive/examples/taskq/server"
 )
 
@@ -455,26 +456,43 @@ func (c *Client) DoAck(queue string, taskID server.TaskID, call Call) (
 	return req, call
 }
 
-func (c *Client) EnQ(queue string, body []byte) (id server.TaskID, err error) {
+func (c *Client) EnQ(ctx context.Context, queue string, body []byte) (
+	id server.TaskID, err error) {
+
 	_, call := c.DoEnQ(queue, body, nil)
-	res := <-call
-	if res.Error != nil {
-		return 0, res.Error
+	select {
+	case res := <-call:
+		if res.Error != nil {
+			return 0, res.Error
+		}
+		return res.Data.(server.TaskID), res.Error
+	case <-ctx.Done():
+		return 0, ctx.Err()
 	}
-	return res.Data.(server.TaskID), res.Error
 }
 
-func (c *Client) Ack(queue string, task server.TaskID) error {
+func (c *Client) Ack(ctx context.Context, queue string, task server.TaskID) (
+	err error) {
 	_, call := c.DoAck(queue, task, nil)
-	res := <-call
-	return res.Error
+	select {
+	case res := <-call:
+		return res.Error
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-func (c *Client) DeQ(queue string) (task server.Task, err error) {
+func (c *Client) DeQ(ctx context.Context, queue string) (task server.Task,
+	err error) {
+
 	_, call := c.DoDeQ(queue, nil)
-	res := <-call
-	if res.Error != nil {
-		return server.Task{}, res.Error
+	select {
+	case res := <-call:
+		if res.Error != nil {
+			return server.Task{}, res.Error
+		}
+		return res.Data.(server.Task), nil
+	case <-ctx.Done():
+		return server.Task{}, ctx.Err()
 	}
-	return res.Data.(server.Task), nil
 }
