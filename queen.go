@@ -218,7 +218,7 @@ func (q *qee) newDetachedBee(h DetachedHandler) (*bee, error) {
 func (q *qee) registerBee(info BeeInfo) error {
 	// TODO(soheil): we should not block on this.
 	_, err := q.hive.node.ProposeRetry(hiveGroup, addBee(info),
-		q.hive.config.RaftElectTimeout(), -1)
+		2*q.hive.config.RaftElectTimeout(), -1)
 	if err == ErrDuplicateBee {
 		err = nil
 	}
