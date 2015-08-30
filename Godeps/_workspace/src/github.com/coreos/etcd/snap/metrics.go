@@ -18,15 +18,22 @@ import "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/prometheus/cl
 
 var (
 	// TODO: save_fsync latency?
-	// TODO: save_encoding latency?
 	saveDurations = prometheus.NewSummary(prometheus.SummaryOpts{
 		Namespace: "etcd",
 		Subsystem: "snapshot",
 		Name:      "save_total_durations_microseconds",
 		Help:      "The total latency distributions of save called by snapshot.",
 	})
+
+	marshallingDurations = prometheus.NewSummary(prometheus.SummaryOpts{
+		Namespace: "etcd",
+		Subsystem: "snapshot",
+		Name:      "save_marshalling_durations_microseconds",
+		Help:      "The marshalling cost distributions of save called by snapshot.",
+	})
 )
 
 func init() {
 	prometheus.MustRegister(saveDurations)
+	prometheus.MustRegister(marshallingDurations)
 }

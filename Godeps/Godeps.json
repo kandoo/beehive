@@ -24,33 +24,38 @@
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/crc",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/fileutil",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/pkg/pbutil",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/raft",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/snap",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
 		},
 		{
 			"ImportPath": "github.com/coreos/etcd/wal",
-			"Comment": "v2.1.0-rc.0-36-gd80f4c8",
-			"Rev": "d80f4c8aa231cbdd391663918aba6096de55419a"
+			"Comment": "v2.2.0-rc.0-5-gfca98c9",
+			"Rev": "fca98c9071f2d7fc2ece35b68d2322b2c0ed440e"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-systemd/journal",
+			"Comment": "v3-9-gcba1623",
+			"Rev": "cba16237846b83be98d25d8392b1520b7bc40b5a"
 		},
 		{
 			"ImportPath": "github.com/coreos/pkg/capnslog",
@@ -66,7 +71,7 @@
 		},
 		{
 			"ImportPath": "github.com/golang/protobuf/proto",
-			"Rev": "ab974be44dc3b7b8a1fb306fb32fe9b9f3864b3d"
+			"Rev": "68c687dc49948540b356a6b47931c9be4fcd0245"
 		},
 		{
 			"ImportPath": "github.com/gorilla/context",
@@ -110,11 +115,11 @@
 		},
 		{
 			"ImportPath": "github.com/soheilhy/cmux",
-			"Rev": "51556c6df50a9b03b4f4de67558e8e7beaba1cc9"
+			"Rev": "a2d7a9030f6b48e56372bc455496f3c71b0571b2"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
-			"Rev": "d9558e5c97f85372afee28cf2b6059d7d3818919"
+			"Rev": "3a29182c25eeabbaaf94daaeecbc7823d86261e7"
 		}
 	]
 }

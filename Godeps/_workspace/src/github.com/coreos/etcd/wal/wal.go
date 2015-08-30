@@ -23,6 +23,7 @@ import (
 	"path"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/fileutil"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/pkg/pbutil"
@@ -202,6 +203,12 @@ func openAtIndex(dirpath string, snap walpb.Snapshot, write bool) (*WAL, error) 
 			rc.Close()
 			return nil, err
 		}
+		err = fileutil.Preallocate(f, segmentSizeBytes)
+		if err != nil {
+			rc.Close()
+			plog.Errorf("failed to allocate space when creating new wal file (%v)", err)
+			return nil, err
+		}
 
 		w.f = f
 		w.seq = seq
@@ -359,6 +366,12 @@ func (w *WAL) cut() error {
 	if err != nil {
 		return err
 	}
+	err = fileutil.Preallocate(f, segmentSizeBytes)
+	if err != nil {
+		plog.Errorf("failed to allocate space when creating new wal file (%v)", err)
+		return err
+	}
+
 	w.f = f
 	prevCrc = w.encoder.crc.Sum32()
 	w.encoder = newEncoder(w.f, prevCrc)
@@ -368,6 +381,7 @@ func (w *WAL) cut() error {
 	if err != nil {
 		return err
 	}
+
 	err = l.Lock()
 	if err != nil {
 		return err
@@ -391,12 +405,14 @@ func (w *WAL) sync() error {
 }
 
 func (w *WAL) Sync() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	if err := w.sync(); err != nil {
 		return err
 	}
-	return w.f.Sync()
+
+	start := time.Now()
+	err := w.f.Sync()
+	syncDurations.Observe(float64(time.Since(start).Nanoseconds() / int64(time.Microsecond)))
+	return err
 }
 
 // ReleaseLockTo releases the locks, which has smaller index than the given index
@@ -454,9 +470,14 @@ func (w *WAL) Close() error {
 		}
 	}
 	for _, l := range w.locks {
-		// TODO: log the error
-		l.Unlock()
-		l.Destroy()
+		err := l.Unlock()
+		if err != nil {
+			plog.Errorf("failed to unlock during closing wal: %s", err)
+		}
+		err = l.Destroy()
+		if err != nil {
+			plog.Errorf("failed to destroy lock during closing wal: %s", err)
+		}
 	}
 	return nil
 }

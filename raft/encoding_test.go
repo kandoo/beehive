@@ -45,7 +45,7 @@ func TestEncoding(t *testing.T) {
 }
 
 func ExampleEncoder() {
-	msgs := []raftpb.Message{ /*...*/}
+	msgs := []raftpb.Message{ /*...*/ }
 	var buf bytes.Buffer
 	enc := NewEncoder(&buf)
 	for _, m := range msgs {
