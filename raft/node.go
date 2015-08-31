@@ -247,7 +247,10 @@ func (g *group) save(rdsv readySaved) error {
 
 		var cc raftpb.ConfChange
 		pbutil.MustUnmarshal(&cc, e.Data)
-		glog.V(2).Infof("%v applies conf change %v: %#v", g, e.Index, cc)
+		if glog.V(2) {
+			glog.Infof("%v applies conf change %s: %s",
+				g, formatConfChange(cc), formatEntry(e))
+		}
 
 		if err := g.validConfChange(cc); err != nil {
 			glog.Errorf("%v received an invalid conf change for node %v: %v",
@@ -320,7 +323,10 @@ func (g *group) apply(ready etcdraft.Ready) error {
 			firsti, g.applied)
 	}
 
-	glog.V(3).Infof("%v receives raft update %v %v", g, es, ready.Entries)
+	if glog.V(3) {
+		glog.Infof("%v receives raft update: committed=%s appended=%s", g,
+			formatEntries(es), formatEntries(ready.Entries))
+	}
 
 	for _, e := range es {
 		if e.Index <= g.applied {
