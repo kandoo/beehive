@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft/raftpb"
@@ -270,8 +271,10 @@ func (r *registry) addBee(info BeeInfo) error {
 		glog.Fatalf("invalid bee info: %v", info)
 	}
 
-	if _, ok := r.Bees[info.ID]; ok {
-		return ErrDuplicateBee
+	if i, ok := r.Bees[info.ID]; ok {
+		if !reflect.DeepEqual(info, i) {
+			return ErrDuplicateBee
+		}
 	}
 	if r.BeeID < info.ID {
 		glog.Fatalf("%v has invalid bee ID: %v < %v", r, info.ID, r.HiveID)
