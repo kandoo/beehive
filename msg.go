@@ -67,6 +67,9 @@ func (m msg) From() uint64 {
 }
 
 func (m msg) String() string {
+	if m.Data() == nil {
+		return fmt.Sprintf("%v -> %v\t(nil)", m.From(), m.To())
+	}
 	return fmt.Sprintf("%v -> %v\t%v(%#v)", m.From(), m.To(), m.Type(), m.Data())
 }
 
