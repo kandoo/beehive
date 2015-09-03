@@ -909,7 +909,7 @@ func RegisterTaskQ(h beehive.Hive, opts ...Option) error {
 
 	r := rate.Get(opts)
 	taskq := h.NewApp("taskq", beehive.Persistent(repl.Get(opts)),
-		beehive.LimitOutRate(bucket.Rate(r), 2*r))
+		beehive.OutRate(bucket.Rate(r), 2*r))
 	taskq.Handle(Enque{}, EnQHandler{})
 	taskq.Handle(Deque{}, DeQHandler{})
 	taskq.Handle(Ack{}, AckHandler{})

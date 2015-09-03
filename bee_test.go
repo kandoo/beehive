@@ -74,7 +74,7 @@ func TestInRate(t *testing.T) {
 		return ctx.LocalMappedCells()
 	}
 
-	app := h.NewApp("rate", LimitInRate(1*bucket.TPS, 1))
+	app := h.NewApp("rate", InRate(1*bucket.TPS, 1))
 	app.HandleFunc(rateTestMsg{}, mapf, rcvf)
 
 	go h.Start()
@@ -119,7 +119,7 @@ func TestOutRate(t *testing.T) {
 		return nil
 	}
 
-	eapp := h.NewApp("echo", LimitOutRate(1*bucket.TPS, 1))
+	eapp := h.NewApp("echo", OutRate(1*bucket.TPS, 1))
 	eapp.HandleFunc(outRateTestMsg{}, mapf, echof)
 
 	sapp := h.NewApp("sink")

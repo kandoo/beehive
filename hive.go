@@ -46,7 +46,7 @@ type Hive interface {
 
 	// Creates an app with the given name and the provided options.
 	// Note that apps are not active until the hive is started.
-	NewApp(name string, options ...AppOption) App
+	NewApp(name string, opts ...AppOption) App
 
 	// Emits a message containing msgData from this hive.
 	Emit(msgData interface{})

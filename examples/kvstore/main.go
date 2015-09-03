@@ -43,7 +43,7 @@ func main() {
 		rp := bh.RandomPlacement{
 			Rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 		}
-		opts = append(opts, bh.WithPlacement(rp))
+		opts = append(opts, bh.Placement(rp))
 	}
 	a := bh.NewApp("kvstore", opts...)
 	kv := &store.KVStore{

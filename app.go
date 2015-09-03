@@ -91,28 +91,28 @@ func NonTransactional() AppOption {
 	}
 }
 
-// WithPlacement is an application option that customizes the default
+// Placement is an application option that customizes the default
 // placement strategy for the application.
-func WithPlacement(m PlacementMethod) AppOption {
+func Placement(m PlacementMethod) AppOption {
 	return func(a *app) {
 		a.placement = m
 	}
 }
 
-// LimitInRate is an application option that limits the rate of incoming
-// messages of each bee of an application using a token bucket with the given
-// rate and the given maximum.
-func LimitInRate(rate bucket.Rate, max uint64) AppOption {
+// InRate is an application option that limits the rate of incoming messages of
+// each bee of an application using a token bucket with the given rate and the
+// given maximum.
+func InRate(rate bucket.Rate, max uint64) AppOption {
 	return func(a *app) {
 		a.rate.inRate = rate
 		a.rate.inMaxTokens = max
 	}
 }
 
-// LimitOutRate is an application option that limits the rate of outgoing
-// messages of each bee of an application using a token bucket with the given
-// rate and the given maximum.
-func LimitOutRate(rate bucket.Rate, max uint64) AppOption {
+// OutRate is an application option that limits the rate of outgoing messages of
+// each bee of an application using a token bucket with the given rate and the
+// given maximum.
+func OutRate(rate bucket.Rate, max uint64) AppOption {
 	return func(a *app) {
 		a.rate.outRate = rate
 		a.rate.outMaxTokens = max

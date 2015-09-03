@@ -28,7 +28,7 @@ type testPlacementRes struct {
 
 func registerPlacementApp(h Hive, ch chan testPlacementRes) App {
 	a := h.NewApp("placementapp", NonTransactional(),
-		WithPlacement(testNonLocalPlacementMethod{}))
+		Placement(testNonLocalPlacementMethod{}))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"D", strconv.Itoa(msg.Data().(int))}}
 	}
