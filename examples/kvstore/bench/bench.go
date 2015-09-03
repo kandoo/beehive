@@ -45,9 +45,8 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	os.RemoveAll(bh.DefaultCfg.StatePath)
-
 	hive := bh.NewHive()
+	os.RemoveAll(hive.Config().StatePath)
 	app := hive.NewApp("kvstore", bh.Persistent(*replFactor))
 	kvs := &store.KVStore{
 		Hive:    hive,

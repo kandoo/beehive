@@ -15,9 +15,8 @@ const (
 )
 
 func BenchmarkThroughput(b *testing.B) {
-	defer os.RemoveAll(bh.DefaultCfg.StatePath)
-
 	hive := bh.NewHive()
+	defer os.RemoveAll(hive.Config().StatePath)
 
 	if b.N < 1024 {
 		return

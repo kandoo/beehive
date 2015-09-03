@@ -107,7 +107,7 @@ type group struct {
 	stateMachine StateMachine
 	raftStorage  *etcdraft.MemoryStorage
 	diskStorage  DiskStorage
-	syncTime     time.Duration
+	fsyncTime    time.Duration
 	snapCount    uint64
 
 	leader    uint64
@@ -136,7 +136,7 @@ func (g *group) startSaver() {
 		}
 		close(g.saverDone)
 	}()
-	var sync <-chan time.Time
+	var fsync <-chan time.Time
 	for {
 		select {
 		case rdsv := <-g.savec:
@@ -146,19 +146,19 @@ func (g *group) startSaver() {
 				}
 				return
 			}
-			if g.syncTime == 0 {
-				if err := g.sync(); err != nil {
+			if g.fsyncTime == 0 {
+				if err := g.fsync(); err != nil {
 					return
 				}
-			} else if sync == nil {
-				sync = time.After(g.syncTime)
+			} else if fsync == nil {
+				fsync = time.After(g.fsyncTime)
 			}
 
-		case <-sync:
-			if err := g.sync(); err != nil {
+		case <-fsync:
+			if err := g.fsync(); err != nil {
 				return
 			}
-			sync = nil
+			fsync = nil
 
 		case <-g.node.done:
 			return
@@ -169,7 +169,7 @@ func (g *group) startSaver() {
 	}
 }
 
-func (g *group) sync() error {
+func (g *group) fsync() error {
 	glog.V(2).Infof("%v syncing disk storage", g)
 	if err := g.diskStorage.Sync(); err != nil {
 		glog.Errorf("%v cannot sync disk storage: %v", g, err)
@@ -809,7 +809,7 @@ type GroupConfig struct {
 	Peers          []etcdraft.Peer // Peers of this group.
 	DataDir        string          // Where to save raft state.
 	SnapCount      uint64          // How many entries to include in a snapshot.
-	SyncTime       time.Duration   // The frequency of fsyncs.
+	FsyncTick      time.Duration   // The frequency of fsyncs.
 	ElectionTicks  int             // Number of ticks to fire an election.
 	HeartbeatTicks int             // Number of ticks to fire heartbeats.
 	MaxInFlights   int             // Maximum number of inflight messages.
@@ -852,7 +852,7 @@ func (n *MultiNode) CreateGroup(ctx context.Context, cfg GroupConfig) error {
 		diskStorage:  ds,
 		applyc:       make(chan etcdraft.Ready, cfg.SnapCount),
 		savec:        make(chan readySaved, 1),
-		syncTime:     cfg.SyncTime,
+		fsyncTime:    cfg.FsyncTick,
 		snapCount:    cfg.SnapCount,
 		snapped:      snap.Metadata.Index,
 		applied:      snap.Metadata.Index,

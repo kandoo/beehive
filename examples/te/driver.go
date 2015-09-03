@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
@@ -42,16 +42,16 @@ func NewDriver(startingSwitchId, numberOfSwitches int) *Driver {
 	return d
 }
 
-func (d *Driver) Start(ctx bh.RcvContext) {
+func (d *Driver) Start(ctx beehive.RcvContext) {
 	for s, _ := range d.switches {
 		ctx.Emit(SwitchJoined{s})
 	}
 }
 
-func (d *Driver) Stop(ctx bh.RcvContext) {
+func (d *Driver) Stop(ctx beehive.RcvContext) {
 }
 
-func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (d *Driver) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	if m.NoReply() {
 		return nil
 	}
@@ -77,7 +77,9 @@ func (d *Driver) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
+func (d *Driver) Map(m beehive.Msg,
+	ctx beehive.MapContext) beehive.MappedCells {
+
 	var k string
 	switch d := m.Data().(type) {
 	case StatQuery:
@@ -85,5 +87,5 @@ func (d *Driver) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
 	case FlowMod:
 		k = d.Switch.Key()
 	}
-	return bh.MappedCells{{switchStateDict, k}}
+	return beehive.MappedCells{{switchStateDict, k}}
 }

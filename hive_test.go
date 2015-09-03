@@ -50,7 +50,7 @@ func (h *testHiveHandler) Rcv(m Msg, c RcvContext) error {
 	return nil
 }
 
-func runHiveTest(cfg HiveConfig, t *testing.T) {
+func runHiveTest(t *testing.T, opts ...HiveOption) {
 	runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(1)
 
@@ -60,7 +60,7 @@ func runHiveTest(cfg HiveConfig, t *testing.T) {
 		testHiveCh = nil
 	}()
 
-	hive := NewHiveWithConfig(cfg)
+	hive := newHiveForTest(opts...)
 	app := hive.NewApp("TestHiveApp")
 	app.Handle(MyMsg(0), &testHiveHandler{})
 
@@ -80,31 +80,25 @@ func runHiveTest(cfg HiveConfig, t *testing.T) {
 }
 
 func TestHiveStart(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	runHiveTest(cfg, t)
+	runHiveTest(t)
 }
 
 func TestHiveRestart(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	runHiveTest(cfg, t)
+	runHiveTest(t)
 	time.Sleep(1 * time.Second)
-	runHiveTest(cfg, t)
+	runHiveTest(t)
 }
 
 func TestHiveCluster(t *testing.T) {
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	go h1.Start()
 	waitTilStareted(h1)
+	h1a := h1.Config().Addr
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	h2 := newHiveForTest(PeerAddrs(h1a))
 	go h2.Start()
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(h1a))
 	go h3.Start()
 
 	waitTilStareted(h2)
@@ -116,19 +110,16 @@ func TestHiveCluster(t *testing.T) {
 }
 
 func TestHiveFailure(t *testing.T) {
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	go h2.Start()
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	go h3.Start()
 
 	waitTilStareted(h2)

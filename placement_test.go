@@ -51,12 +51,13 @@ func TestPlacement(t *testing.T) {
 
 	nh := 2
 	for i := 0; i < nh; i++ {
-		cfg := newHiveConfigForTest()
-		if i != 0 {
-			cfg.PeerAddrs = []string{hives[0].(*hive).config.Addr}
+		var h Hive
+		if i == 0 {
+			h = newHiveForTest()
+		} else {
+			h = newHiveForTest(PeerAddrs(hives[0].(*hive).config.Addr))
 		}
-		hives = append(hives, NewHiveWithConfig(cfg))
-
+		hives = append(hives, h)
 		registerPlacementApp(hives[i], ch)
 		go hives[i].Start()
 		waitTilStareted(hives[i])

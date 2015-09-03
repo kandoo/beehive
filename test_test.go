@@ -5,8 +5,8 @@ import (
 	"os"
 )
 
-func removeState(cfg HiveConfig) {
-	os.RemoveAll(cfg.StatePath)
+func removeState(path string) {
+	os.RemoveAll(path)
 }
 
 func waitTilStareted(h Hive) {
@@ -21,11 +21,12 @@ var (
 	testPort = 6000
 )
 
-func newHiveConfigForTest() (cfg HiveConfig) {
-	cfg = DefaultCfg
+func newHiveForTest(opts ...HiveOption) Hive {
 	testPort++
-	cfg.Addr = fmt.Sprintf("127.0.0.1:%v", testPort)
-	cfg.StatePath = fmt.Sprintf("/tmp/bhtest-%v", testPort)
-	removeState(cfg)
-	return cfg
+	addr := fmt.Sprintf("127.0.0.1:%v", testPort)
+	path := fmt.Sprintf("/tmp/bhtest-%v", testPort)
+	removeState(path)
+	opts = append(opts, Addr(addr))
+	opts = append(opts, StatePath(path))
+	return NewHive(opts...)
 }

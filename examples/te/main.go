@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
@@ -17,13 +17,13 @@ var (
 	elephantProb float64
 )
 
-func createHive(config bh.HiveConfig, minDriver, maxDriver int,
+func createHive(addr string, paddrs []string, minDriver, maxDriver int,
 	minCol, maxCol int, stickyCollector bool, lockRouter bool, joinCh chan bool) {
-	h := bh.NewHiveWithConfig(config)
 
-	cOps := []bh.AppOption{}
+	h := beehive.NewHive(beehive.Addr(addr), beehive.PeerAddrs(paddrs...))
+	cOps := []beehive.AppOption{}
 	if stickyCollector {
-		cOps = append(cOps, bh.Sticky())
+		cOps = append(cOps, beehive.Sticky())
 	}
 	c := h.NewApp("Collector", cOps...)
 	p := NewPoller(1 * time.Second)
@@ -31,10 +31,10 @@ func createHive(config bh.HiveConfig, minDriver, maxDriver int,
 	c.Handle(StatResult{}, &Collector{uint64(maxSpike * (1 - elephantProb)), p})
 	c.Handle(SwitchJoined{}, &SwitchJoinHandler{p})
 
-	r := h.NewApp("Router", bh.Sticky())
+	r := h.NewApp("Router", beehive.Sticky())
 	r.Handle(MatrixUpdate{}, &UpdateHandler{})
 
-	d := h.NewApp("Driver", bh.Sticky())
+	d := h.NewApp("Driver", beehive.Sticky())
 	driver := NewDriver(minDriver, maxDriver-minDriver)
 	d.Handle(StatQuery{}, driver)
 	d.Handle(FlowMod{}, driver)
@@ -88,22 +88,23 @@ func main() {
 
 	joinChannels := make([]chan bool, 0)
 
-	config := bh.DefaultCfg
+	var pas []string
 	for h := 0; h < *nhives; h++ {
-		config.Addr = fmt.Sprintf(lAddr, port)
+		addr := fmt.Sprintf(lAddr, port)
 		port++
 
 		jCh := make(chan bool)
 		joinChannels = append(joinChannels, jCh)
 
 		if *centCol && h == 0 {
-			createHive(config, h*driverPerHive, (h+1)*driverPerHive,
+			createHive(addr, pas, h*driverPerHive, (h+1)*driverPerHive,
 				0, *nswitches, *stickyCol, true, jCh)
 			time.Sleep(1 * time.Second)
+			pas = append(pas, addr)
 			continue
 		}
 
-		createHive(config, h*driverPerHive, (h+1)*driverPerHive,
+		createHive(addr, pas, h*driverPerHive, (h+1)*driverPerHive,
 			h*collectorPerHive, (h+1)*collectorPerHive, *stickyCol, false, jCh)
 
 	}

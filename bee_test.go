@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/kandoo/beehive/bucket"
+	"github.com/kandoo/beehive/raft"
+	"github.com/kandoo/beehive/randtime"
 	"github.com/kandoo/beehive/state"
 )
 
@@ -47,9 +49,7 @@ func TestDeferReply(t *testing.T) {
 		return ctx.LocalMappedCells()
 	}
 
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	app := h.NewApp("defer")
 	app.HandleFunc(ping{}, mapf, pongf)
 	app.HandleFunc(send{}, mapf, pongf)
@@ -63,9 +63,7 @@ func TestDeferReply(t *testing.T) {
 }
 
 func TestInRate(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	type rateTestMsg struct{}
 	ch := make(chan time.Time, 1)
 	rcvf := func(msg Msg, ctx RcvContext) error {
@@ -94,8 +92,7 @@ func TestInRate(t *testing.T) {
 }
 
 func TestOutRate(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
+	h := newHiveForTest()
 
 	type outRateTestMsg struct{}
 	type outRateTestStart struct{}
@@ -144,8 +141,7 @@ func TestOutRate(t *testing.T) {
 }
 
 func TestBeeTxTerm(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
+	h := newHiveForTest()
 
 	ch := make(chan bool)
 	mapf := func(msg Msg, ctx MapContext) MappedCells {
@@ -211,21 +207,36 @@ func (h benchBeeHandler) Map(msg Msg, ctx MapContext) MappedCells {
 func BenchmarkBeePersistence(b *testing.B) {
 	b.StopTimer()
 	log.SetOutput(ioutil.Discard)
+	hive := &hive{
+		id: 1,
+		config: HiveConfig{
+			StatePath:      "/tmp/bhtest_bench_bee",
+			RaftTick:       100 * time.Millisecond,
+			RaftHBTicks:    1,
+			RaftElectTicks: 5,
+			RaftInFlights:  1,
+			RaftFsyncTick:  1 * time.Second,
+		},
+		collector: &noOpStatCollector{},
+	}
+	removeState(hive.config.StatePath)
+	hive.ticker = randtime.NewTicker(hive.config.RaftTick, 0)
+	hive.registry = newRegistry(hive.String())
+	ncfg := raft.Config{
+		ID:     hive.id,
+		Name:   hive.String(),
+		Send:   hive.sendRaft,
+		Ticker: hive.ticker.C,
+	}
+	hive.node = raft.StartMultiNode(ncfg)
 
 	bee := bee{
 		beeID: 1,
 		beeColony: Colony{
+			ID:     1,
 			Leader: 1,
 		},
-		hive: &hive{
-			config: HiveConfig{
-				StatePath:      "/tmp/bhtest_bench_bee",
-				RaftTick:       100 * time.Millisecond,
-				RaftHBTicks:    1,
-				RaftElectTicks: 5,
-			},
-			collector: &noOpStatCollector{},
-		},
+		hive: hive,
 		app: &app{
 			name:  "test",
 			flags: appFlagTransactional | appFlagPersistent,
@@ -234,9 +245,17 @@ func BenchmarkBeePersistence(b *testing.B) {
 		dataCh:    newMsgChannel(uint(b.N)),
 		batchSize: 1024,
 	}
-	removeState(bee.hive.config)
-	bee.createGroup()
 	bee.becomeLeader()
+	hive.registry.addBee(BeeInfo{
+		ID:     1,
+		Hive:   1,
+		App:    "test",
+		Colony: bee.colony(),
+	})
+	if err := bee.createGroup(); err != nil {
+		b.Fatal(err)
+	}
+
 	b.StartTimer()
 
 	h := benchBeeHandler{data: []byte{1, 1, 1, 1}}
@@ -253,5 +272,5 @@ func BenchmarkBeePersistence(b *testing.B) {
 
 	b.StopTimer()
 	time.Sleep(1 * time.Second)
-	bee.processCmd(cmdStop{})
+	hive.node.Stop()
 }

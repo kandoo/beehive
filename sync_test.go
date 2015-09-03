@@ -12,9 +12,7 @@ import (
 type query string
 
 func TestSync(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	app := h.NewApp("sync")
 	rcvf := func(msg Msg, ctx RcvContext) error {
 		ctx.ReplyTo(msg, msg.Data().(query))
@@ -39,9 +37,7 @@ func TestSync(t *testing.T) {
 }
 
 func TestSyncCancel(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	req := query("test")
 	ctx, ccl := context.WithCancel(context.Background())
 	go ccl()
@@ -52,9 +48,7 @@ func TestSyncCancel(t *testing.T) {
 }
 
 func TestSyncDeferReply(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	app := h.NewApp("syncDeferReply")
 	type reply string
 	type deferred struct {
@@ -122,9 +116,7 @@ func BenchmarkSync(b *testing.B) {
 	log.SetOutput(ioutil.Discard)
 	b.StopTimer()
 
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	app := h.NewApp("sync")
 	app.Handle(0, benchSyncHandler{})
 

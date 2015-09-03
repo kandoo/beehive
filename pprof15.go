@@ -3,7 +3,7 @@
 package beehive
 
 import (
-	"net/http/pprof"
+	httpPprof "net/http/pprof"
 
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/gorilla/mux"
 )
@@ -11,9 +11,9 @@ import (
 type pprofHandler struct{}
 
 func (p pprofHandler) install(r *mux.Router) {
-	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	r.HandleFunc("/debug/pprof/{rest:.*}", pprof.Index)
+	r.HandleFunc("/debug/pprof/cmdline", httpPprof.Cmdline)
+	r.HandleFunc("/debug/pprof/profile", httpPprof.Profile)
+	r.HandleFunc("/debug/pprof/symbol", httpPprof.Symbol)
+	r.HandleFunc("/debug/pprof/trace", httpPprof.Trace)
+	r.HandleFunc("/debug/pprof/{rest:.*}", httpPprof.Index)
 }

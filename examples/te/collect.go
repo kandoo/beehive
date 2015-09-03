@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
@@ -49,7 +49,7 @@ type Collector struct {
 	poller *Poller
 }
 
-func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (c *Collector) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	res := m.Data().(StatResult)
 	glog.V(2).Infof("Stat results: %+v", res)
 	matrix := ctx.Dict(matrixDict)
@@ -76,8 +76,10 @@ func (c *Collector) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (c *Collector) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
-	return bh.MappedCells{{matrixDict, m.Data().(StatResult).Switch.Key()}}
+func (c *Collector) Map(m beehive.Msg,
+	ctx beehive.MapContext) beehive.MappedCells {
+
+	return beehive.MappedCells{{matrixDict, m.Data().(StatResult).Switch.Key()}}
 }
 
 type Poller struct {
@@ -98,7 +100,7 @@ func NewPoller(timeout time.Duration) *Poller {
 	}
 }
 
-func (p *Poller) Start(ctx bh.RcvContext) {
+func (p *Poller) Start(ctx beehive.RcvContext) {
 	for {
 		select {
 		case q := <-p.query:
@@ -119,13 +121,13 @@ func (p *Poller) Start(ctx bh.RcvContext) {
 	}
 }
 
-func (p *Poller) Stop(ctx bh.RcvContext) {
+func (p *Poller) Stop(ctx beehive.RcvContext) {
 	join := make(chan bool)
 	p.quit <- join
 	<-join
 }
 
-func (p *Poller) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (p *Poller) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	return nil
 }
 
@@ -137,7 +139,7 @@ type SwitchJoinHandler struct {
 	poller *Poller
 }
 
-func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (s *SwitchJoinHandler) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	if m.NoReply() {
 		return nil
 	}
@@ -157,8 +159,8 @@ func (s *SwitchJoinHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (s *SwitchJoinHandler) Map(m bh.Msg,
-	ctx bh.MapContext) bh.MappedCells {
+func (s *SwitchJoinHandler) Map(m beehive.Msg,
+	ctx beehive.MapContext) beehive.MappedCells {
 
-	return bh.MappedCells{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
+	return beehive.MappedCells{{matrixDict, m.Data().(SwitchJoined).Switch.Key()}}
 }

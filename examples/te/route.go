@@ -1,7 +1,7 @@
 package main
 
 import (
-	bh "github.com/kandoo/beehive"
+	"github.com/kandoo/beehive"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
 )
 
@@ -11,7 +11,7 @@ const (
 
 type UpdateHandler struct{}
 
-func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (h *UpdateHandler) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	if m.NoReply() {
 		return nil
 	}
@@ -22,8 +22,10 @@ func (r *UpdateHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
 	return nil
 }
 
-func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
-	return bh.MappedCells{
+func (h *UpdateHandler) Map(m beehive.Msg,
+	ctx beehive.MapContext) beehive.MappedCells {
+
+	return beehive.MappedCells{
 		{matrixDict, "0"},
 		{topologyDict, "0"},
 	}
@@ -31,10 +33,12 @@ func (r *UpdateHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
 
 type TopologyHandler struct{}
 
-func (t *TopologyHandler) Rcv(m bh.Msg, ctx bh.RcvContext) error {
+func (h *TopologyHandler) Rcv(m beehive.Msg, ctx beehive.RcvContext) error {
 	return nil
 }
 
-func (t *TopologyHandler) Map(m bh.Msg, ctx bh.MapContext) bh.MappedCells {
-	return bh.MappedCells{{topologyDict, "0"}}
+func (h *TopologyHandler) Map(m beehive.Msg,
+	ctx beehive.MapContext) beehive.MappedCells {
+
+	return beehive.MappedCells{{topologyDict, "0"}}
 }

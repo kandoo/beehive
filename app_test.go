@@ -10,8 +10,7 @@ import (
 type AppTestMsg int
 
 func TestPersistentApp(t *testing.T) {
-	h := NewHiveWithConfig(newHiveConfigForTest())
-
+	h := newHiveForTest()
 	app := h.NewApp("persistent", Persistent(3))
 	mf := func(msg Msg, ctx MapContext) MappedCells {
 		return ctx.LocalMappedCells()
@@ -60,22 +59,19 @@ func registerPersistentApp(h Hive, ch chan hiveAndBeeID) App {
 func TestReplicatedApp(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
@@ -94,22 +90,19 @@ func TestReplicatedApp(t *testing.T) {
 func TestReplicatedAppFailure(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
@@ -156,22 +149,19 @@ func TestReplicatedAppFailure(t *testing.T) {
 func TestReplicatedAppHandoff(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
@@ -213,22 +203,19 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 	apps := make([]App, 3)
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	apps[0] = registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	apps[1] = registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	apps[2] = registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
@@ -277,22 +264,19 @@ func TestReplicatedAppMigrateToFollower(t *testing.T) {
 func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	ch := make(chan hiveAndBeeID)
 
-	cfg1 := newHiveConfigForTest()
-	h1 := NewHiveWithConfig(cfg1)
+	h1 := newHiveForTest()
 	app1 := registerPersistentApp(h1, ch)
 	go h1.Start()
 	waitTilStareted(h1)
 
-	cfg2 := newHiveConfigForTest()
-	cfg2.PeerAddrs = []string{cfg1.Addr}
-	h2 := NewHiveWithConfig(cfg2)
+	cfg1 := h1.Config()
+
+	h2 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h2, ch)
 	go h2.Start()
 	waitTilStareted(h2)
 
-	cfg3 := newHiveConfigForTest()
-	cfg3.PeerAddrs = []string{cfg1.Addr}
-	h3 := NewHiveWithConfig(cfg3)
+	h3 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h3, ch)
 	go h3.Start()
 	waitTilStareted(h3)
@@ -302,9 +286,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 	h1.Emit(AppTestMsg(0))
 	id0 := <-ch
 
-	cfg4 := newHiveConfigForTest()
-	cfg4.PeerAddrs = []string{cfg1.Addr}
-	h4 := NewHiveWithConfig(cfg4)
+	h4 := newHiveForTest(PeerAddrs(cfg1.Addr))
 	registerPersistentApp(h4, ch)
 	go h4.Start()
 	waitTilStareted(h4)
@@ -341,8 +323,7 @@ func TestReplicatedAppMigrateToNewHive(t *testing.T) {
 }
 
 func TestAppHTTP(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := hive{config: cfg}
+	h := hive{config: hiveConfig()}
 	h.httpServer = newServer(&h)
 	a := &app{
 		name: "testapp",
@@ -351,7 +332,8 @@ func TestAppHTTP(t *testing.T) {
 	a.HandleHTTPFunc("/test", func(w http.ResponseWriter, r *http.Request) {})
 	go h.httpServer.ListenAndServe()
 	time.Sleep(1 * time.Second)
-	resp, err := http.Get(fmt.Sprintf("http://%s/apps/testapp/test", cfg.Addr))
+	resp, err := http.Get(
+		fmt.Sprintf("http://%s/apps/testapp/test", h.config.Addr))
 	if err != nil {
 		t.Error(err)
 	}
@@ -361,8 +343,7 @@ func TestAppHTTP(t *testing.T) {
 }
 
 func TestRuntimeMap(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
+	h := newHiveForTest()
 	a := h.NewApp("RuntimeMap")
 
 	go h.Start()

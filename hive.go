@@ -12,15 +12,16 @@ import (
 	"net/rpc"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	etcdraft "github.com/kandoo/beehive/Godeps/_workspace/src/github.com/coreos/etcd/raft"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/golang/glog"
+	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/soheilhy/args"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/github.com/soheilhy/cmux"
 	"github.com/kandoo/beehive/Godeps/_workspace/src/golang.org/x/net/context"
-	bhflag "github.com/kandoo/beehive/flag"
 	"github.com/kandoo/beehive/raft"
 	"github.com/kandoo/beehive/randtime"
 )
@@ -80,19 +81,15 @@ type HiveConfig struct {
 	Instrument     bool // whether to instrument apps on the hive.
 	OptimizeThresh uint // when to notify the optimizer (in msg/s).
 
-	RegLockTimeout time.Duration // when to retry to lock an entry in a registry.
 	RaftTick       time.Duration // the raft tick interval.
 	RaftTickDelta  time.Duration // the maximum random delta added to the tick.
-	RaftSyncTime   time.Duration // the frequency of Fsync.
+	RaftFsyncTick  time.Duration // the frequency of Fsync.
 	RaftHBTicks    int           // number of raft ticks that fires a heartbeat.
 	RaftElectTicks int           // number of raft ticks that fires election.
-	RaftInflights  int           // maximum number of inflights to a node.
+	RaftInFlights  int           // maximum number of inflights to a node.
 	RaftMaxMsgSize uint64        // maximum size of an append message.
 
-	MaxConnPerHost int           // max parallel data connections to a host.
-	ConnTimeout    time.Duration // timeout for connections between hives.
-	BatcherPerHost int           // number of parallel batchers per host.
-	BatcherTimeout time.Duration // timeout used in the batchers.
+	ConnTimeout time.Duration // timeout for connections between hives.
 }
 
 // RaftElectTimeout returns the raft election timeout as
@@ -106,22 +103,178 @@ func (c HiveConfig) RaftHBTimeout() time.Duration {
 	return time.Duration(c.RaftHBTicks) * (c.RaftTick + c.RaftTickDelta)
 }
 
-var raftOnce sync.Once
+var raftLogOnce sync.Once
 
-// NewHiveWithConfig creates a new hive based on the given configuration.
-func NewHiveWithConfig(cfg HiveConfig) Hive {
+// HiveOption represents a configuration option of a hive.
+type HiveOption args.V
+
+var addr = args.NewString(args.Flag("addr", "localhost:7677",
+	"the server listening address used for both RPC and HTTP"))
+
+// Addr represents the listening address of the hive used for both inter-hive
+// RPC and its HTTP/web interface.
+func Addr(a string) HiveOption { return HiveOption(addr(a)) }
+
+var paddrs = args.NewString(args.Flag("paddrs", "",
+	"address of peers. Seperate entries with a comma"))
+
+// PeerAddrs represents the peer addresses of hive.
+func PeerAddrs(pa ...string) HiveOption {
+	return HiveOption(paddrs(strings.Join(pa, ",")))
+}
+
+var dataChBufSize = args.NewUint(args.Flag("chsize", uint(1024),
+	"buffer size of data channels"))
+
+// DataChBufSize represents the size of the message channels used by hives,
+// queen bees and bees.
+func DataChBufSize(s uint) HiveOption { return HiveOption(dataChBufSize(s)) }
+
+var cmdChBufSize = args.NewUint(args.Flag("cmdchsize", uint(128),
+	"buffer size of command channels"))
+
+// CmdChBufSize represents the size of the command channel used by hives,
+// queen bees and bees.
+func CmdChBufSize(s uint) HiveOption { return HiveOption(cmdChBufSize(s)) }
+
+var batchSize = args.NewUint(args.Flag("batch", uint(1024),
+	"number of messages to batch per transaction"))
+
+// BatchSize represents the maximum batch size used for batching messages
+// in a hive.
+func BatchSize(s uint) HiveOption { return HiveOption(batchSize(s)) }
+
+var syncPoolSize = args.NewUint(args.Flag("sync", uint(16),
+	"number of sync go-routines"))
+
+// SyncPoolSize represents the number of sync go-routines running in a hive.
+// These go-routine handle sync requests.
+func SyncPoolSize(s uint) HiveOption { return HiveOption(syncPoolSize(s)) }
+
+var pprof = args.NewBool(args.Flag("pprof", false,
+	"whether to install pprof on /debug/pprof"))
+
+// Pprof represents whether the hive should enable pprof handlers on its HTTP
+// interface.
+func Pprof(p bool) HiveOption { return HiveOption(pprof(p)) }
+
+var instrument = args.NewBool(args.Flag("instrument", false,
+	"whether to insturment apps"))
+
+// InstrumentOptimize represents whether the hive should perform runtime
+// intstrumentation and optimization.
+func InstrumentOptimize(i bool) HiveOption { return HiveOption(instrument(i)) }
+
+var optimizeThresh = args.NewUint(args.Flag("optthresh", uint(10),
+	"when the local stat collector should notify the optimizer (in msg/s)."))
+
+// OptimizeThresh represents the minimum message rate (i.e., the number of
+// messages per second) after which we notify the optimizer.
+func OptimizeThresh(t uint) HiveOption { return HiveOption(optimizeThresh(t)) }
+
+var statePath = args.NewString(args.Flag("statepath", "/tmp/beehive",
+	"where to store persistent state data"))
+
+// StatePath represents where the hive should save its state.
+func StatePath(p string) HiveOption { return HiveOption(statePath(p)) }
+
+var raftTick = args.NewDuration(args.Flag("rafttick", 100*time.Millisecond,
+	"raft tick period"))
+
+// RaftTick represents the raft tick.
+func RaftTick(t time.Duration) HiveOption { return HiveOption(raftTick(t)) }
+
+var raftTickDelta = args.NewDuration(args.Flag("deltarafttick",
+	0*time.Millisecond, "max random duration added to the raft tick per tick"))
+
+// RaftTickDelta represents the random tick to add to the main raft tick.
+func RaftTickDelta(d time.Duration) HiveOption {
+	return HiveOption(raftTickDelta(d))
+}
+
+var raftFsyncTick = args.NewDuration(args.Flag("raftfsync", 1*time.Second,
+	"the frequency of raft fsync. 0 means always sync immidiately"))
+
+// RaftFsyncTick represents when the hive should call fsync on written entires.
+// 0 means immidiately after each write.
+func RaftFsyncTick(t time.Duration) HiveOption {
+	return HiveOption(raftFsyncTick(t))
+}
+
+var raftElectTicks = args.NewInt(args.Flag("raftelectionticks", 5,
+	"number of raft ticks to start an election (ie, election timeout)"))
+
+// RaftElectTicks represents the number of ticks to start a new raft election.
+func RaftElectTicks(e int) HiveOption { return HiveOption(raftElectTicks(e)) }
+
+var raftHbeatTicks = args.NewInt(args.Flag("rafthbticks", 1,
+	"number of raft ticks to fire a heartbeat (ie, heartbeat timeout)"))
+
+// RaftHbeatTicks represents the number of ticks to send a new raft heartbeat.
+func RaftHbeatTicks(h int) HiveOption { return HiveOption(raftHbeatTicks(h)) }
+
+// TODO(soheil): use a better set of default values.
+var raftInFlights = args.NewInt(args.Flag("raftmaxinflights", 4096/8,
+	"maximum number of inflight raft append messages"))
+
+// RaftInFlights represents the maximum number of raft messages in flight.
+func RaftInFlights(f int) HiveOption { return HiveOption(raftInFlights(f)) }
+
+var raftMaxMsgSize = args.NewUint64(args.Flag("raftmaxmsgsize",
+	uint64(1*1024*1024), "maximum number of a raft append message"))
+
+// RaftMaxMsgSize represents the maximum number of entries in a raft message.
+func RaftMaxMsgSize(s uint64) HiveOption {
+	return HiveOption(raftMaxMsgSize(s))
+}
+
+var connTimeout = args.NewDuration(args.Flag("conntimeout", 60*time.Second,
+	"timeout for trying to connect to other hives"))
+
+// ConnTimeout represents the connection timeout for RPC connections.
+func ConnTimeout(t time.Duration) HiveOption {
+	return HiveOption(connTimeout(t))
+}
+
+func hiveConfig(opts ...HiveOption) (cfg HiveConfig) {
+	cfg.Addr = addr.Get(opts)
+	if paddrs.IsSet(opts) {
+		cfg.PeerAddrs = strings.Split(paddrs.Get(opts), ",")
+	}
+	cfg.StatePath = statePath.Get(opts)
+	cfg.DataChBufSize = dataChBufSize.Get(opts)
+	cfg.CmdChBufSize = cmdChBufSize.Get(opts)
+	cfg.BatchSize = batchSize.Get(opts)
+	cfg.SyncPoolSize = syncPoolSize.Get(opts)
+	cfg.Pprof = pprof.Get(opts)
+	cfg.Instrument = instrument.Get(opts)
+	cfg.OptimizeThresh = optimizeThresh.Get(opts)
+	cfg.RaftTick = raftTick.Get(opts)
+	cfg.RaftTickDelta = raftTickDelta.Get(opts)
+	cfg.RaftFsyncTick = raftFsyncTick.Get(opts)
+	cfg.RaftHBTicks = raftHbeatTicks.Get(opts)
+	cfg.RaftElectTicks = raftElectTicks.Get(opts)
+	cfg.RaftInFlights = raftInFlights.Get(opts)
+	cfg.RaftMaxMsgSize = raftMaxMsgSize.Get(opts)
+	cfg.ConnTimeout = connTimeout.Get(opts)
+	return cfg
+}
+
+// NewHive creates a new hive based on the given configuration options.
+func NewHive(opts ...HiveOption) Hive {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
 
 	if !glog.V(1) {
-		raftOnce.Do(func() {
+		raftLogOnce.Do(func() {
 			etcdraft.SetLogger(&etcdraft.DefaultLogger{
 				Logger: log.New(ioutil.Discard, "", 0),
 			})
 		})
 	}
 
+	cfg := hiveConfig(opts...)
 	os.MkdirAll(cfg.StatePath, 0700)
 	m := meta(cfg)
 	h := &hive{
@@ -150,67 +303,6 @@ func NewHiveWithConfig(cfg HiveConfig) Hive {
 	h.initSync()
 
 	return h
-}
-
-// DefaultCfg is the default configration for hives in beehive.
-var DefaultCfg = HiveConfig{}
-
-// NewHive creates a new hive and load its configuration from command line
-// flags.
-func NewHive() Hive {
-	if !flag.Parsed() {
-		flag.Parse()
-	}
-
-	return NewHiveWithConfig(DefaultCfg)
-}
-
-func init() {
-	flag.StringVar(&DefaultCfg.Addr, "addr", "localhost:7677",
-		"the server listening address used for both RPC and HTTP")
-	flag.Var(&bhflag.CSV{S: &DefaultCfg.PeerAddrs}, "paddrs",
-		"address of peers. Seperate entries with a comma")
-	flag.UintVar(&DefaultCfg.DataChBufSize, "chsize", 1024,
-		"buffer size of data channels")
-	flag.UintVar(&DefaultCfg.CmdChBufSize, "cmdchsize", 128,
-		"buffer size of command channels")
-	flag.UintVar(&DefaultCfg.BatchSize, "batch", 1024,
-		"number of messages to batch per transaction")
-	flag.UintVar(&DefaultCfg.SyncPoolSize, "sync", 16,
-		"number of sync go-routines")
-	flag.BoolVar(&DefaultCfg.Pprof, "pprof", false,
-		"whether to install pprof on /debug/pprof")
-	flag.BoolVar(&DefaultCfg.Instrument, "instrument", false,
-		"whether to insturment apps")
-	flag.UintVar(&DefaultCfg.OptimizeThresh, "optthresh", 10,
-		"when the local stat collector should notify the optimizer (in msg/s).")
-	flag.StringVar(&DefaultCfg.StatePath, "statepath", "/tmp/beehive",
-		"where to store persistent state data")
-	flag.DurationVar(&DefaultCfg.RegLockTimeout, "reglocktimeout",
-		10*time.Millisecond, "timeout to retry locking an entry in the registry")
-	flag.DurationVar(&DefaultCfg.RaftTick, "rafttick", 100*time.Millisecond,
-		"raft tick period")
-	flag.DurationVar(&DefaultCfg.RaftTickDelta, "deltarafttick",
-		0*time.Millisecond, "max random duration added to the raft tick per tick")
-	flag.DurationVar(&DefaultCfg.RaftSyncTime, "raftsync", 1*time.Second,
-		"the frequency of raft fsync. 0 means always sync immidiately")
-	flag.IntVar(&DefaultCfg.RaftElectTicks, "raftelectionticks", 5,
-		"number of raft ticks to start an election (ie, election timeout)")
-	flag.IntVar(&DefaultCfg.RaftHBTicks, "rafthbticks", 1,
-		"number of raft ticks to fire a heartbeat (ie, heartbeat timeout)")
-	// TODO(soheil): use a better set of default values.
-	flag.IntVar(&DefaultCfg.RaftInflights, "raftmaxinflights", 4096/8,
-		"maximum number of inflight raft append messages")
-	flag.Uint64Var(&DefaultCfg.RaftMaxMsgSize, "raftmaxmsgsize", 1*1024*1024,
-		"maximum number of a raft append message")
-	flag.IntVar(&DefaultCfg.MaxConnPerHost, "maxconn", 32,
-		"maximum number of parallel data connectons to a remote host")
-	flag.DurationVar(&DefaultCfg.ConnTimeout, "conntimeout", 60*time.Second,
-		"timeout for trying to connect to other hives")
-	flag.IntVar(&DefaultCfg.BatcherPerHost, "batchers", 1,
-		"number of parallel batchers per host")
-	flag.DurationVar(&DefaultCfg.BatcherTimeout, "batchertimeout",
-		1*time.Millisecond, "timeout used for batching")
 }
 
 type qeeAndHandler struct {
@@ -500,10 +592,10 @@ func (h *hive) startRaftNode() {
 		Peers:          peers,
 		DataDir:        h.config.StatePath,
 		SnapCount:      1024,
-		SyncTime:       h.config.RaftSyncTime,
+		FsyncTick:      h.config.RaftFsyncTick,
 		ElectionTicks:  h.config.RaftElectTicks,
 		HeartbeatTicks: h.config.RaftHBTicks,
-		MaxInFlights:   h.config.RaftInflights,
+		MaxInFlights:   h.config.RaftInFlights,
 		MaxMsgSize:     h.config.RaftMaxMsgSize,
 	}
 	if err := h.node.CreateGroup(context.TODO(), gcfg); err != nil {

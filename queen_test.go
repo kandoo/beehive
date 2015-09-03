@@ -7,9 +7,7 @@ import (
 )
 
 func TestQueenMultipleKeys(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
-
+	h := newHiveForTest()
 	ch := make(chan uint64)
 	mapf := func(msg Msg, ctx MapContext) MappedCells {
 		return MappedCells{{"D", msg.Data().(string)}, {"D", "K"}}
@@ -68,19 +66,17 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 
 	var hives []Hive
 	for i := 0; i < hiveN; i++ {
-		cfg := newHiveConfigForTest()
-		if i != 0 {
-			cfg.PeerAddrs = []string{hives[0].(*hive).config.Addr}
+		var h Hive
+		if i == 0 {
+			h = newHiveForTest()
+		} else {
+			h = newHiveForTest(PeerAddrs(hives[0].Config().Addr))
 		}
-		h := NewHiveWithConfig(cfg)
-
 		a := h.NewApp("qeeBenchApp")
 		a.Handle("", handler)
-
 		go h.Start()
 		waitTilStareted(h)
 		defer h.Stop()
-
 		hives = append(hives, h)
 	}
 
@@ -94,7 +90,7 @@ func doBenchmarkQueenBeeCreation(b *testing.B, hiveN int) {
 
 	a, _ := hives[0].(*hive).app("qeeBenchApp")
 	qee := a.qee
-	batch := int(DefaultCfg.BatchSize)
+	batch := int(hives[0].Config().BatchSize)
 
 	b.StartTimer()
 

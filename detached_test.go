@@ -36,12 +36,9 @@ func (d *testDetachedHandler) Rcv(msg Msg, ctx RcvContext) error {
 }
 
 func TestDetached(t *testing.T) {
-	cfg := newHiveConfigForTest()
-	h := NewHiveWithConfig(cfg)
+	h := newHiveForTest()
 	app := h.NewApp("TestDetached")
-
 	nDetached := 10
-
 	msgCh := make(chan bool)
 	for i := 0; i < nDetached; i++ {
 		app.Detached(&testDetachedHandler{

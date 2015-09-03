@@ -156,10 +156,10 @@ func (b *bee) createGroup() error {
 		Peers:          b.peers(),
 		DataDir:        b.statePath(),
 		SnapCount:      1024,
-		SyncTime:       b.hive.config.RaftSyncTime,
+		FsyncTick:      b.hive.config.RaftFsyncTick,
 		ElectionTicks:  b.hive.config.RaftElectTicks,
 		HeartbeatTicks: b.hive.config.RaftHBTicks,
-		MaxInFlights:   b.hive.config.RaftInflights,
+		MaxInFlights:   b.hive.config.RaftInFlights,
 		MaxMsgSize:     b.hive.config.RaftMaxMsgSize,
 	}
 	if err := b.hive.node.CreateGroup(context.TODO(), cfg); err != nil {
@@ -491,7 +491,9 @@ func (b *bee) handleMsgLeader(mhs []msgAndHandler) {
 		}
 
 		mh := mhs[i]
-		glog.V(2).Infof("%v handles message %v", b, mh.msg)
+		if glog.V(2) {
+			glog.Infof("%v handles message %v", b, mh.msg)
+		}
 		b.callRcv(mh)
 
 		if usetx {
