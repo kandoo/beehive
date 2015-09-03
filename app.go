@@ -399,7 +399,6 @@ func (a *app) appHTTPPrefix() string {
 }
 
 func (a *app) initQee() {
-	// TODO(soheil): Maybe stop the previous qee if any?
 	a.qee = &qee{
 		dataCh:       newMsgChannel(a.hive.config.DataChBufSize),
 		ctrlCh:       make(chan cmdAndChannel, a.hive.config.CmdChBufSize),

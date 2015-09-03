@@ -225,7 +225,6 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 
 		b.setTerm(ev.Term)
 
-		// TODO(soheil): this can be problematic if not done in sync.
 		go func() {
 			// FIXME(): add raft term to make sure it's versioned.
 			glog.V(2).Infof("%v is the new leader of %v", b, oldc)
@@ -236,14 +235,13 @@ func (b *bee) ProcessStatusChange(sch interface{}) {
 			}
 
 			// TODO(soheil): should we have a max retry?
-			// TODO(soheil): maybe do this in a go-routine.
 			_, err := b.hive.node.ProposeRetry(hiveGroup, up,
 				b.hive.config.RaftElectTimeout(), -1)
 			if err != nil {
 				glog.Errorf("%v cannot update its colony: %v", b, err)
 			}
 		}()
-		// FIXME(soheil): add health checks here and recruit if needed.
+		// TODO(soheil): add health checks here and recruit if needed.
 	}
 }
 
