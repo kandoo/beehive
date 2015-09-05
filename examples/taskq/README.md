@@ -21,21 +21,26 @@ $ go get github.com/kandoo/beehive/examples/taskq
 ```
 
 ## Running the first node 
+Each taskq server has two listening ports. One used for its RESTful API and also
+for Beehive's RPC. The other one is used for taskq's text-based protocol. The
+former is set using `-addr` and the later is set using `-taskq.addr`.
+
 You can run the first node using:
 ```bash
-taskq -logtostderr -addr ADDR1 -statepath STATE1
+taskq -logtostderr -addr ADDR1 -taskq.addr TADDR1 -statepath DIR1
 ```
 
-`ADDR1` is the address of the first node in the form of `IP:PORT`.
-`STATE1` is the directory in which the first node stores its state.
+`ADDR1` and `TADDR1` are the listening addresses of the first node in the form
+of `IP:PORT`. `STATE1` is the directory where the first node stores its state.
 
 ## Running a cluster
 You can run new nodes to join the cluster using:
+
 ```bash
-taskq -logtostderr -addr ADDRN -paddrs ADDR1 -statepath STATEN
+taskq -logtostderr -addr ADDRN -paddrs ADDR1 -taskq.addr TADDRN -statepath DIRN
 ```
 
-`ADDRN` is the address of the new node in the form of `IP:PORT`.
-`ADDR1` is the address of the first node.
-`STATEN` is the directory in which the N'th node stores its state.
+`ADDRN` and `TADDRN` are the listening addresses of the new node in the form
+of `IP:PORT`. `ADDR1` is the address of the first node.
+`DIRN` is the directory where the N'th node stores its state.
 
