@@ -115,7 +115,7 @@ func launchWorker(c *client.Client, w workload, timeout time.Duration,
 			if i == 0 {
 				minStart = now
 			}
-			req, _ := c.DoEnQ(string(e.Queue), e.Body, call)
+			req, _ := c.GoEnQ(string(e.Queue), e.Body, call)
 			reqStart[req] = now
 		}
 		close(done)

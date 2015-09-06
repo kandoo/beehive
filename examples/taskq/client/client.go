@@ -25,6 +25,7 @@ var (
 	ErrInvalidResponse = errors.New("taskq client: invalid response")
 )
 
+// Client represents a client to a taskq server.
 type Client struct {
 	sync.Mutex
 	conn  net.Conn
@@ -34,6 +35,7 @@ type Client struct {
 	done  chan struct{}
 }
 
+// New creates a client to the given address.
 func New(addr string) (client *Client, err error) {
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -50,12 +52,15 @@ func New(addr string) (client *Client, err error) {
 	return client, nil
 }
 
+// Call represents one asynchronous request enqued by the client. Once the
+// response is received, the client will send it over this channel.
 type Call chan Response
 
+// Response represents a response to a request.
 type Response struct {
-	Request server.Request
-	Data    interface{}
-	Error   error
+	Request server.Request // Request is the request ID.
+	Data    interface{}    // Data is the response data returned by the server.
+	Error   error          // Error is the response error.
 }
 
 func (c *Client) serve() {
@@ -295,6 +300,8 @@ func (c *Client) handleError(req server.Request, r *bufio.Reader) (res Response,
 	return
 }
 
+// Close closes the client and its underlying connection. All pending calls
+// will be returned with an error.
 func (c *Client) Close() {
 	c.conn.Close()
 	<-c.done
@@ -326,7 +333,12 @@ func (c *Client) getDelCall(req server.Request) (call Call, err error) {
 	return
 }
 
-func (c *Client) DoEnQ(queue string, body []byte, call Call) (
+// GoEnQ enques a task with the given body in the given queue. This method
+// returns the request ID and the Call represeting the enque.
+//
+// If call is nil in the arguments, this method returns a new call. Otherwise
+// it reuses and returns the provided call.
+func (c *Client) GoEnQ(queue string, body []byte, call Call) (
 	server.Request, Call) {
 
 	if call == nil {
@@ -376,7 +388,12 @@ func (c *Client) DoEnQ(queue string, body []byte, call Call) (
 	return req, call
 }
 
-func (c *Client) DoDeQ(queue string, call Call) (server.Request, Call) {
+// GoDeQ dequeues a task from the given queue. This method returns the request
+// ID and the Call represeting the enque.
+//
+// If call is nil in the arguments, this method returns a new call. Otherwise
+// it reuses and returns the provided call.
+func (c *Client) GoDeQ(queue string, call Call) (server.Request, Call) {
 	if call == nil {
 		call = make(chan Response, 1)
 	}
@@ -412,7 +429,12 @@ func (c *Client) DoDeQ(queue string, call Call) (server.Request, Call) {
 	return req, call
 }
 
-func (c *Client) DoAck(queue string, taskID server.TaskID, call Call) (
+// GoAck acknowledges a task in the given queue. This method returns the request
+// ID and the Call represeting the enque.
+//
+// If call is nil in the arguments, this method returns a new call. Otherwise
+// it reuses and returns the provided call.
+func (c *Client) GoAck(queue string, taskID server.TaskID, call Call) (
 	server.Request, Call) {
 
 	if call == nil {
@@ -456,10 +478,12 @@ func (c *Client) DoAck(queue string, taskID server.TaskID, call Call) (
 	return req, call
 }
 
+// EnQ enqueues a task with the given body in the queue. It returns the
+// task's id or an error.
 func (c *Client) EnQ(ctx context.Context, queue string, body []byte) (
 	id server.TaskID, err error) {
 
-	_, call := c.DoEnQ(queue, body, nil)
+	_, call := c.GoEnQ(queue, body, nil)
 	select {
 	case res := <-call:
 		if res.Error != nil {
@@ -471,21 +495,11 @@ func (c *Client) EnQ(ctx context.Context, queue string, body []byte) (
 	}
 }
 
-func (c *Client) Ack(ctx context.Context, queue string, task server.TaskID) (
-	err error) {
-	_, call := c.DoAck(queue, task, nil)
-	select {
-	case res := <-call:
-		return res.Error
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
+// DeQ dequeues a task from the given queue. It returns the task or an error.
 func (c *Client) DeQ(ctx context.Context, queue string) (task server.Task,
 	err error) {
 
-	_, call := c.DoDeQ(queue, nil)
+	_, call := c.GoDeQ(queue, nil)
 	select {
 	case res := <-call:
 		if res.Error != nil {
@@ -494,5 +508,17 @@ func (c *Client) DeQ(ctx context.Context, queue string) (task server.Task,
 		return res.Data.(server.Task), nil
 	case <-ctx.Done():
 		return server.Task{}, ctx.Err()
+	}
+}
+
+// Ack acknowledges a task in the queue.
+func (c *Client) Ack(ctx context.Context, queue string, task server.TaskID) (
+	err error) {
+	_, call := c.GoAck(queue, task, nil)
+	select {
+	case res := <-call:
+		return res.Error
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
