@@ -104,8 +104,8 @@ func launchWorker(c *client.Client, w workload, timeout time.Duration,
 	<-start
 
 	call := make(chan client.Response, len(w.enqs))
-	reqStart := make(map[server.Request]time.Time)
-	reqEnd := make(map[server.Request]time.Time)
+	reqStart := make(map[server.ReqID]time.Time)
+	reqEnd := make(map[server.ReqID]time.Time)
 
 	var minStart time.Time
 	done := make(chan struct{})
@@ -137,7 +137,7 @@ loop:
 			if response.Error != nil {
 				continue
 			}
-			reqEnd[response.Request] = time.Now()
+			reqEnd[response.ID] = time.Now()
 			res.reqs++
 		case <-to:
 			break loop

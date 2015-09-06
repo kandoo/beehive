@@ -39,7 +39,8 @@ const (
 var (
 	// ErrEmptyQueue is returned when dequeing an empty queue.
 	ErrEmptyQueue = errors.New("taskq: no task in queue")
-	// ErrNoTask is returned when acking or accessing a task that does not exist.
+	// ErrNoSuchTask is returned when acking or accessing a task that does not
+	// exist.
 	ErrNoSuchTask = errors.New("taskq: no such task")
 	// ErrInvalidCmd is returned by the protocol handler whenever an invalid
 	// command is sent to the server.
@@ -75,42 +76,42 @@ type dqTask struct {
 	DequeTime time.Time // When the task is dequed.
 }
 
-// Request contains a client assigned request ID.
-type Request uint64
+// ReqID contains a client assigned request ID.
+type ReqID uint64
 
-func (r Request) String() string {
+func (r ReqID) String() string {
 	return strconv.FormatUint(uint64(r), 10)
 }
 
-// Enqueue enqueus a task.
+// Enque enqueus a task.
 type Enque struct {
-	Request Request // The client request.
-	Queue   Queue   // The queue to enque the task.
-	Body    []byte  // The body of the task to be enqued.
+	ID    ReqID  // The client-assigned request ID.
+	Queue Queue  // The queue to enque the task.
+	Body  []byte // The body of the task to be enqued.
 }
 
 // Deque represents a message emitted to dequeue a task from a queue.
 type Deque struct {
-	Request Request // The client request.
-	Queue   Queue   // The queue to dequeue a task from.
+	ID    ReqID // The client-assigned request ID.
+	Queue Queue // The queue to dequeue a task from.
 }
 
 // Ack represents a message emitted to acknowledge a previously dequeued task.
 type Ack struct {
-	Request Request // The client request.
-	Queue   Queue   // The queue.
-	TaskID  TaskID  // The task ID.
+	ID     ReqID  // The client-assigned request ID.
+	Queue  Queue  // The queue.
+	TaskID TaskID // The task ID.
 }
 
 // Enqued represents a message emitted as a reply to a successful Enque request.
 type Enqued struct {
-	Request Request // The client request.
-	Queue   Queue   // The queue that the task is enqueued in.
-	TaskID  TaskID  // The assigned ID of the enqueued task.
+	ID     ReqID  // The client-assigned request ID.
+	Queue  Queue  // The queue that the task is enqueued in.
+	TaskID TaskID // The assigned ID of the enqueued task.
 }
 
 func (e Enqued) writeTo(w *bufio.Writer) (err error) {
-	if _, err = w.WriteString(e.Request.String()); err != nil {
+	if _, err = w.WriteString(e.ID.String()); err != nil {
 		return err
 	}
 
@@ -118,7 +119,7 @@ func (e Enqued) writeTo(w *bufio.Writer) (err error) {
 		return err
 	}
 
-	if _, err = w.Write(ProtoRepEnQed); err != nil {
+	if _, err = w.Write(ProtoResEnQed); err != nil {
 		return err
 	}
 
@@ -147,12 +148,12 @@ func (e Enqued) writeTo(w *bufio.Writer) (err error) {
 
 // Dequed represents a message emitted as a reply to a successful Deque request.
 type Dequed struct {
-	Request Request // The client request.
-	Task    Task    // The task that is dequeued.
+	ID   ReqID // The request ID.
+	Task Task  // The task that is dequeued.
 }
 
 func (d Dequed) writeTo(w *bufio.Writer) (err error) {
-	if _, err = w.WriteString(d.Request.String()); err != nil {
+	if _, err = w.WriteString(d.ID.String()); err != nil {
 		return err
 	}
 
@@ -160,7 +161,7 @@ func (d Dequed) writeTo(w *bufio.Writer) (err error) {
 		return err
 	}
 
-	if _, err = w.Write(ProtoRepDeQed); err != nil {
+	if _, err = w.Write(ProtoResDeQed); err != nil {
 		return err
 	}
 
@@ -205,13 +206,13 @@ func (d Dequed) writeTo(w *bufio.Writer) (err error) {
 
 // Acked represents a message emitted as a reply to a successful Ack request.
 type Acked struct {
-	Request Request // The client request.
-	Queue   Queue   // The queue.
-	TaskID  TaskID  // The ID of the acknowledged task.
+	ID     ReqID  // The request ID.
+	Queue  Queue  // The queue.
+	TaskID TaskID // The ID of the acknowledged task.
 }
 
 func (a Acked) writeTo(w *bufio.Writer) (err error) {
-	if _, err = w.WriteString(a.Request.String()); err != nil {
+	if _, err = w.WriteString(a.ID.String()); err != nil {
 		return err
 	}
 
@@ -219,7 +220,7 @@ func (a Acked) writeTo(w *bufio.Writer) (err error) {
 		return err
 	}
 
-	if _, err = w.Write(ProtoRepAcked); err != nil {
+	if _, err = w.Write(ProtoResAcked); err != nil {
 		return err
 	}
 
@@ -252,16 +253,16 @@ type writerTo interface {
 
 // Error is a message replied when there is an error handling a request.
 type Error struct {
-	Request        // The client request.
+	ID      ReqID  // The request ID.
 	Message string // The error message.
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("taskq error for request %v: %v", e.Request, e.Message)
+	return fmt.Sprintf("taskq error for request %v: %v", e.ID, e.Message)
 }
 
 func (e *Error) writeTo(w *bufio.Writer) error {
-	if _, err := w.WriteString(e.Request.String()); err != nil {
+	if _, err := w.WriteString(e.ID.String()); err != nil {
 		return err
 	}
 
@@ -269,7 +270,7 @@ func (e *Error) writeTo(w *bufio.Writer) error {
 		return err
 	}
 
-	if _, err := w.Write(ProtoRepError); err != nil {
+	if _, err := w.Write(ProtoResError); err != nil {
 		return err
 	}
 
@@ -318,9 +319,9 @@ func (h EnQHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	}
 
 	enqued := Enqued{
-		Request: enq.Request,
-		Queue:   enq.Queue,
-		TaskID:  next,
+		ID:     enq.ID,
+		Queue:  enq.Queue,
+		TaskID: next,
 	}
 	return ctx.ReplyTo(msg, enqued)
 }
@@ -336,8 +337,8 @@ func (h EnQHandler) Map(msg beehive.Msg,
 // doDequeTask adds a task to the dequed dictionary and replys to the message.
 func doDequeTask(msg beehive.Msg, ctx beehive.RcvContext, t Task) error {
 	ctx.ReplyTo(msg, Dequed{
-		Request: msg.Data().(Deque).Request,
-		Task:    t,
+		ID:   msg.Data().(Deque).ID,
+		Task: t,
 	})
 
 	ddict := ctx.Dict(dequed)
@@ -403,9 +404,9 @@ type AckHandler struct{}
 func (h AckHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	ack := msg.Data().(Ack)
 	acked := Acked{
-		Request: ack.Request,
-		Queue:   ack.Queue,
-		TaskID:  ack.TaskID,
+		ID:     ack.ID,
+		Queue:  ack.Queue,
+		TaskID: ack.TaskID,
 	}
 
 	key := ack.TaskID.String()
@@ -589,26 +590,29 @@ func (h *AckHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	CmdLen = 3
-	ResLen = 5
+	ReqLen = 3 // ReqLen is length of a taskq request verb.
+	ResLen = 5 // ResLen is length of a taskq response verb.
 )
 
 var (
-	ProtoCmdEnQ = []byte("enq")
-	ProtoCmdDeQ = []byte("deq")
-	ProtoCmdAck = []byte("ack")
+	ProtoReqEnQ = []byte("enq") // ProtoReqEnQ represents an enqueue.
+	ProtoReqDeQ = []byte("deq") // ProtoReqDeQ represents a dequeue.
+	ProtoReqAck = []byte("ack") // ProtoReqAck represents an acknowledgement.
 
-	ProtoRepEnQed = []byte("enqed")
-	ProtoRepDeQed = []byte("deqed")
-	ProtoRepAcked = []byte("acked")
-	ProtoRepError = []byte("error")
+	ProtoResEnQed = []byte("enqed") // ProtoResEnQed is a response to an enqueue.
+	ProtoResDeQed = []byte("deqed") // ProtoResDeQed is a response to a dequeue.
+	ProtoResAcked = []byte("acked") // ProtoResAcked is a response to an ack.
+	ProtoResError = []byte("error") // ProtoResError is an error response.
 )
 
+// ProtoHandler is the detached handler that implements the taskq protocol.
 type ProtoHandler struct {
 	lis  net.Listener
 	done chan struct{}
 }
 
+// NewProtoHandler creates a detached handler for the taskq protocol listening
+// on the given address. addr should be in the form of IP:PORT.
 func NewProtoHandler(addr string) (h *ProtoHandler, err error) {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -637,7 +641,7 @@ func (h *ProtoHandler) Start(ctx beehive.RcvContext) {
 		}
 
 		// TODO(soheil): do we need to be graceful for connections?
-		go ctx.StartDetached(h.NewConnHandler(c))
+		go ctx.StartDetached(NewConnHandler(c))
 	}
 }
 
@@ -650,13 +654,15 @@ func (h *ProtoHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	return errors.New("protohandler: received unexpected message")
 }
 
+// ConnHandler is a detached handler that handles a single taskq connection.
 type ConnHandler struct {
 	conn net.Conn
 	done chan struct{}
 	w    *bufio.Writer
 }
 
-func (h *ProtoHandler) NewConnHandler(conn net.Conn) *ConnHandler {
+// NewConnHandler creates a new connection handler for the given connection.
+func NewConnHandler(conn net.Conn) *ConnHandler {
 	return &ConnHandler{
 		conn: conn,
 		done: make(chan struct{}),
@@ -667,7 +673,7 @@ func (h *ConnHandler) Start(ctx beehive.RcvContext) {
 	r := bufio.NewReader(h.conn)
 	h.w = bufio.NewWriter(h.conn)
 
-	var req Request
+	var req ReqID
 	var cmd []byte
 	var err error
 
@@ -692,13 +698,13 @@ func (h *ConnHandler) Start(ctx beehive.RcvContext) {
 		}
 
 		switch {
-		case bytes.Equal(cmd, ProtoCmdEnQ):
+		case bytes.Equal(cmd, ProtoReqEnQ):
 			err = h.handleEnQ(req, ctx, r)
 
-		case bytes.Equal(cmd, ProtoCmdDeQ):
+		case bytes.Equal(cmd, ProtoReqDeQ):
 			err = h.handleDeQ(req, ctx, r)
 
-		case bytes.Equal(cmd, ProtoCmdAck):
+		case bytes.Equal(cmd, ProtoReqAck):
 			err = h.handleAck(req, ctx, r)
 
 		default:
@@ -711,18 +717,18 @@ func (h *ConnHandler) Start(ctx beehive.RcvContext) {
 	}
 }
 
-func (h *ConnHandler) readRequestID(r *bufio.Reader) (req Request, err error) {
+func (h *ConnHandler) readRequestID(r *bufio.Reader) (id ReqID, err error) {
 	reqs, err := r.ReadString(' ')
 	if err != nil {
 		return 0, err
 	}
-	id, err := strconv.ParseUint(reqs[:len(reqs)-1], 10, 64)
-	return Request(id), err
+	n, err := strconv.ParseUint(reqs[:len(reqs)-1], 10, 64)
+	return ReqID(n), err
 }
 
 func (h *ConnHandler) readCmd(r *bufio.Reader) (cmd []byte, err error) {
-	cmd = make([]byte, CmdLen)
-	if n, err := io.ReadAtLeast(r, cmd, CmdLen); n != CmdLen {
+	cmd = make([]byte, ReqLen)
+	if n, err := io.ReadAtLeast(r, cmd, ReqLen); n != ReqLen {
 		if err == io.EOF {
 			return nil, err
 		}
@@ -736,7 +742,7 @@ func (h *ConnHandler) readCmd(r *bufio.Reader) (cmd []byte, err error) {
 	return cmd, nil
 }
 
-func (h *ConnHandler) handleEnQ(req Request, ctx beehive.RcvContext,
+func (h *ConnHandler) handleEnQ(req ReqID, ctx beehive.RcvContext,
 	r *bufio.Reader) error {
 
 	q, err := r.ReadString(' ')
@@ -770,9 +776,9 @@ func (h *ConnHandler) handleEnQ(req Request, ctx beehive.RcvContext,
 	}
 
 	ctx.Emit(Enque{
-		Request: req,
-		Queue:   Queue(q),
-		Body:    d,
+		ID:    req,
+		Queue: Queue(q),
+		Body:  d,
 	})
 	return nil
 }
@@ -818,7 +824,7 @@ func dropNewLine(str string) string {
 	return str[:l-1]
 }
 
-func (h *ConnHandler) handleDeQ(req Request, ctx beehive.RcvContext,
+func (h *ConnHandler) handleDeQ(req ReqID, ctx beehive.RcvContext,
 	r *bufio.Reader) error {
 
 	q, err := r.ReadString('\n')
@@ -828,13 +834,13 @@ func (h *ConnHandler) handleDeQ(req Request, ctx beehive.RcvContext,
 	q = dropNewLine(q)
 
 	ctx.Emit(Deque{
-		Request: req,
-		Queue:   Queue(q),
+		ID:    req,
+		Queue: Queue(q),
 	})
 	return nil
 }
 
-func (h *ConnHandler) handleAck(req Request, ctx beehive.RcvContext,
+func (h *ConnHandler) handleAck(req ReqID, ctx beehive.RcvContext,
 	r *bufio.Reader) error {
 
 	q, err := r.ReadString(' ')
@@ -855,9 +861,9 @@ func (h *ConnHandler) handleAck(req Request, ctx beehive.RcvContext,
 	}
 
 	ctx.Emit(Ack{
-		Request: req,
-		Queue:   Queue(q),
-		TaskID:  TaskID(tid),
+		ID:     req,
+		Queue:  Queue(q),
+		TaskID: TaskID(tid),
 	})
 	return nil
 }
@@ -940,7 +946,7 @@ func init() {
 	gob.Register(Enqued{})
 	gob.Register(Enque{})
 	gob.Register(Queue(""))
-	gob.Register(Request(0))
+	gob.Register(ReqID(0))
 	gob.Register(TaskID(0))
 	gob.Register(Task{})
 	gob.Register(dqTask{})

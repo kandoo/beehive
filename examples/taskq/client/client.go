@@ -30,7 +30,7 @@ type Client struct {
 	sync.Mutex
 	conn  net.Conn
 	req   uint64
-	calls map[server.Request]Call
+	calls map[server.ReqID]Call
 	err   error
 	done  chan struct{}
 }
@@ -45,7 +45,7 @@ func New(addr string) (client *Client, err error) {
 	client = &Client{
 		conn:  c,
 		req:   1,
-		calls: make(map[server.Request]Call),
+		calls: make(map[server.ReqID]Call),
 		done:  make(chan struct{}),
 	}
 	go client.serve()
@@ -58,9 +58,9 @@ type Call chan Response
 
 // Response represents a response to a request.
 type Response struct {
-	Request server.Request // Request is the request ID.
-	Data    interface{}    // Data is the response data returned by the server.
-	Error   error          // Error is the response error.
+	ID    server.ReqID // ID is the request ID.
+	Data  interface{}  // Data is the response data returned by the server.
+	Error error        // Error is the response error.
 }
 
 func (c *Client) serve() {
@@ -79,7 +79,7 @@ func (c *Client) serve() {
 
 	r := bufio.NewReader(c.conn)
 	for {
-		var req server.Request
+		var req server.ReqID
 		if req, err = c.readRequest(r); err != nil {
 			return
 		}
@@ -96,25 +96,25 @@ func (c *Client) serve() {
 
 		var res Response
 		switch {
-		case bytes.Equal(rtype, server.ProtoRepEnQed):
+		case bytes.Equal(rtype, server.ProtoResEnQed):
 			res, err = c.handleEnQed(req, r)
 			if err != nil {
 				return
 			}
 
-		case bytes.Equal(rtype, server.ProtoRepDeQed):
+		case bytes.Equal(rtype, server.ProtoResDeQed):
 			res, err = c.handleDeQed(req, r)
 			if err != nil {
 				return
 			}
 
-		case bytes.Equal(rtype, server.ProtoRepAcked):
+		case bytes.Equal(rtype, server.ProtoResAcked):
 			res, err = c.handleAcked(req, r)
 			if err != nil {
 				return
 			}
 
-		case bytes.Equal(rtype, server.ProtoRepError):
+		case bytes.Equal(rtype, server.ProtoResError):
 			res, err = c.handleError(req, r)
 			if err != nil {
 				return
@@ -137,20 +137,20 @@ func (c *Client) broadcastError(err error) {
 	c.err = err
 	for req, call := range c.calls {
 		call <- Response{
-			Request: req,
-			Error:   err,
+			ID:    req,
+			Error: err,
 		}
 	}
 	c.Unlock()
 }
 
-func (c *Client) readRequest(r *bufio.Reader) (req server.Request, err error) {
+func (c *Client) readRequest(r *bufio.Reader) (req server.ReqID, err error) {
 	reqs, err := r.ReadString(' ')
 	if err != nil {
 		return 0, err
 	}
 	id, err := strconv.ParseUint(reqs[:len(reqs)-1], 10, 64)
-	return server.Request(id), err
+	return server.ReqID(id), err
 }
 
 func (c *Client) readResponseType(r *bufio.Reader) (res []byte, err error) {
@@ -169,7 +169,7 @@ func (c *Client) readResponseType(r *bufio.Reader) (res []byte, err error) {
 	return res, nil
 }
 
-func (c *Client) handleEnQed(req server.Request, r *bufio.Reader) (res Response,
+func (c *Client) handleEnQed(req server.ReqID, r *bufio.Reader) (res Response,
 	err error) {
 
 	q, err := r.ReadString(' ')
@@ -190,13 +190,13 @@ func (c *Client) handleEnQed(req server.Request, r *bufio.Reader) (res Response,
 	}
 
 	res = Response{
-		Request: req,
-		Data:    server.TaskID(tid),
+		ID:   req,
+		Data: server.TaskID(tid),
 	}
 	return
 }
 
-func (c *Client) handleDeQed(req server.Request, r *bufio.Reader) (res Response,
+func (c *Client) handleDeQed(req server.ReqID, r *bufio.Reader) (res Response,
 	err error) {
 
 	q, err := r.ReadString(' ')
@@ -246,7 +246,7 @@ func (c *Client) handleDeQed(req server.Request, r *bufio.Reader) (res Response,
 	}
 
 	res = Response{
-		Request: req,
+		ID: req,
 		Data: server.Task{
 			Queue: server.Queue(q),
 			ID:    server.TaskID(tid),
@@ -256,7 +256,7 @@ func (c *Client) handleDeQed(req server.Request, r *bufio.Reader) (res Response,
 	return
 }
 
-func (c *Client) handleAcked(req server.Request, r *bufio.Reader) (res Response,
+func (c *Client) handleAcked(req server.ReqID, r *bufio.Reader) (res Response,
 	err error) {
 
 	q, err := r.ReadString(' ')
@@ -276,7 +276,7 @@ func (c *Client) handleAcked(req server.Request, r *bufio.Reader) (res Response,
 	}
 
 	res = Response{
-		Request: req,
+		ID: req,
 		Data: server.Task{
 			Queue: server.Queue(q),
 			ID:    server.TaskID(tid),
@@ -285,7 +285,7 @@ func (c *Client) handleAcked(req server.Request, r *bufio.Reader) (res Response,
 	return
 }
 
-func (c *Client) handleError(req server.Request, r *bufio.Reader) (res Response,
+func (c *Client) handleError(req server.ReqID, r *bufio.Reader) (res Response,
 	err error) {
 
 	msg, err := r.ReadString('\n')
@@ -294,8 +294,8 @@ func (c *Client) handleError(req server.Request, r *bufio.Reader) (res Response,
 	}
 
 	res = Response{
-		Request: req,
-		Error:   errors.New(msg[:len(msg)-1]),
+		ID:    req,
+		Error: errors.New(msg[:len(msg)-1]),
 	}
 	return
 }
@@ -307,11 +307,11 @@ func (c *Client) Close() {
 	<-c.done
 }
 
-func (c *Client) reqID() server.Request {
-	return server.Request(atomic.AddUint64(&c.req, 1))
+func (c *Client) reqID() server.ReqID {
+	return server.ReqID(atomic.AddUint64(&c.req, 1))
 }
 
-func (c *Client) addCall(req server.Request, call Call) error {
+func (c *Client) addCall(req server.ReqID, call Call) error {
 	c.Lock()
 	if c.err != nil {
 		c.Unlock()
@@ -322,7 +322,7 @@ func (c *Client) addCall(req server.Request, call Call) error {
 	return nil
 }
 
-func (c *Client) getDelCall(req server.Request) (call Call, err error) {
+func (c *Client) getDelCall(req server.ReqID) (call Call, err error) {
 	c.Lock()
 	call, ok := c.calls[req]
 	if !ok {
@@ -339,14 +339,14 @@ func (c *Client) getDelCall(req server.Request) (call Call, err error) {
 // If call is nil in the arguments, this method returns a new call. Otherwise
 // it reuses and returns the provided call.
 func (c *Client) GoEnQ(queue string, body []byte, call Call) (
-	server.Request, Call) {
+	server.ReqID, Call) {
 
 	if call == nil {
 		call = make(chan Response, 1)
 	}
 	req := c.reqID()
 	if err := c.addCall(req, call); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
@@ -354,15 +354,15 @@ func (c *Client) GoEnQ(queue string, body []byte, call Call) (
 	lstr := strconv.Itoa(len(body))
 
 	line := make([]byte,
-		len(rstr)+len(server.ProtoCmdEnQ)+len(queue)+len(lstr)+len(body)+5)
+		len(rstr)+len(server.ProtoReqEnQ)+len(queue)+len(lstr)+len(body)+5)
 
 	copy(line, rstr)
 	off := len(rstr)
 	line[off] = ' '
 	off++
 
-	copy(line[off:], server.ProtoCmdEnQ)
-	off += len(server.ProtoCmdEnQ)
+	copy(line[off:], server.ProtoReqEnQ)
+	off += len(server.ProtoReqEnQ)
 	line[off] = ' '
 	off++
 
@@ -381,7 +381,7 @@ func (c *Client) GoEnQ(queue string, body []byte, call Call) (
 	line[off] = '\n'
 
 	if _, err := c.conn.Write(line); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
@@ -393,27 +393,27 @@ func (c *Client) GoEnQ(queue string, body []byte, call Call) (
 //
 // If call is nil in the arguments, this method returns a new call. Otherwise
 // it reuses and returns the provided call.
-func (c *Client) GoDeQ(queue string, call Call) (server.Request, Call) {
+func (c *Client) GoDeQ(queue string, call Call) (server.ReqID, Call) {
 	if call == nil {
 		call = make(chan Response, 1)
 	}
 	req := c.reqID()
 	if err := c.addCall(req, call); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
 	rstr := strconv.FormatUint(uint64(req), 10)
 
-	line := make([]byte, len(rstr)+len(server.ProtoCmdDeQ)+len(queue)+3)
+	line := make([]byte, len(rstr)+len(server.ProtoReqDeQ)+len(queue)+3)
 
 	copy(line, rstr)
 	off := len(rstr)
 	line[off] = ' '
 	off++
 
-	copy(line[off:], server.ProtoCmdDeQ)
-	off += len(server.ProtoCmdDeQ)
+	copy(line[off:], server.ProtoReqDeQ)
+	off += len(server.ProtoReqDeQ)
 	line[off] = ' '
 	off++
 
@@ -422,7 +422,7 @@ func (c *Client) GoDeQ(queue string, call Call) (server.Request, Call) {
 	line[off] = '\n'
 
 	if _, err := c.conn.Write(line); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
@@ -435,29 +435,29 @@ func (c *Client) GoDeQ(queue string, call Call) (server.Request, Call) {
 // If call is nil in the arguments, this method returns a new call. Otherwise
 // it reuses and returns the provided call.
 func (c *Client) GoAck(queue string, taskID server.TaskID, call Call) (
-	server.Request, Call) {
+	server.ReqID, Call) {
 
 	if call == nil {
 		call = make(chan Response, 1)
 	}
 	req := c.reqID()
 	if err := c.addCall(req, call); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
 	rstr := strconv.FormatUint(uint64(req), 10)
 	tstr := strconv.FormatUint(uint64(taskID), 10)
 
-	line := make([]byte, len(rstr)+len(server.ProtoCmdAck)+len(queue)+len(tstr)+5)
+	line := make([]byte, len(rstr)+len(server.ProtoReqAck)+len(queue)+len(tstr)+5)
 
 	copy(line, rstr)
 	off := len(rstr)
 	line[off] = ' '
 	off++
 
-	copy(line[off:], server.ProtoCmdAck)
-	off += len(server.ProtoCmdAck)
+	copy(line[off:], server.ProtoReqAck)
+	off += len(server.ProtoReqAck)
 	line[off] = ' '
 	off++
 
@@ -471,7 +471,7 @@ func (c *Client) GoAck(queue string, taskID server.TaskID, call Call) (
 	line[off] = '\n'
 
 	if _, err := c.conn.Write(line); err != nil {
-		call <- Response{Request: req, Error: err}
+		call <- Response{ID: req, Error: err}
 		return req, call
 	}
 
