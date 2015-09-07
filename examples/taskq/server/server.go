@@ -65,7 +65,7 @@ func (id TaskID) String() string {
 
 // Task represents a task in a queue.
 type Task struct {
-	ID    TaskID `json:"id"`    // Task's globally unique ID assigned by taskq.
+	ID    TaskID `json:"id"`    // Task's globally unique ID assigned by TaskQ.
 	Queue Queue  `json:"queue"` // Task's queue.
 	Body  []byte `json:"body"`  // Task's client data.
 }
@@ -590,8 +590,8 @@ func (h *AckHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	ReqLen = 3 // ReqLen is length of a taskq request verb.
-	ResLen = 5 // ResLen is length of a taskq response verb.
+	ReqLen = 3 // ReqLen is length of a TaskQ request verb.
+	ResLen = 5 // ResLen is length of a TaskQ response verb.
 )
 
 var (
@@ -605,13 +605,13 @@ var (
 	ProtoResError = []byte("error") // ProtoResError is an error response.
 )
 
-// ProtoHandler is the detached handler that implements the taskq protocol.
+// ProtoHandler is the detached handler that implements the TaskQ protocol.
 type ProtoHandler struct {
 	lis  net.Listener
 	done chan struct{}
 }
 
-// NewProtoHandler creates a detached handler for the taskq protocol listening
+// NewProtoHandler creates a detached handler for the TaskQ protocol listening
 // on the given address. addr should be in the form of IP:PORT.
 func NewProtoHandler(addr string) (h *ProtoHandler, err error) {
 	lis, err := net.Listen("tcp", addr)
@@ -654,7 +654,7 @@ func (h *ProtoHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	return errors.New("protohandler: received unexpected message")
 }
 
-// ConnHandler is a detached handler that handles a single taskq connection.
+// ConnHandler is a detached handler that handles a single TaskQ connection.
 type ConnHandler struct {
 	conn net.Conn
 	done chan struct{}
@@ -888,20 +888,20 @@ var addr = args.NewString(args.Flag("taskq.addr", ":7979",
 var rate = args.NewUint64(args.Flag("taskq.maxrate", uint64(bucket.Unlimited),
 	"maximum message rate of each client"))
 
-// Option represents taskq server options.
+// Option represents TaskQ server options.
 type Option args.V
 
-// ReplicationFactor is an option represeting the replication factor of taskq.
+// ReplicationFactor is an option represeting the replication factor of TaskQ.
 func ReplicationFactor(f int) Option { return Option(repl(f)) }
 
-// Address is an option representing a taskq address.
+// Address is an option representing a TaskQ address.
 func Address(a string) Option { return Option(addr(a)) }
 
 // MaxRate is an option represeting the maximum rate of messages a client
 // can send per second.
 func MaxRate(r uint64) Option { return Option(rate(r)) }
 
-// RegisterTaskQ registers the taskq application and all its handler in the
+// RegisterTaskQ registers the TaskQ application and all its handler in the
 // hive.
 func RegisterTaskQ(h beehive.Hive, opts ...Option) error {
 	if !flag.Parsed() {

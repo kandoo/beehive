@@ -1,10 +1,10 @@
-# taskq: A distributed task queue in Go
+# TaskQ: A distributed task queue in Go
 This is a simple distributed task queue using which you can:
 * enqueue a task into a named queue.
 * dequeue a task from a named queue.
 * acknowledge a task in a named queue.
 
-Tasks are either in "active" or "dequeued" state. `taskq` dequeue tasks
+Tasks are either in "active" or "dequeued" state. TaskQ dequeue tasks
 from the list of active tasks, return them to the user, and put them in
 the dequeued list. If a dequeued task is not acknowledged after a
 timetout (2-3 min), the task will be put back  in the active queue.
