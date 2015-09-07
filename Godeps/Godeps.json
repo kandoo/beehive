@@ -111,7 +111,7 @@
 		},
 		{
 			"ImportPath": "github.com/soheilhy/args",
-			"Rev": "6bcf4c78e87e38c051ddd7dc4deae19d3fc5b9bc"
+			"Rev": "d56b66b8b2ba391d3e4bd186d58e38070d54affa"
 		},
 		{
 			"ImportPath": "github.com/soheilhy/cmux",

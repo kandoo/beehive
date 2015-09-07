@@ -74,3 +74,23 @@ func TestOrder(t *testing.T) {
 		}
 	}(testStr(argv1), testStr(argv2))
 }
+
+func TestIsSet(t *testing.T) {
+	argv := "test"
+	testNew1 := New()
+	testNew2 := New()
+	testNew3 := New()
+	func(vals ...V) {
+		if testNew1.IsSet(vals) {
+			t.Errorf("testNew1 should not be set")
+		}
+
+		if !testNew2.IsSet(vals) {
+			t.Errorf("testNew2 should be set")
+		}
+
+		if testNew3.IsSet(vals) {
+			t.Errorf("testNew3 should not be set")
+		}
+	}(testNew2(argv))
+}

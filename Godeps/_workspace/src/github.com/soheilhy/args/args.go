@@ -401,8 +401,9 @@ func isSet(arg *arg, vals []interface{}) bool {
 			}
 
 		default:
-			_, ok := arg.valueOf(val)
-			return ok
+			if _, ok := arg.valueOf(val); ok {
+				return true
+			}
 		}
 	}
 	return false
