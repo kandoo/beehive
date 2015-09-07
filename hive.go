@@ -238,8 +238,8 @@ func ConnTimeout(t time.Duration) HiveOption {
 
 func hiveConfig(opts ...HiveOption) (cfg HiveConfig) {
 	cfg.Addr = addr.Get(opts)
-	if paddrs.IsSet(opts) {
-		cfg.PeerAddrs = strings.Split(paddrs.Get(opts), ",")
+	if pa := paddrs.Get(opts); pa != "" {
+		cfg.PeerAddrs = strings.Split(pa, ",")
 	}
 	cfg.StatePath = statePath.Get(opts)
 	cfg.DataChBufSize = dataChBufSize.Get(opts)
