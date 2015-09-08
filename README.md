@@ -50,7 +50,7 @@ go test -v
 ## Hello World
 Let's write a simple example that counts the number of times we have
 said hello to each person. You can find the complete example in the
-[GoDoc](https://godoc.org/github.com/kandoo/beehive/#example-package)
+[GoDoc](https://godoc.org/github.com/kandoo/beehive/#example-package).
 
 ### Message
 Beehive is based on asynchronous message passing. Naturally, the first step is
