@@ -50,7 +50,7 @@ go test -v
 ## Hello World
 Let's write a simple example that counts the number of times we have
 said hello to each person. You can find the complete example in the
-[GoDoc](https://godoc.org/github.com/kandoo/beehive/#example).
+[GoDoc](https://godoc.org/github.com/kandoo/beehive/#example-package)
 
 ### Message
 Beehive is based on asynchronous message passing. Naturally, the first step is
@@ -382,7 +382,7 @@ A detached handler is different than a message handler in a sense that it is
 started in its `Start` method and only receives replies.
 
 The
-[Detached Example](https://godoc.org/github.com/kandoo/beehive/#example__detached)
+[Detached Example](https://godoc.org/github.com/kandoo/beehive/#example-package--Detached)
 demonstrates how we used detached handlers to implement a text-based protocol in
 Beehive. When you run this example, you can telnet to port 6789 for sending
 names to the hello world application:
