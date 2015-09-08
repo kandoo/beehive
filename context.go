@@ -20,6 +20,12 @@ type Context interface {
 	// Sync processes a synchrounous message (req) and blocks until the response
 	// is recieved.
 	Sync(ctx context.Context, req interface{}) (res interface{}, err error)
+	// Printf formats according to format string and writes the string on
+	// standard output.
+	//
+	// Note: This method is solely for debugging your message handlers.
+	// For proper logging, use glog.
+	Printf(format string, a ...interface{})
 }
 
 // MapContext is passed to the map functions of message handlers. It provides

@@ -202,6 +202,8 @@ func (c runtimeRcvContext) ID() uint64 {
 	return 0
 }
 
+func (c runtimeRcvContext) Printf(format string, a ...interface{}) {}
+
 func (c runtimeRcvContext) Emit(msgData interface{}) {}
 
 func (c runtimeRcvContext) SendToCell(msgData interface{}, app string,

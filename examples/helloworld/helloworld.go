@@ -1,10 +1,6 @@
 package main
 
-import (
-	"fmt"
-
-	bh "github.com/kandoo/beehive"
-)
+import bh "github.com/kandoo/beehive"
 
 const (
 	helloDict = "HelloCountDict"
@@ -19,7 +15,7 @@ func rcvf(msg bh.Msg, ctx bh.RcvContext) error {
 	}
 
 	cnt++
-	fmt.Printf("%v> hello %s (%d)!\n", ctx.ID(), name, cnt)
+	ctx.Printf("hello %s (%d)!\n", name, cnt)
 	ctx.Dict(helloDict).Put(name, cnt)
 	return nil
 }

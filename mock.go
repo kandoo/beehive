@@ -69,6 +69,8 @@ func (m MockRcvContext) ID() uint64 {
 	return m.CtxID
 }
 
+func (m MockRcvContext) Printf(format string, a ...interface{}) {}
+
 func (m *MockRcvContext) Emit(msgData interface{}) {
 	msg := MockMsg{
 		MsgData: msgData,

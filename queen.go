@@ -67,6 +67,10 @@ func (q *qee) String() string {
 	return fmt.Sprintf("%d/%s/Q", q.hive.ID(), q.app.Name())
 }
 
+func (q *qee) Printf(format string, a ...interface{}) {
+	fmt.Printf("%v> "+format, append([]interface{}{q}, a...)...)
+}
+
 func (q *qee) Dict(n string) state.Dict {
 	return q.state.Dict(n)
 }

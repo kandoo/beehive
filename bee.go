@@ -87,6 +87,10 @@ func (b *bee) String() string {
 	}
 }
 
+func (b *bee) Printf(format string, a ...interface{}) {
+	fmt.Printf("%v> "+format, append([]interface{}{b}, a...)...)
+}
+
 func (b *bee) colony() Colony {
 	b.Lock()
 	c := b.beeColony.DeepCopy()
