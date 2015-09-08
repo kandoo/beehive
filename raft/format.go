@@ -33,5 +33,5 @@ func formatEntries(es []raftpb.Entry) string {
 }
 
 func formatConfChange(cc raftpb.ConfChange) string {
-	return fmt.Sprintf("%s@%s %s", cc.NodeID, cc.ID, cc.Type)
+	return fmt.Sprintf("%d@%d %s", cc.NodeID, cc.ID, cc.Type)
 }
