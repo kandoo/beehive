@@ -77,16 +77,16 @@ func newRPCClientPool(h *hive) *rpcClientPool {
 	}
 }
 
-func (c *rpcClientPool) stop() {
-	c.Lock()
-	defer c.Unlock()
+func (p *rpcClientPool) stop() {
+	p.Lock()
+	defer p.Unlock()
 
-	for _, client := range c.hiveClients {
+	for _, client := range p.hiveClients {
 		client.stop()
 	}
 }
 
-func (c *rpcClientPool) shouldReset(err error) bool {
+func (p *rpcClientPool) shouldReset(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -99,15 +99,15 @@ func (c *rpcClientPool) shouldReset(err error) bool {
 	return ok && !nerr.Temporary()
 }
 
-func (c *rpcClientPool) sendRaft(batch *raft.Batch, r raft.Reporter) error {
-	client, err := c.hiveClient(batch.To)
+func (p *rpcClientPool) sendRaft(batch *raft.Batch, r raft.Reporter) error {
+	client, err := p.hiveClient(batch.To)
 	if err != nil {
 		report(err, batch, r)
 		return err
 	}
 
-	if err = client.sendRaft(batch, r); c.shouldReset(err) {
-		c.resetHiveClient(batch.To, client)
+	if err = client.sendRaft(batch, r); p.shouldReset(err) {
+		p.resetHiveClient(batch.To, client)
 	}
 	return err
 }
@@ -116,21 +116,21 @@ func (c *rpcClientPool) sendRaft(batch *raft.Batch, r raft.Reporter) error {
 // error.
 //
 // It is preferred store and reuse the beeClient to relay messages.
-func (c *rpcClientPool) sendMsg(msgs []msg) (err error) {
+func (p *rpcClientPool) sendMsg(msgs []msg) (err error) {
 	mm := make(map[uint64][]msg)
 	for _, msg := range msgs {
 		mm[msg.To()] = append(mm[msg.To()], msg)
 	}
 
 	for b, bmsgs := range mm {
-		client, berr := c.beeClient(b)
+		client, berr := p.beeClient(b)
 		if berr != nil {
 			err = berr
 			continue
 		}
 
-		if berr = client.sendMsg(bmsgs); c.shouldReset(berr) {
-			c.resetBeeClient(b, client)
+		if berr = client.sendMsg(bmsgs); p.shouldReset(berr) {
+			p.resetBeeClient(b, client)
 			err = berr
 		}
 	}
@@ -138,14 +138,14 @@ func (c *rpcClientPool) sendMsg(msgs []msg) (err error) {
 	return err
 }
 
-func (c *rpcClientPool) sendCmd(cmd cmd) (res interface{}, err error) {
-	client, err := c.hiveClient(cmd.Hive)
+func (p *rpcClientPool) sendCmd(cmd cmd) (res interface{}, err error) {
+	client, err := p.hiveClient(cmd.Hive)
 	if err != nil {
 		return nil, err
 	}
 
-	if res, err = client.sendCmd(cmd); c.shouldReset(err) {
-		c.resetHiveClient(cmd.Hive, client)
+	if res, err = client.sendCmd(cmd); p.shouldReset(err) {
+		p.resetHiveClient(cmd.Hive, client)
 	}
 	return
 }
