@@ -36,6 +36,8 @@ func (c mockContext) ID() uint64 {
 	return 0
 }
 
+func (c mockContext) Printf(format string, a ...interface{}) {}
+
 func (c mockContext) Emit(msgData interface{})                 {}
 func (c mockContext) SendToBee(msgData interface{}, to uint64) {}
 func (c mockContext) SendToCell(msgData interface{}, to string,
