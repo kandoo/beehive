@@ -10,9 +10,15 @@ import (
 var DefaultHive Hive
 
 // Start starts the DefaultHive. This method blocks.
-func Start() {
+func Start() error {
 	maybeInitDefaultHive()
-	DefaultHive.Start()
+	return DefaultHive.Start()
+}
+
+// Stop stops the DefaultHive. This method blocks.
+func Stop() error {
+	maybeInitDefaultHive()
+	return DefaultHive.Stop()
 }
 
 // NewApp creates a new application on DefaultHive.
