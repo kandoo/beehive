@@ -94,7 +94,7 @@ func (m *MockRcvContext) SendToBee(msgData interface{}, to uint64) {
 	m.CtxMsgs = append(m.CtxMsgs, msg)
 }
 
-func (m *MockRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+func (m *MockRcvContext) Reply(msg Msg, replyData interface{}) error {
 	if msg.NoReply() {
 		return errors.New("cannot reply")
 	}

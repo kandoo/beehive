@@ -41,7 +41,7 @@ func (c mockContext) SendToBee(msgData interface{}, to uint64) {}
 func (c mockContext) SendToCell(msgData interface{}, to string,
 	dk bh.CellKey) {
 }
-func (c mockContext) ReplyTo(msg bh.Msg, replyData interface{}) error {
+func (c mockContext) Reply(msg bh.Msg, replyData interface{}) error {
 	return nil
 }
 

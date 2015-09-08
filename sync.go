@@ -143,9 +143,9 @@ type syncRcvContext struct {
 	replied bool
 }
 
-func (ctx *syncRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+func (ctx *syncRcvContext) Reply(msg Msg, replyData interface{}) error {
 	if msg.From() != ctx.from {
-		return ctx.RcvContext.ReplyTo(msg, replyData)
+		return ctx.RcvContext.Reply(msg, replyData)
 	}
 
 	if ctx.replied {
@@ -157,7 +157,7 @@ func (ctx *syncRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
 		ID:   ctx.id,
 		Data: replyData,
 	}
-	return ctx.RcvContext.ReplyTo(msg, r)
+	return ctx.RcvContext.Reply(msg, r)
 }
 
 func (ctx *syncRcvContext) DeferReply(msg Msg) Repliable {
@@ -191,14 +191,14 @@ func (h syncHandler) Rcv(m Msg, ctx RcvContext) error {
 			ID:  req.ID,
 			Err: bhgob.Error(err.Error()),
 		}
-		ctx.ReplyTo(m, r)
+		ctx.Reply(m, r)
 		return err
 	}
 	if !sc.replied {
 		r := syncRes{
 			ID: req.ID,
 		}
-		ctx.ReplyTo(m, r)
+		ctx.Reply(m, r)
 	}
 	return nil
 }

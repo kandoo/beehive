@@ -210,7 +210,7 @@ func (c runtimeRcvContext) SendToCell(msgData interface{}, app string,
 
 func (c runtimeRcvContext) SendToBee(msgData interface{}, to uint64) {}
 
-func (c runtimeRcvContext) ReplyTo(msg Msg, replyData interface{}) error {
+func (c runtimeRcvContext) Reply(msg Msg, replyData interface{}) error {
 	return nil
 }
 

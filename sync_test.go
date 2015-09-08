@@ -15,7 +15,7 @@ func TestSync(t *testing.T) {
 	h := newHiveForTest()
 	app := h.NewApp("sync")
 	rcvf := func(msg Msg, ctx RcvContext) error {
-		ctx.ReplyTo(msg, msg.Data().(query))
+		ctx.Reply(msg, msg.Data().(query))
 		return nil
 	}
 	mapf := func(msg Msg, ctx MapContext) MappedCells {
@@ -104,7 +104,7 @@ func TestSyncDeferReply(t *testing.T) {
 type benchSyncHandler struct{}
 
 func (h benchSyncHandler) Rcv(msg Msg, ctx RcvContext) error {
-	ctx.ReplyTo(msg, msg.Data().(int))
+	ctx.Reply(msg, msg.Data().(int))
 	return nil
 }
 
@@ -133,7 +133,7 @@ func BenchmarkSync(b *testing.B) {
 
 func ExampleSyncInstall() {
 	rcvf := func(msg Msg, ctx RcvContext) error {
-		ctx.ReplyTo(msg, "hello "+msg.Data().(query))
+		ctx.Reply(msg, "hello "+msg.Data().(query))
 		return nil
 	}
 	mapf := func(msg Msg, ctx MapContext) MappedCells {

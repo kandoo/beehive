@@ -45,7 +45,7 @@ func (c *Calculator) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 	op := msg.Data().(Op)
 	res := c.calc(op)
 	fmt.Printf("%d %s %d = %d\n", op.Lhs, op.OpT, op.Rhs, res)
-	ctx.ReplyTo(msg, res)
+	ctx.Reply(msg, res)
 	return nil
 }
 

@@ -68,9 +68,9 @@ type RcvContext interface {
 	SendToCell(msgData interface{}, app string, cell CellKey)
 	// SendToBee sends a message to the given bee.
 	SendToBee(msgData interface{}, to uint64)
-	// ReplyTo replies to a message: Sends a message from the current bee to the
+	// Reply replies to a message: Sends a message from the current bee to the
 	// bee that emitted msg.
-	ReplyTo(msg Msg, replyData interface{}) error
+	Reply(msg Msg, replyData interface{}) error
 	// DeferReply returns a Repliable that can be used to reply to a
 	// message (either a sync or a async message) later.
 	DeferReply(msg Msg) Repliable

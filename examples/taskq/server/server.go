@@ -323,7 +323,7 @@ func (h EnQHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 		Queue:  enq.Queue,
 		TaskID: next,
 	}
-	return ctx.ReplyTo(msg, enqued)
+	return ctx.Reply(msg, enqued)
 }
 
 func (h EnQHandler) Map(msg beehive.Msg,
@@ -336,7 +336,7 @@ func (h EnQHandler) Map(msg beehive.Msg,
 
 // doDequeTask adds a task to the dequed dictionary and replys to the message.
 func doDequeTask(msg beehive.Msg, ctx beehive.RcvContext, t Task) error {
-	ctx.ReplyTo(msg, Dequed{
+	ctx.Reply(msg, Dequed{
 		ID:   msg.Data().(Deque).ID,
 		Task: t,
 	})
@@ -412,7 +412,7 @@ func (h AckHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	key := ack.TaskID.String()
 	ddict := ctx.Dict(dequed)
 	if err := ddict.Del(key); err == nil {
-		ctx.ReplyTo(msg, acked)
+		ctx.Reply(msg, acked)
 		return nil
 	}
 
@@ -420,7 +420,7 @@ func (h AckHandler) Rcv(msg beehive.Msg, ctx beehive.RcvContext) error {
 	// timeout. So, we need to search the active dictionary as well.
 	odict := ctx.Dict(ooo)
 	if err := odict.Del(key); err == nil {
-		ctx.ReplyTo(msg, acked)
+		ctx.Reply(msg, acked)
 		return nil
 	}
 

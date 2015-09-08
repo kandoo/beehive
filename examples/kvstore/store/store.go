@@ -52,7 +52,7 @@ func (s *KVStore) Rcv(msg bh.Msg, ctx bh.RcvContext) error {
 		if err != nil {
 			return errKeyNotFound
 		}
-		ctx.ReplyTo(msg, Result{Key: string(data), Val: v.(string)})
+		ctx.Reply(msg, Result{Key: string(data), Val: v.(string)})
 		return nil
 	case Del:
 		return ctx.Dict(dict).Del(string(data))

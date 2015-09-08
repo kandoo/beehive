@@ -414,7 +414,7 @@ func (h statRequestHandler) Rcv(msg Msg, ctx RcvContext) error {
 		res.Matrix[os.Bee] = os.Matrix
 		return true
 	})
-	return ctx.ReplyTo(msg, res)
+	return ctx.Reply(msg, res)
 }
 
 func (h statRequestHandler) Map(msg Msg, ctx MapContext) MappedCells {

@@ -103,7 +103,7 @@ func TestOutRate(t *testing.T) {
 
 	echof := func(msg Msg, ctx RcvContext) error {
 		for i := 0; i < 2; i++ {
-			ctx.ReplyTo(msg, msg.Data())
+			ctx.Reply(msg, msg.Data())
 		}
 		return nil
 	}

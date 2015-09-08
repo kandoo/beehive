@@ -54,8 +54,8 @@ type Hive interface {
 	SendToCellKey(msgData interface{}, to string, dk CellKey)
 	// Sends a message to a sepcific bee.
 	SendToBee(msgData interface{}, to uint64)
-	// Replies to a message.
-	ReplyTo(msg Msg, replyData interface{}) error
+	// Reply replies to the message.
+	Reply(msg Msg, replyData interface{}) error
 	// Sync processes a synchrounous message (req) and blocks until the response
 	// is recieved.
 	Sync(ctx context.Context, req interface{}) (res interface{}, err error)
@@ -736,7 +736,7 @@ func (h *hive) SendToBee(msgData interface{}, to uint64) {
 }
 
 // Reply to thatMsg with the provided replyData.
-func (h *hive) ReplyTo(thatMsg Msg, replyData interface{}) error {
+func (h *hive) Reply(thatMsg Msg, replyData interface{}) error {
 	m := thatMsg.(*msg)
 	if m.NoReply() {
 		return errors.New("cannot reply to this message")

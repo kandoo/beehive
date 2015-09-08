@@ -883,7 +883,7 @@ func (b *bee) SendToBee(msgData interface{}, to uint64) {
 }
 
 // Reply to msg with the provided reply.
-func (b *bee) ReplyTo(msg Msg, reply interface{}) error {
+func (b *bee) Reply(msg Msg, reply interface{}) error {
 	if msg.NoReply() {
 		return errors.New("Cannot reply to this message.")
 	}
