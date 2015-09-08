@@ -10,7 +10,7 @@ the dequeued list. If a dequeued task is not acknowledged after a
 timetout (2-3 min), the task will be put back  in the active queue.
 
 ## Installation
-**Option 1.** Run the following command:
+**Option 1.** Install TaskQ using [goget](https://github.com/soheilhy/goget):
 
 ```bash
 curl -sL https://git.io/goget | bash -s -- github.com/kandoo/beehive/examples/taskq
