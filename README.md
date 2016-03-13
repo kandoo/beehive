@@ -456,6 +456,9 @@ Google group: [https://groups.google.com/forum/#!forum/beehive-dev](https://grou
 Please report bugs in github, not in the group.
 
 ## Publications
-Soheil Hassas Yeganeh, Yashar Ganjali,
+- Soheil Hassas Yeganeh, Yashar Ganjali,
+[Beehive: Beehive: Simple Distributed Programming in Software-Defined Networks](http://conferences.sigcomm.org/sosr/2016/papers/sosr_paper17.pdf),
+SOSR 2016.
+- Soheil Hassas Yeganeh, Yashar Ganjali,
 [Beehive: Towards a Simple Abstraction for Scalable Software-Defined Networking](http://conferences.sigcomm.org/hotnets/2014/papers/hotnets-XIII-final17.pdf),
 HotNets XIII, 2014.
