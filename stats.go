@@ -53,7 +53,7 @@ func newAppStatCollector(h *hive) collector {
 	}))
 
 	a.Handle(statRequest{}, statRequestHandler{})
-	a.HandleHTTP("/stats", &statHttpHandler{hive: h})
+	a.HandleHTTP("/stats", &statHTTPHandler{hive: h})
 
 	glog.V(1).Infof("%v installs app stat collector", h)
 	return c
@@ -425,11 +425,11 @@ func beeInfoFromContext(ctx RcvContext, bid uint64) (BeeInfo, error) {
 	return ctx.Hive().(*hive).registry.bee(bid)
 }
 
-type statHttpHandler struct {
+type statHTTPHandler struct {
 	hive Hive
 }
 
-func (h *statHttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *statHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, ccl := context.WithTimeout(context.Background(), 10*time.Second)
 	defer ccl()
 	res, err := h.hive.Sync(ctx, statRequest{})

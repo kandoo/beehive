@@ -7,7 +7,7 @@ import (
 	"runtime"
 )
 
-// Message is a generic interface for messages emitted in the system. Messages
+// Msg is a generic interface for messages emitted in the system. Messages
 // are defined for each type.
 type Msg interface {
 	// Type of the data in this message.

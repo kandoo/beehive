@@ -284,12 +284,12 @@ func (q *qee) handleCmd(cc cmdAndChannel) {
 		if info, err := q.hive.registry.bee(cc.cmd.Bee); err == nil &&
 			!q.isLocalBee(info) {
 
-			if b, err := q.newProxyBee(info); err == nil {
+			b, err := q.newProxyBee(info)
+			if err == nil {
 				b.enqueCmd(cc)
 				return
-			} else {
-				glog.Warningf("cannot create proxy to %#v", info)
 			}
+			glog.Warningf("%v cannot create proxy to %#v: %v", q, info, err)
 		}
 
 		if cc.ch != nil {
@@ -674,7 +674,7 @@ func (q *qee) handleMsgs(mhs []msgAndHandler) {
 				if pc.bee == nil {
 					var err error
 					if pc.bee, err = q.newLocalBeeWithID(pc.beeID, true); err != nil {
-						glog.Fatalf("%v cannot create local bee %v", err)
+						glog.Fatalf("%v cannot create local bee %v", q, err)
 					}
 				}
 				pc.bee.processCmd(cmdAddMappedCells{Cells: cells})
